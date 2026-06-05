@@ -1,0 +1,65 @@
+/* CSS 变量（设计 Token） */
+:root {
+  /* 颜色 */
+  --color-primary: #409eff;
+  --color-success: #67c23a;
+  --color-warning: #e6a23c;
+  --color-danger: #f56c6c;
+  --color-info: #909399;
+
+  /* 状态颜色 */
+  --status-planning: #909399;
+  --status-todo: #409eff;
+  --status-dispatched: #e6a23c;
+  --status-review: #f56c6c;
+  --status-done: #67c23a;
+  --status-blocked: #f56c6c;
+
+  /* 优先级颜色 */
+  --priority-p0: #f56c6c;
+  --priority-p1: #e6a23c;
+  --priority-p2: #909399;
+
+  /* 间距 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* 字号 */
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* 圆角 */
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  /* 背景 */
+  --bg-page: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-hover: #f0f2f5;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: var(--font-size-md);
+  background-color: var(--bg-page);
+  color: #303133;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100vh;
+}
