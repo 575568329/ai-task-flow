@@ -63,4 +63,49 @@ describe('Task', () => {
     const worktree = WorktreeRef.create('/path', 'ws-003', 'xyz');
     expect(() => task.dispatch(worktree)).toThrow('Only TODO tasks');
   });
+
+  it('should apply update and emit TaskUpdated event', () => {
+    const task = new Task(
+      TaskId.create('WS', 4),
+      'Original',
+      'Original desc',
+      TaskStatus.TODO,
+      Priority.P2,
+      [],
+      [],
+      []
+    );
+
+    task.applyUpdate({
+      title: 'Updated',
+      status: TaskStatus.DISPATCHED,
+      priority: Priority.P0,
+    });
+
+    expect(task.title).toBe('Updated');
+    expect(task.status).toBe(TaskStatus.DISPATCHED);
+    expect(task.priority).toBe(Priority.P0);
+    expect(task.domainEvents).toHaveLength(1);
+    expect(task.domainEvents[0].eventType).toBe('TaskUpdated');
+  });
+
+  it('should only update provided fields on applyUpdate', () => {
+    const task = new Task(
+      TaskId.create('WS', 5),
+      'Keep title',
+      'Keep desc',
+      TaskStatus.TODO,
+      Priority.P1,
+      ['proj-a'],
+      [],
+      []
+    );
+
+    task.applyUpdate({ status: TaskStatus.BLOCKED });
+
+    expect(task.title).toBe('Keep title');
+    expect(task.description).toBe('Keep desc');
+    expect(task.projects).toEqual(['proj-a']);
+    expect(task.status).toBe(TaskStatus.BLOCKED);
+  });
 });

@@ -4,7 +4,8 @@ export class TaskId {
   public readonly sequence: number;
 
   private constructor(public readonly value: string) {
-    const match = value.match(/^([A-Z]+)-(\d+)$/);
+    // prefix 以大写字母开头，可含大写字母和数字（如 WS、BUG、E2E）；sequence 为纯数字
+    const match = value.match(/^([A-Z][A-Z0-9]*)-(\d+)$/);
     if (!match) {
       throw new Error(`Invalid TaskId format: ${value}`);
     }

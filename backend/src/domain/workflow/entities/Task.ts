@@ -6,6 +6,7 @@ import { WorktreeRef } from '../value-objects/WorktreeRef.js';
 import { ExecutionResult } from '../value-objects/ExecutionResult.js';
 import { TaskDispatched } from '../events/TaskDispatched.js';
 import { TaskResultRecorded } from '../events/TaskResultRecorded.js';
+import { TaskUpdated } from '../events/TaskUpdated.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
 
 export class Task {
@@ -72,6 +73,39 @@ export class Task {
     this.executionResult = undefined;
     this.updatedAt = new Date();
     // TaskRejected event 省略
+  }
+
+  /**
+   * 通用字段更新（供 HTTP PATCH 等场景使用）
+   * 修改基础字段，并在状态变化时发布 TaskUpdated 事件以驱动前端实时刷新。
+   * 注意：本方法不强制状态机校验，由调用方保证语义合理；
+   * 严格的状态流转请使用 dispatch / recordResult / approve / reject。
+   */
+  applyUpdate(updates: {
+    title?: string;
+    description?: string;
+    status?: TaskStatus;
+    priority?: Priority;
+    projects?: string[];
+    relatedFiles?: string[];
+    acceptanceCriteria?: string[];
+  }): void {
+    const previousStatus = this.status;
+
+    if (updates.title !== undefined) this.title = updates.title;
+    if (updates.description !== undefined) this.description = updates.description;
+    if (updates.status !== undefined) this.status = updates.status;
+    if (updates.priority !== undefined) this.priority = updates.priority;
+    if (updates.projects !== undefined) this.projects = updates.projects;
+    if (updates.relatedFiles !== undefined) this.relatedFiles = updates.relatedFiles;
+    if (updates.acceptanceCriteria !== undefined) {
+      this.acceptanceCriteria = updates.acceptanceCriteria;
+    }
+
+    this.updatedAt = new Date();
+    this._domainEvents.push(
+      new TaskUpdated(this.id.value, previousStatus, this.status)
+    );
   }
 
   toJSON() {

@@ -99,27 +99,12 @@ export async function registerTaskRoutes(
       return reply.status(404).send({ error: 'Task not found' });
     }
 
-    const updates = request.body;
+    // 通过领域方法更新，发布 TaskUpdated 事件以驱动前端 SSE 实时刷新
+    task.applyUpdate(request.body);
 
-    // 更新字段（通过重新创建，因为 Task 是不可变的）
-    const updatedTask = new Task(
-      task.id,
-      updates.title ?? task.title,
-      updates.description ?? task.description,
-      updates.status ?? task.status,
-      updates.priority ?? task.priority,
-      updates.projects ?? task.projects,
-      updates.relatedFiles ?? task.relatedFiles,
-      updates.acceptanceCriteria ?? task.acceptanceCriteria,
-      task.worktree,
-      task.executionResult,
-      task.createdAt,
-      new Date() // updatedAt
-    );
+    await taskRepository.save(task);
 
-    await taskRepository.save(updatedTask);
-
-    return updatedTask.toJSON();
+    return task.toJSON();
   });
 
   // DELETE /api/tasks/:id - 删除任务
