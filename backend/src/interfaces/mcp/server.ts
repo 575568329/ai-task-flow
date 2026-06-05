@@ -5,6 +5,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { container } from '../../infrastructure/di/container.js';
+import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
+import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 
 /**
  * AI Task Flow MCP Server
@@ -19,6 +22,7 @@ import {
 
 class AITaskFlowServer {
   private server: Server;
+  private taskRepository: TaskRepository;
 
   constructor() {
     this.server = new Server(
@@ -32,6 +36,9 @@ class AITaskFlowServer {
         },
       }
     );
+
+    // 从 DI 容器获取依赖
+    this.taskRepository = container.resolve<TaskRepository>('TaskRepository');
 
     this.setupHandlers();
   }
@@ -114,12 +121,47 @@ class AITaskFlowServer {
   }
 
   private async handleListPendingTasks(args: any) {
-    // TODO: 实现逻辑
+    const statusFilter = args?.status || 'todo';
+
+    let tasks;
+    if (statusFilter === 'all') {
+      const todo = await this.taskRepository.findByStatus(TaskStatus.TODO);
+      const dispatched = await this.taskRepository.findByStatus(TaskStatus.DISPATCHED);
+      tasks = [...todo, ...dispatched];
+    } else if (statusFilter === 'dispatched') {
+      tasks = await this.taskRepository.findByStatus(TaskStatus.DISPATCHED);
+    } else {
+      tasks = await this.taskRepository.findByStatus(TaskStatus.TODO);
+    }
+
+    // 格式化为 Markdown 表格
+    const lines = [
+      '# 待办任务列表',
+      '',
+      `共 ${tasks.length} 个任务`,
+      '',
+      '| ID | 标题 | 优先级 | 状态 | 项目 |',
+      '|----|------|--------|------|------|',
+    ];
+
+    for (const task of tasks) {
+      lines.push(
+        `| ${task.id.value} | ${task.title} | ${task.priority} | ${task.status} | ${task.projects.join(', ') || '-'} |`
+      );
+    }
+
+    if (tasks.length === 0) {
+      lines.push('| - | 暂无待办任务 | - | - | - |');
+    }
+
+    lines.push('');
+    lines.push('**提示**: 使用 `get_task` 获取任务详情');
+
     return {
       content: [
         {
           type: 'text',
-          text: 'List pending tasks - TODO',
+          text: lines.join('\n'),
         },
       ],
     };
