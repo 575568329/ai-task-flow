@@ -431,12 +431,40 @@ class AITaskFlowServer {
   }
 
   private async handleAddNoteToTask(args: any) {
-    // TODO: 实现逻辑
+    const { taskId, note } = args;
+
+    if (!taskId) {
+      throw new Error('taskId is required');
+    }
+
+    if (!note) {
+      throw new Error('note is required');
+    }
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+
+    if (!task) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 不存在`,
+          },
+        ],
+      };
+    }
+
+    // 追加备注到描述中
+    task.description = task.description + '\n\n---\n**备注**: ' + note;
+    task.updatedAt = new Date();
+
+    await this.taskRepository.save(task);
+
     return {
       content: [
         {
           type: 'text',
-          text: `Add note to ${args.taskId} - TODO`,
+          text: `✅ 已为任务 ${taskId} 添加备注`,
         },
       ],
     };
