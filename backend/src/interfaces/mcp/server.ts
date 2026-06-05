@@ -255,15 +255,75 @@ class AITaskFlowServer {
   }
 
   private async handleRecordResult(args: any) {
-    // TODO: 实现逻辑
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Record result for ${args.taskId} - TODO`,
-        },
-      ],
-    };
+    const { taskId, status, changedFiles, notes, reviewPoints, blockedReason } = args;
+
+    if (!taskId) {
+      throw new Error('taskId is required');
+    }
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+
+    if (!task) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 不存在`,
+          },
+        ],
+      };
+    }
+
+    // 验证任务状态
+    if (task.status !== TaskStatus.DISPATCHED) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 未派发，无法记录结果（当前状态: ${task.status}）`,
+          },
+        ],
+      };
+    }
+
+    // 记录结果
+    try {
+      const resultEvent = task.recordResult({
+        status,
+        changedFiles,
+        notes,
+        reviewPoints,
+        blockedReason,
+      });
+
+      await this.taskRepository.save(task);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ 任务 ${taskId} 结果已记录`,
+              '',
+              `**状态**: ${status}`,
+              `**变更文件**: ${changedFiles.length} 个`,
+              `**备注**: ${notes}`,
+              '',
+              '任务已进入审核状态，请等待审核。',
+            ].join('\n'),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 记录结果失败: ${error.message}`,
+          },
+        ],
+      };
+    }
   }
 
   async run(): Promise<void> {
