@@ -1,0 +1,66 @@
+// backend/src/domain/workflow/entities/__tests__/Task.test.ts
+import { describe, it, expect } from 'vitest';
+import { Task } from '../Task.js';
+import { TaskId } from '../../value-objects/TaskId.js';
+import { TaskStatus } from '../../value-objects/TaskStatus.js';
+import { Priority } from '../../value-objects/Priority.js';
+import { WorktreeRef } from '../../value-objects/WorktreeRef.js';
+import { ExecutionResult } from '../../value-objects/ExecutionResult.js';
+
+describe('Task', () => {
+  it('should dispatch task and emit event', () => {
+    const task = new Task(
+      TaskId.create('WS', 1),
+      'Test task',
+      'Description',
+      TaskStatus.TODO,
+      Priority.P1,
+      ['project-a'],
+      [],
+      []
+    );
+
+    const worktree = WorktreeRef.create('/path/to/project', 'ws-001', 'abc123');
+    task.dispatch(worktree);
+
+    expect(task.status).toBe(TaskStatus.DISPATCHED);
+    expect(task.worktree).toBe(worktree);
+    expect(task.domainEvents).toHaveLength(1);
+    expect(task.domainEvents[0].eventType).toBe('TaskDispatched');
+  });
+
+  it('should record result and move to review', () => {
+    const task = new Task(
+      TaskId.create('WS', 2),
+      'Test',
+      'Desc',
+      TaskStatus.DISPATCHED,
+      Priority.P0,
+      [],
+      [],
+      []
+    );
+
+    const result = new ExecutionResult('done', ['file.ts'], 'Fixed bug');
+    task.recordResult(result);
+
+    expect(task.status).toBe(TaskStatus.REVIEW);
+    expect(task.executionResult).toBe(result);
+  });
+
+  it('should reject invalid state transition', () => {
+    const task = new Task(
+      TaskId.create('WS', 3),
+      'Test',
+      'Desc',
+      TaskStatus.DONE,
+      Priority.P2,
+      [],
+      [],
+      []
+    );
+
+    const worktree = WorktreeRef.create('/path', 'ws-003', 'xyz');
+    expect(() => task.dispatch(worktree)).toThrow('Only TODO tasks');
+  });
+});
