@@ -10,6 +10,8 @@ import { Priority } from '../../domain/workflow/value-objects/Priority.js';
 import { WorktreeRef } from '../../domain/workflow/value-objects/WorktreeRef.js';
 import { ExecutionResult } from '../../domain/workflow/value-objects/ExecutionResult.js';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
+import { EventBus } from '../pubsub/EventBus.js';
+import { EventStore } from '../pubsub/EventStore.js';
 
 interface TaskDTO {
   id: string;
@@ -45,7 +47,11 @@ interface TaskDTO {
 export class JsonTaskRepository implements TaskRepository {
   private readonly filePath: string;
 
-  constructor(customPath?: string) {
+  constructor(
+    customPath?: string,
+    private eventBus?: EventBus,
+    private eventStore?: EventStore
+  ) {
     if (customPath) {
       this.filePath = customPath;
     } else {
@@ -66,6 +72,25 @@ export class JsonTaskRepository implements TaskRepository {
     }
 
     await this.saveAll(tasks);
+
+    // 发布和持久化领域事件
+    const events = task.domainEvents;
+    if (events.length > 0) {
+      for (const event of events) {
+        // 发布到 EventBus（如果有）
+        if (this.eventBus) {
+          await this.eventBus.publish(event);
+        }
+
+        // 持久化到 EventStore（如果有）
+        if (this.eventStore) {
+          await this.eventStore.append(event);
+        }
+      }
+
+      // 清除已发布的事件
+      task.clearEvents();
+    }
   }
 
   async findById(id: TaskId): Promise<Task | null> {
