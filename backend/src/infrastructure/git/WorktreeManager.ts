@@ -1,5 +1,5 @@
 // backend/src/infrastructure/git/WorktreeManager.ts
-import simpleGit, { SimpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import { WorktreeRef } from '../../domain/workflow/value-objects/WorktreeRef.js';
 import fs from 'fs/promises';
 import path from 'path';

@@ -1,7 +1,7 @@
 // backend/src/infrastructure/git/__tests__/WorktreeManager.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WorktreeManager } from '../WorktreeManager.js';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';

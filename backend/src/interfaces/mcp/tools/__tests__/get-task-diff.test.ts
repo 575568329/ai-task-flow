@@ -37,7 +37,7 @@ describe('get_task_diff MCP tool', () => {
     execSync('git add .', { cwd: testRepoPath });
     execSync('git commit -m "Initial commit"', { cwd: testRepoPath });
 
-    worktreeManager = new WorktreeManager(testRepoPath);
+    worktreeManager = new WorktreeManager();
   });
 
   afterEach(async () => {
