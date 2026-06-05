@@ -9,6 +9,7 @@ import { container } from '../../infrastructure/di/container.js';
 import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
+import type { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
 
 /**
  * AI Task Flow MCP Server
@@ -24,6 +25,7 @@ import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 class AITaskFlowServer {
   private server: Server;
   private taskRepository: TaskRepository;
+  private worktreeManager: WorktreeManager;
 
   constructor() {
     this.server = new Server(
@@ -40,6 +42,7 @@ class AITaskFlowServer {
 
     // 从 DI 容器获取依赖
     this.taskRepository = container.resolve<TaskRepository>('TaskRepository');
+    this.worktreeManager = container.resolve<WorktreeManager>('WorktreeManager');
 
     this.setupHandlers();
   }
@@ -101,6 +104,38 @@ class AITaskFlowServer {
             required: ['taskId', 'status', 'changedFiles', 'notes'],
           },
         },
+        {
+          name: 'get_task_diff',
+          description: '获取任务 worktree 的 git diff',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '任务 ID（例如 WS-001）',
+              },
+            },
+            required: ['taskId'],
+          },
+        },
+        {
+          name: 'add_note_to_task',
+          description: '为任务添加备注',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: '任务 ID（例如 WS-001）',
+              },
+              note: {
+                type: 'string',
+                description: '备注内容',
+              },
+            },
+            required: ['taskId', 'note'],
+          },
+        },
       ],
     }));
 
@@ -115,6 +150,10 @@ class AITaskFlowServer {
           return this.handleGetTask(args);
         case 'record_result':
           return this.handleRecordResult(args);
+        case 'get_task_diff':
+          return this.handleGetTaskDiff(args);
+        case 'add_note_to_task':
+          return this.handleAddNoteToTask(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -324,6 +363,83 @@ class AITaskFlowServer {
         ],
       };
     }
+  }
+
+  private async handleGetTaskDiff(args: any) {
+    const { taskId } = args;
+
+    if (!taskId) {
+      throw new Error('taskId is required');
+    }
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+
+    if (!task) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 不存在`,
+          },
+        ],
+      };
+    }
+
+    // 验证任务是否有 worktree
+    if (!task.worktree) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 未派发，没有 worktree`,
+          },
+        ],
+      };
+    }
+
+    // 获取 diff
+    try {
+      const diff = await this.worktreeManager.getDiff(task.worktree);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `# Diff for Task ${taskId}`,
+              '',
+              `**Worktree**: \`${task.worktree.path}\``,
+              `**Branch**: \`${task.worktree.branch}\``,
+              '',
+              '```diff',
+              diff || '(no changes)',
+              '```',
+            ].join('\n'),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 获取 diff 失败: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private async handleAddNoteToTask(args: any) {
+    // TODO: 实现逻辑
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Add note to ${args.taskId} - TODO`,
+        },
+      ],
+    };
   }
 
   async run(): Promise<void> {
