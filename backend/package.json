@@ -1,0 +1,26 @@
+{
+  "name": "@ai-task-flow/backend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "test": "vitest",
+    "mcp": "node dist/interfaces/mcp/mcp-server.js"
+  },
+  "dependencies": {
+    "fastify": "^4.26.0",
+    "@fastify/cors": "^9.0.1",
+    "zod": "^3.22.4",
+    "tsyringe": "^4.8.0",
+    "simple-git": "^3.22.0",
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "nanoid": "^5.0.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",
+    "vitest": "^1.2.1",
+    "@types/node": "^20.11.5"
+  }
+}
