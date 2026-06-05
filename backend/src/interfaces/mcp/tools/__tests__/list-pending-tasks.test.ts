@@ -1,4 +1,5 @@
 // backend/src/interfaces/mcp/tools/__tests__/list-pending-tasks.test.ts
+import 'reflect-metadata';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { JsonTaskRepository } from '../../../../infrastructure/persistence/JsonTaskRepository.js';
 import { Task } from '../../../../domain/workflow/entities/Task.js';

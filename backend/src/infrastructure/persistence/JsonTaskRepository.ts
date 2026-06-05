@@ -2,6 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { injectable } from 'tsyringe';
 import { Task } from '../../domain/workflow/entities/Task.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
@@ -40,6 +41,7 @@ interface TaskDTO {
  * JSON 文件存储的 Task 仓储实现
  * 存储位置：~/.ai-task-flow/tasks.json
  */
+@injectable()
 export class JsonTaskRepository implements TaskRepository {
   private readonly filePath: string;
 

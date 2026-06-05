@@ -3,7 +3,6 @@ import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { WorktreeManager } from '../git/WorktreeManager.js';
 import { JsonTaskRepository } from '../persistence/JsonTaskRepository.js';
-import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 
 /**
  * 依赖注入容器配置
@@ -14,7 +13,7 @@ import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepo
 container.registerSingleton('WorktreeManager', WorktreeManager);
 
 // 注册 Repository
-container.registerSingleton<TaskRepository>('TaskRepository', {
+container.register('TaskRepository', {
   useClass: JsonTaskRepository,
 });
 

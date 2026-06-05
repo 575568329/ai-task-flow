@@ -8,6 +8,7 @@ import {
 import { container } from '../../infrastructure/di/container.js';
 import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
+import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 
 /**
  * AI Task Flow MCP Server
@@ -168,12 +169,86 @@ class AITaskFlowServer {
   }
 
   private async handleGetTask(args: any) {
-    // TODO: 实现逻辑
+    const { taskId } = args;
+
+    if (!taskId) {
+      throw new Error('taskId is required');
+    }
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+
+    if (!task) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 不存在`,
+          },
+        ],
+      };
+    }
+
+    // 拼装 Markdown 格式的任务详情
+    const lines = [
+      `# 任务详情: ${task.id.value}`,
+      '',
+      `**标题**: ${task.title}`,
+      `**优先级**: ${task.priority}`,
+      `**状态**: ${task.status}`,
+      `**项目**: ${task.projects.join(', ') || '无'}`,
+      '',
+      '## 描述',
+      task.description || '（无描述）',
+      '',
+      '## 验收标准',
+    ];
+
+    if (task.acceptanceCriteria.length > 0) {
+      task.acceptanceCriteria.forEach((ac, index) => {
+        lines.push(`${index + 1}. ${ac}`);
+      });
+    } else {
+      lines.push('（无验收标准）');
+    }
+
+    lines.push('');
+    lines.push('## 相关文件');
+    if (task.relatedFiles.length > 0) {
+      task.relatedFiles.forEach(file => {
+        lines.push(`- \`${file}\``);
+      });
+    } else {
+      lines.push('（无相关文件）');
+    }
+
+    // Worktree 信息
+    if (task.worktree) {
+      lines.push('');
+      lines.push('## Worktree 信息');
+      lines.push(`- 路径: \`${task.worktree.path}\``);
+      lines.push(`- 分支: \`${task.worktree.branch}\``);
+      lines.push(`- Base Commit: \`${task.worktree.baseCommit.substring(0, 7)}\``);
+    }
+
+    // 执行结果
+    if (task.executionResult) {
+      lines.push('');
+      lines.push('## 执行结果');
+      lines.push(`- 状态: ${task.executionResult.status}`);
+      lines.push(`- 变更文件: ${task.executionResult.changedFiles.join(', ')}`);
+      lines.push(`- 备注: ${task.executionResult.notes}`);
+    }
+
+    lines.push('');
+    lines.push('---');
+    lines.push(`创建时间: ${task.createdAt.toISOString()}`);
+    lines.push(`更新时间: ${task.updatedAt.toISOString()}`);
+
     return {
       content: [
         {
           type: 'text',
-          text: `Get task ${args.taskId} - TODO`,
+          text: lines.join('\n'),
         },
       ],
     };

@@ -1,4 +1,5 @@
 // backend/src/infrastructure/persistence/__tests__/JsonTaskRepository.test.ts
+import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { JsonTaskRepository } from '../JsonTaskRepository.js';
 import { Task } from '../../../domain/workflow/entities/Task.js';
