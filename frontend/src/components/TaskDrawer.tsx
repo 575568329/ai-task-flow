@@ -1,6 +1,6 @@
 // frontend/src/components/TaskDrawer.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { TaskStatus, Priority, stepsToMarkdown, type TaskDTO, type TaskStep } from '@ai-task-flow/shared';
+import { TaskStatus, Priority, stepsToMarkdown, buildClaudeCodePrompt, type TaskDTO, type TaskStep } from '@ai-task-flow/shared';
 import { Drawer } from './ui/Drawer';
 import { Button } from './ui/Button';
 import { Input, Textarea } from './ui/Input';
@@ -14,7 +14,7 @@ import { taskApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/taskMeta';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Copy } from 'lucide-react';
 
 export function TaskDrawer() {
   const selectedId = useUIStore((s) => s.selectedTaskId);
@@ -323,6 +323,23 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
                   }
                 >
                   保存
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={async () => {
+                    const prompt = buildClaudeCodePrompt(task);
+                    try {
+                      await navigator.clipboard.writeText(prompt);
+                      toast.success('派发指令已复制,粘贴给 Claude Code 即可开工');
+                    } catch {
+                      toast.error('复制失败,请检查浏览器权限');
+                    }
+                  }}
+                  title="复制一段提示词,粘贴给 Claude Code 让它通过 MCP 拉取任务并开始执行"
+                >
+                  <Copy size={14} />
+                  复制派发指令
                 </Button>
                 <Button
                   variant="danger"
