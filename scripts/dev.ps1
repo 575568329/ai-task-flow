@@ -52,17 +52,6 @@ Write-Host ""
 Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
 Write-Host "=========================================" -ForegroundColor Green
 
-# 捕获 Ctrl+C
-$exitHandler = {
-    Write-Host ""
-    Write-Host "Stopping all services..." -ForegroundColor Yellow
-    Stop-Job $sharedJob, $backendJob, $frontendJob -ErrorAction SilentlyContinue
-    Remove-Job $sharedJob, $backendJob, $frontendJob -Force -ErrorAction SilentlyContinue
-    exit 0
-}
-
-Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $exitHandler | Out-Null
-
 # 实时输出 backend 和 frontend 日志
 try {
     while ($true) {
@@ -71,5 +60,13 @@ try {
         Start-Sleep -Milliseconds 100
     }
 } finally {
-    & $exitHandler
+    Write-Host ""
+    Write-Host "Stopping all services..." -ForegroundColor Yellow
+    Stop-Job $sharedJob, $backendJob, $frontendJob -ErrorAction SilentlyContinue
+    Remove-Job $sharedJob, $backendJob, $frontendJob -Force -ErrorAction SilentlyContinue
+
+    # 额外保险:强制杀掉可能残留的 node 进程
+    Write-Host "Cleaning up node processes..." -ForegroundColor Yellow
+    taskkill /F /T /IM node.exe 2>$null | Out-Null
+    Write-Host "Done." -ForegroundColor Green
 }
