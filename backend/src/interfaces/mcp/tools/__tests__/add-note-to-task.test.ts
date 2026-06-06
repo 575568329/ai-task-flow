@@ -34,7 +34,8 @@ describe('add_note_to_task MCP tool', () => {
       'Original description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -55,3 +56,4 @@ describe('add_note_to_task MCP tool', () => {
     expect(task).toBeNull();
   });
 });
+

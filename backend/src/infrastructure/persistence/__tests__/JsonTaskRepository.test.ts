@@ -34,9 +34,13 @@ describe('JsonTaskRepository', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P1,
-      ['project-a'],
+      undefined,
+      undefined,
       [],
-      ['AC1', 'AC2']
+      [
+        { description: 'AC1' },
+        { description: 'AC2' }
+      ]
     );
 
     await repository.save(task);
@@ -45,7 +49,8 @@ describe('JsonTaskRepository', () => {
     expect(found).not.toBeNull();
     expect(found?.id.value).toBe('TEST-001');
     expect(found?.title).toBe('Test Task');
-    expect(found?.acceptanceCriteria).toEqual(['AC1', 'AC2']);
+    expect(found?.steps).toHaveLength(2);
+    expect(found?.steps[0].description).toBe('AC1');
   });
 
   it('should find tasks by status', async () => {
@@ -55,7 +60,8 @@ describe('JsonTaskRepository', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -66,7 +72,8 @@ describe('JsonTaskRepository', () => {
       'Desc',
       TaskStatus.DONE,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -86,7 +93,8 @@ describe('JsonTaskRepository', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P2,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -110,7 +118,8 @@ describe('JsonTaskRepository', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -122,3 +131,4 @@ describe('JsonTaskRepository', () => {
     expect(found).toBeNull();
   });
 });
+

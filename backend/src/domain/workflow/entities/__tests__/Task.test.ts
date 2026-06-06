@@ -15,7 +15,8 @@ describe('Task', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P1,
-      ['project-a'],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -36,7 +37,8 @@ describe('Task', () => {
       'Desc',
       TaskStatus.DISPATCHED,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -55,7 +57,8 @@ describe('Task', () => {
       'Desc',
       TaskStatus.DONE,
       Priority.P2,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -71,7 +74,8 @@ describe('Task', () => {
       'Original desc',
       TaskStatus.TODO,
       Priority.P2,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -96,7 +100,8 @@ describe('Task', () => {
       'Keep desc',
       TaskStatus.TODO,
       Priority.P1,
-      ['proj-a'],
+      '/path/to/repo',
+      'project-a',
       [],
       []
     );
@@ -105,7 +110,7 @@ describe('Task', () => {
 
     expect(task.title).toBe('Keep title');
     expect(task.description).toBe('Keep desc');
-    expect(task.projects).toEqual(['proj-a']);
+    expect(task.projectName).toBe('project-a');
     expect(task.status).toBe(TaskStatus.BLOCKED);
   });
 
@@ -116,7 +121,8 @@ describe('Task', () => {
       'desc',
       TaskStatus.REVIEW,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -135,7 +141,8 @@ describe('Task', () => {
       'desc',
       TaskStatus.REVIEW,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -155,7 +162,8 @@ describe('Task', () => {
       'd',
       TaskStatus.TODO,
       Priority.P2,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );

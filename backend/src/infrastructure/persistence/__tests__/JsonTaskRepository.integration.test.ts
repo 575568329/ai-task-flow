@@ -52,7 +52,8 @@ describe('JsonTaskRepository Integration (EventBus + EventStore)', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -75,7 +76,8 @@ describe('JsonTaskRepository Integration (EventBus + EventStore)', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -100,7 +102,8 @@ describe('JsonTaskRepository Integration (EventBus + EventStore)', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -127,7 +130,8 @@ describe('JsonTaskRepository Integration (EventBus + EventStore)', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );

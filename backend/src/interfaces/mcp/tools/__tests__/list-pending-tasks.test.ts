@@ -24,7 +24,8 @@ describe('list_pending_tasks MCP tool', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      ['frontend'],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -35,7 +36,8 @@ describe('list_pending_tasks MCP tool', () => {
       'Description',
       TaskStatus.DONE,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -55,7 +57,8 @@ describe('list_pending_tasks MCP tool', () => {
       'Desc',
       TaskStatus.DISPATCHED,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -66,3 +69,4 @@ describe('list_pending_tasks MCP tool', () => {
     expect(dispatchedTasks).toHaveLength(1);
   });
 });
+

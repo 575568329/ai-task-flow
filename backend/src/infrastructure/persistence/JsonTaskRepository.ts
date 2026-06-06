@@ -12,32 +12,7 @@ import { ExecutionResult } from '../../domain/workflow/value-objects/ExecutionRe
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../pubsub/EventBus.js';
 import { EventStore } from '../pubsub/EventStore.js';
-
-interface TaskDTO {
-  id: string;
-  title: string;
-  description: string;
-  status: TaskStatus;
-  priority: Priority;
-  projects: string[];
-  relatedFiles: string[];
-  acceptanceCriteria: string[];
-  worktree?: {
-    path: string;
-    branch: string;
-    baseCommit: string;
-    createdAt: string;
-  };
-  executionResult?: {
-    status: 'done' | 'partial' | 'blocked';
-    changedFiles: string[];
-    notes: string;
-    reviewPoints?: string[];
-    blockedReason?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
+import type { TaskDTO } from '@ai-task-flow/shared';
 
 /**
  * JSON 文件存储的 Task 仓储实现

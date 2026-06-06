@@ -186,7 +186,7 @@ class AITaskFlowServer {
 
     for (const task of tasks) {
       lines.push(
-        `| ${task.id.value} | ${task.title} | ${task.priority} | ${task.status} | ${task.projects.join(', ') || '-'} |`
+        `| ${task.id.value} | ${task.title} | ${task.priority} | ${task.status} | ${task.projectName || '-'} |`
       );
     }
 
@@ -234,20 +234,24 @@ class AITaskFlowServer {
       `**标题**: ${task.title}`,
       `**优先级**: ${task.priority}`,
       `**状态**: ${task.status}`,
-      `**项目**: ${task.projects.join(', ') || '无'}`,
+      `**项目**: ${task.projectName || '无'}`,
+      `**仓库路径**: ${task.repoPath || '无'}`,
       '',
       '## 描述',
       task.description || '（无描述）',
       '',
-      '## 验收标准',
+      '## 任务步骤',
     ];
 
-    if (task.acceptanceCriteria.length > 0) {
-      task.acceptanceCriteria.forEach((ac, index) => {
-        lines.push(`${index + 1}. ${ac}`);
+    if (task.steps.length > 0) {
+      task.steps.forEach((step, index) => {
+        lines.push(`${index + 1}. ${step.description}`);
+        if (step.imageUrl) {
+          lines.push(`   ![图片](${step.imageUrl})`);
+        }
       });
     } else {
-      lines.push('（无验收标准）');
+      lines.push('（无步骤）');
     }
 
     lines.push('');

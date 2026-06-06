@@ -42,7 +42,8 @@ describe('record_result MCP tool', () => {
       'Description',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -75,7 +76,8 @@ describe('record_result MCP tool', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -103,7 +105,8 @@ describe('record_result MCP tool', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -123,3 +126,4 @@ describe('record_result MCP tool', () => {
     expect(found?.executionResult?.blockedReason).toBe('Waiting for API endpoint');
   });
 });
+

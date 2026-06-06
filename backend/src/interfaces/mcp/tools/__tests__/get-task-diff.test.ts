@@ -61,7 +61,8 @@ describe('get_task_diff MCP tool', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P0,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -92,7 +93,8 @@ describe('get_task_diff MCP tool', () => {
       'Desc',
       TaskStatus.TODO,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       []
     );
@@ -103,3 +105,4 @@ describe('get_task_diff MCP tool', () => {
     expect(found?.worktree).toBeUndefined();
   });
 });
+

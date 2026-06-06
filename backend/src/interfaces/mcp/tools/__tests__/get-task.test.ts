@@ -35,9 +35,13 @@ describe('get_task MCP tool', () => {
       'Fix the authentication issue',
       TaskStatus.TODO,
       Priority.P0,
-      ['backend', 'auth'],
+      undefined,
+      undefined,
       ['src/auth/login.ts', 'src/middleware/auth.ts'],
-      ['用户可以正常登录', '错误提示清晰']
+      [
+        { description: '用户可以正常登录' },
+        { description: '错误提示清晰' }
+      ]
     );
 
     await repository.save(task);
@@ -45,7 +49,7 @@ describe('get_task MCP tool', () => {
     const found = await repository.findById(task.id);
     expect(found).not.toBeNull();
     expect(found?.title).toBe('Fix login bug');
-    expect(found?.acceptanceCriteria).toHaveLength(2);
+    expect(found?.steps).toHaveLength(2);
     expect(found?.relatedFiles).toHaveLength(2);
   });
 
@@ -68,7 +72,8 @@ describe('get_task MCP tool', () => {
       'Desc',
       TaskStatus.DISPATCHED,
       Priority.P1,
-      [],
+      undefined,
+      undefined,
       [],
       [],
       worktree
@@ -81,3 +86,4 @@ describe('get_task MCP tool', () => {
     expect(found?.worktree?.branch).toBe('feature/fix-bug');
   });
 });
+
