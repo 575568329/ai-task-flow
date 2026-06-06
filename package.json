@@ -14,7 +14,7 @@
     "dev:shared": "cd shared && npm run build:watch",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "cleanup": "taskkill //F //T //IM node.exe || echo 没有 node 进程",
+    "cleanup": "powershell -ExecutionPolicy Bypass -File scripts/cleanup.ps1",
     "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
     "build:shared": "cd shared && npm run build",
     "build:backend": "cd backend && npm run build",
