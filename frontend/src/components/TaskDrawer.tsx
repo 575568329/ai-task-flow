@@ -330,10 +330,10 @@ function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject 
 
       {/* 右侧:预览区 */}
       {showPreview && (
-        <div className="w-[40%] overflow-y-auto border-l pl-4" style={{ borderColor: 'var(--border-primary)' }}>
+        <div className="fade-in w-[40%] overflow-y-auto border-l pl-4 transition-smooth" style={{ borderColor: 'var(--border-primary)' }}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">预览</h3>
-            <button onClick={() => setShowPreview(false)} className="text-xs" style={{ color: 'var(--text-3)' }}>
+            <button onClick={() => setShowPreview(false)} className="text-xs hover:opacity-70 transition-fast" style={{ color: 'var(--text-3)' }}>
               <ChevronRight size={16} />
             </button>
           </div>
@@ -345,7 +345,7 @@ function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject 
       {!showPreview && (
         <button
           onClick={() => setShowPreview(true)}
-          className="absolute right-4 top-4 rounded p-1"
+          className="fade-in absolute right-4 top-4 rounded p-1 hover:opacity-70 transition-fast"
           style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
         >
           <ChevronLeft size={16} />

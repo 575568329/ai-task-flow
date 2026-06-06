@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { initTheme } from './stores/uiStore.ts';
 import './index.css';
+import './styles/animations.css';
 
 initTheme();
 

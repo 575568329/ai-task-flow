@@ -23,11 +23,11 @@ export function Modal({ open, onClose, title, children, footer, width = 560 }: M
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="modal-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl shadow-2xl"
+        className="modal-content-enter flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl shadow-2xl"
         style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

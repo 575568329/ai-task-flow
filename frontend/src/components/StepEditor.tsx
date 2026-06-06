@@ -89,8 +89,8 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className={`rounded-lg border p-3 ${
-                        snapshot.isDragging ? 'shadow-lg' : ''
+                      className={`rounded-lg border p-3 transition-fast ${
+                        snapshot.isDragging ? 'dragging' : ''
                       }`}
                       style={{
                         borderColor: 'var(--border-primary)',

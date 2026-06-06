@@ -55,12 +55,12 @@ export function Toaster() {
 
 function ToastItem({ toast: t, onClose }: { toast: Toast; onClose: () => void }) {
   useEffect(() => {
-    // 占位:动画可后续加
+    // 动画已通过 CSS 类实现
   }, []);
   const Icon = t.type === 'success' ? CheckCircle : t.type === 'error' ? XCircle : Info;
   return (
     <div
-      className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg"
+      className="toast-enter flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg cursor-pointer"
       style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', borderLeft: `3px solid ${colorMap[t.type]}` }}
       onClick={onClose}
     >

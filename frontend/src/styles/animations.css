@@ -1,0 +1,180 @@
+/* frontend/src/styles/animations.css */
+
+/* Modal 进出动画 */
+@keyframes modal-overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-content-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-content-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* Drawer 进出动画 */
+@keyframes drawer-overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-content-enter {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-content-exit {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Toast 进出动画 */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+/* 动画类 */
+.modal-overlay-enter {
+  animation: modal-overlay-enter 200ms ease-out;
+}
+
+.modal-overlay-exit {
+  animation: modal-overlay-exit 200ms ease-in;
+}
+
+.modal-content-enter {
+  animation: modal-content-enter 300ms ease-out;
+}
+
+.modal-content-exit {
+  animation: modal-content-exit 200ms ease-in;
+}
+
+.drawer-overlay-enter {
+  animation: drawer-overlay-enter 200ms ease-out;
+}
+
+.drawer-overlay-exit {
+  animation: drawer-overlay-exit 200ms ease-in;
+}
+
+.drawer-content-enter {
+  animation: drawer-content-enter 300ms ease-out;
+}
+
+.drawer-content-exit {
+  animation: drawer-content-exit 250ms ease-in;
+}
+
+.toast-enter {
+  animation: toast-enter 200ms ease-out;
+}
+
+.toast-exit {
+  animation: toast-exit 200ms ease-in;
+}
+
+/* 拖拽相关 */
+.dragging {
+  opacity: 0.8;
+  transform: scale(1.02);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+  transition: all 150ms ease-out;
+}
+
+.drag-placeholder {
+  border: 2px dashed var(--border-primary);
+  background: var(--surface-2);
+  opacity: 0.5;
+}
+
+.drop-target-highlight {
+  border-color: var(--primary-6);
+  background: var(--primary-1);
+  transition: all 150ms ease-out;
+}
+
+/* 通用过渡 */
+.transition-smooth {
+  transition: all 300ms ease-in-out;
+}
+
+.transition-fast {
+  transition: all 150ms ease-out;
+}
+
+.fade-in {
+  animation: modal-overlay-enter 200ms ease-out;
+}
+
+.fade-out {
+  animation: modal-overlay-exit 200ms ease-in;
+}

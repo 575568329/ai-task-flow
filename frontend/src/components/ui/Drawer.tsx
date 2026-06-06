@@ -22,9 +22,9 @@ export function Drawer({ open, onClose, title, children, width = 520 }: DrawerPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+    <div className="drawer-overlay-enter fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
       <div
-        className="flex h-full flex-col shadow-2xl"
+        className="drawer-content-enter flex h-full flex-col shadow-2xl"
         style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', width }}
         onClick={(e) => e.stopPropagation()}
       >
