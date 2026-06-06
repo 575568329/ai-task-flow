@@ -186,4 +186,81 @@ export async function registerTaskRoutes(
       }
     }
   );
+
+  // GET /api/tasks/:id/markdown - 生成任务的 markdown 文本
+  fastify.get<{ Params: { id: string } }>(
+    '/api/tasks/:id/markdown',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      const lines = [
+        `# ${task.title}`,
+        '',
+        `**任务ID**: ${task.id.value}`,
+        `**优先级**: ${task.priority}`,
+        `**状态**: ${task.status}`,
+      ];
+
+      if (task.projectName) {
+        lines.push(`**项目**: ${task.projectName}`);
+      }
+      if (task.repoPath) {
+        lines.push(`**仓库路径**: \`${task.repoPath}\``);
+      }
+
+      lines.push('', '## 描述', '', task.description || '（无描述）', '');
+
+      if (task.steps.length > 0) {
+        lines.push('## 任务步骤', '');
+        task.steps.forEach((step, index) => {
+          lines.push(`### 步骤 ${index + 1}`, '');
+          if (step.imageUrl) {
+            lines.push(`![步骤${index + 1}图片](${step.imageUrl})`, '');
+          }
+          lines.push(step.description, '');
+        });
+      }
+
+      if (task.relatedFiles.length > 0) {
+        lines.push('## 相关文件', '');
+        task.relatedFiles.forEach(file => {
+          lines.push(`- \`${file}\``);
+        });
+        lines.push('');
+      }
+
+      if (task.worktree) {
+        lines.push(
+          '## Worktree 信息',
+          '',
+          `- **路径**: \`${task.worktree.path}\``,
+          `- **分支**: \`${task.worktree.branch}\``,
+          `- **基准提交**: \`${task.worktree.baseCommit}\``,
+          ''
+        );
+      }
+
+      if (task.executionResult) {
+        lines.push(
+          '## 执行结果',
+          '',
+          `**状态**: ${task.executionResult.status}`,
+          '',
+          '**变更文件**:',
+          ''
+        );
+        task.executionResult.changedFiles.forEach(file => {
+          lines.push(`- \`${file}\``);
+        });
+        lines.push('', `**备注**: ${task.executionResult.notes}`, '');
+      }
+
+      return { markdown: lines.join('\n') };
+    }
+  );
 }
