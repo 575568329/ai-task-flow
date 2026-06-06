@@ -19,9 +19,7 @@ Write-Host "  - $LOGS_DIR/frontend.log"
 Write-Host ""
 
 # 清理旧日志
-"" | Out-File "$LOGS_DIR/shared.log"
-"" | Out-File "$LOGS_DIR/backend.log"
-"" | Out-File "$LOGS_DIR/frontend.log"
+Remove-Item "$LOGS_DIR/*.log" -Force -ErrorAction SilentlyContinue
 
 # 启动 shared (后台)
 $sharedJob = Start-Job -ScriptBlock {
