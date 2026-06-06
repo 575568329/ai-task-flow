@@ -8,3 +8,6 @@ dist/
 # TS build artifacts
 *.tsbuildinfo
 dist-tsnode/
+
+# 用户上传的图片(运行时产物,不进版本库)
+backend/uploads/
