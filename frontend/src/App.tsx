@@ -54,7 +54,9 @@ function App() {
   // 所有项目(用于过滤下拉)
   const allProjects = useMemo(() => {
     const set = new Set<string>();
-    tasks.forEach((t) => t.projects.forEach((p) => set.add(p)));
+    tasks.forEach((t) => {
+      if (t.projectName) set.add(t.projectName);
+    });
     return [...set].sort();
   }, [tasks]);
 
@@ -62,7 +64,7 @@ function App() {
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return tasks.filter((t) => {
-      if (projectFilter && !t.projects.includes(projectFilter)) return false;
+      if (projectFilter && t.projectName !== projectFilter) return false;
       if (q && !t.title.toLowerCase().includes(q) && !t.id.toLowerCase().includes(q)) return false;
       return true;
     });

@@ -9,7 +9,7 @@ interface TaskState {
   loading: boolean;
 
   fetchAll: () => Promise<void>;
-  create: (data: CreateTaskRequest) => Promise<void>;
+  create: (data: CreateTaskRequest) => Promise<TaskDTO>;
   update: (id: string, data: UpdateTaskRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
   /** 拖拽乐观更新:先改本地,失败回滚 */
@@ -36,6 +36,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   create: async (data) => {
     const task = await taskApi.create(data);
     set((s) => ({ tasks: [...s.tasks, task] }));
+    return task;
   },
 
   update: async (id, data) => {

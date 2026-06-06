@@ -7,7 +7,7 @@ interface DrawerProps {
   onClose: () => void;
   title?: ReactNode;
   children: ReactNode;
-  width?: number;
+  width?: number | string;
 }
 
 /** 右侧滑出抽屉 */

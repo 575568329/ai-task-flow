@@ -14,7 +14,6 @@ const EMPTY = {
   title: '',
   description: '',
   priority: Priority.P1,
-  projects: '',
   relatedFiles: '',
   acceptanceCriteria: '',
 };
@@ -47,12 +46,12 @@ export function CreateTaskModal() {
         title: form.title,
         description: form.description,
         priority: form.priority,
-        projects: splitList(form.projects),
         relatedFiles: splitList(form.relatedFiles),
-        acceptanceCriteria: form.acceptanceCriteria
+        steps: form.acceptanceCriteria
           .split('\n')
           .map((s) => s.trim())
-          .filter(Boolean),
+          .filter(Boolean)
+          .map((desc) => ({ description: desc })),
       });
       toast.success('任务创建成功');
       setOpen(false);
@@ -105,12 +104,6 @@ export function CreateTaskModal() {
               { label: 'P1 - 高', value: Priority.P1 },
               { label: 'P2 - 普通', value: Priority.P2 },
             ]}
-          />
-        </Field>
-        <Field label="项目(逗号分隔)">
-          <Input
-            value={form.projects}
-            onChange={(e) => setForm({ ...form, projects: e.target.value })}
           />
         </Field>
         <Field label="相关文件(逗号分隔)">

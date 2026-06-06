@@ -50,11 +50,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         </p>
       )}
 
-      {task.projects.length > 0 && (
+      {task.projectName && (
         <div className="mb-2 flex flex-wrap gap-1">
-          {task.projects.map((p) => (
-            <Tag key={p}>{p}</Tag>
-          ))}
+          <Tag>{task.projectName}</Tag>
         </div>
       )}
 
