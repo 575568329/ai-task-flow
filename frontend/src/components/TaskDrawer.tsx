@@ -9,12 +9,13 @@ import { Tag } from './ui/Tag';
 import { DiffViewer } from './DiffViewer';
 import { StepEditor } from './StepEditor';
 import { MarkdownPreview } from './MarkdownPreview';
+import { DirectoryPicker } from './DirectoryPicker';
 import { toast } from './ui/Toaster';
 import { taskApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/taskMeta';
-import { ChevronRight, ChevronLeft, Copy } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Copy, FolderOpen } from 'lucide-react';
 
 export function TaskDrawer() {
   const selectedId = useUIStore((s) => s.selectedTaskId);
@@ -133,6 +134,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
   const [busy, setBusy] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const isNewTask = creating;
 
@@ -160,8 +162,9 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
     }
   }
 
-  async function checkProjectPath() {
-    if (!repoPath.trim()) {
+  async function checkProjectPath(overridePath?: string) {
+    const target = (overridePath ?? repoPath).trim();
+    if (!target) {
       setPathValid(null);
       return;
     }
@@ -170,7 +173,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
       const res = await fetch('http://localhost:3000/api/projects/inspect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: repoPath }),
+        body: JSON.stringify({ path: target }),
       });
 
       const data = await res.json();
@@ -261,11 +264,21 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               <Input
                 value={repoPath}
                 onChange={(e) => setRepoPath(e.target.value)}
-                onBlur={checkProjectPath}
-                placeholder="/path/to/repo"
+                onBlur={() => checkProjectPath()}
+                placeholder="点「浏览」选择,或直接粘贴路径"
               />
-              {pathValid === true && <span className="text-green-600">✓</span>}
-              {pathValid === false && <span className="text-red-600">✗</span>}
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-sm transition-fast hover:opacity-80"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
+                title="打开目录选择器"
+              >
+                <FolderOpen size={14} />
+                浏览…
+              </button>
+              {pathValid === true && <span className="self-center text-green-600">✓</span>}
+              {pathValid === false && <span className="self-center text-red-600">✗</span>}
             </div>
             {projectName && (
               <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -412,6 +425,18 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
           <ChevronLeft size={16} />
         </button>
       )}
+
+      {/* 项目目录选择器(Modal,fixed 定位不影响布局) */}
+      <DirectoryPicker
+        open={pickerOpen}
+        initialPath={repoPath || undefined}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(picked) => {
+          setRepoPath(picked);
+          // 选中后立即用新路径校验,而不是等下次 blur
+          checkProjectPath(picked);
+        }}
+      />
     </div>
   );
 }

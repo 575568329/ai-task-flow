@@ -129,6 +129,22 @@ export interface InspectProjectResponse {
   valid: boolean;       // 是否为有效 git 仓库
 }
 
+/** 目录浏览器条目 */
+export interface BrowseDirEntry {
+  name: string;
+  isGitRepo: boolean;   // 子目录下是否含 .git
+}
+
+/** GET /api/projects/browse 响应 */
+export interface BrowseDirResponse {
+  path: string;             // 当前完整绝对路径
+  parent: string | null;    // 父目录绝对路径,到根/盘符顶时为 null
+  isGitRepo: boolean;       // 当前路径本身是不是 git 仓库
+  entries: BrowseDirEntry[];
+  drives?: string[];        // Windows: 可用驱动器(其他平台不返回)
+  home: string;             // 用户主目录(供「回到主目录」快捷入口)
+}
+
 /** GET /api/tasks/:id/markdown 响应 */
 export interface TaskMarkdownResponse {
   markdown: string;  // 完整的 markdown 文本
