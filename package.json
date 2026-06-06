@@ -8,7 +8,7 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently -n shared,backend,frontend -c blue,green,magenta \"npm run dev:shared\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently --raw -n shared,backend,frontend -c blue,green,magenta \"npm run dev:shared\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:shared": "cd shared && npm run build:watch",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
