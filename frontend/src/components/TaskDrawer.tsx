@@ -19,41 +19,57 @@ import { ChevronRight, ChevronLeft } from 'lucide-react';
 export function TaskDrawer() {
   const selectedId = useUIStore((s) => s.selectedTaskId);
   const setSelectedTask = useUIStore((s) => s.setSelectedTask);
+  const creatingTask = useUIStore((s) => s.creatingTask);
+  const setCreatingTask = useUIStore((s) => s.setCreatingTask);
   const tasks = useTaskStore((s) => s.tasks);
   const update = useTaskStore((s) => s.update);
   const remove = useTaskStore((s) => s.remove);
   const upsert = useTaskStore((s) => s.upsert);
   const create = useTaskStore((s) => s.create);
 
-  const task = tasks.find((t) => t.id === selectedId) ?? null;
+  const existingTask = tasks.find((t) => t.id === selectedId) ?? null;
+  // 创建模式:构造一张空白任务作为初始表单
+  const task = creatingTask ? EMPTY_TASK : existingTask;
   const open = !!task;
+
+  function close() {
+    if (creatingTask) setCreatingTask(false);
+    else setSelectedTask(null);
+  }
 
   return (
     <Drawer
       open={open}
-      onClose={() => setSelectedTask(null)}
+      onClose={close}
       width="80%"
       title={
-        task && (
+        task &&
+        (creatingTask ? (
+          <span className="font-mono text-sm">新建任务</span>
+        ) : (
           <span className="flex items-center gap-2">
             <span className="font-mono text-sm">{task.id}</span>
             <Tag color={STATUS_COLORS[task.status]} filled>
               {STATUS_LABELS[task.status]}
             </Tag>
           </span>
-        )
+        ))
       }
     >
       {task && (
         <TaskDrawerBody
+          // 切换创建/编辑或不同任务时,强制重建表单状态
+          key={creatingTask ? '__new__' : task.id}
           task={task}
+          creating={creatingTask}
           onSave={async (data) => {
             await update(task.id, data);
             toast.success('已保存');
           }}
           onCreate={async (data) => {
             const created = await create(data);
-            toast.success('已创建');
+            toast.success('任务创建成功');
+            setCreatingTask(false);
             setSelectedTask(created.id);
           }}
           onDelete={async () => {
@@ -77,10 +93,26 @@ export function TaskDrawer() {
   );
 }
 
+/** 创建模式下的空白任务模板 */
+const EMPTY_TASK: TaskDTO = {
+  id: '',
+  title: '',
+  description: '',
+  status: TaskStatus.TODO,
+  priority: Priority.P1,
+  repoPath: undefined,
+  projectName: undefined,
+  relatedFiles: [],
+  steps: [],
+  createdAt: '',
+  updatedAt: '',
+};
+
 // __CONTINUE_HERE__
 
 interface BodyProps {
   task: TaskDTO;
+  creating: boolean;
   onSave: (data: Partial<TaskDTO>) => Promise<void>;
   onCreate: (data: any) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -88,7 +120,8 @@ interface BodyProps {
   onReject: (reason: string) => Promise<void>;
 }
 
-function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject }: BodyProps) {
+function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove, onReject }: BodyProps) {
+  const [prefix, setPrefix] = useState('WS');
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<TaskStatus>(task.status);
@@ -101,7 +134,7 @@ function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject 
   const [showPreview, setShowPreview] = useState(true);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
 
-  const isNewTask = !task.id;
+  const isNewTask = creating;
 
   // 切换任务时同步表单
   useEffect(() => {
@@ -193,6 +226,16 @@ function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject 
       {/* 左侧:编辑区 */}
       <div className={`flex-1 overflow-y-auto ${showPreview ? 'pr-2' : ''}`}>
         <div className="flex flex-col gap-4">
+          {isNewTask && (
+            <Section label="ID 前缀">
+              <Input
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+                placeholder="WS / BUG / FEAT"
+              />
+            </Section>
+          )}
+
           <Section label="标题">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="任务标题" />
           </Section>
@@ -245,17 +288,23 @@ function TaskDrawerBody({ task, onSave, onCreate, onDelete, onApprove, onReject 
               <Button
                 variant="primary"
                 disabled={busy || !title.trim()}
-                onClick={() =>
+                onClick={() => {
+                  if (!/^[A-Z][A-Z0-9]*$/.test(prefix)) {
+                    toast.error('ID 前缀须为大写字母开头(可含数字),如 WS、BUG');
+                    return;
+                  }
                   wrap(() =>
                     onCreate({
+                      prefix,
                       title,
                       description,
                       priority,
                       repoPath: repoPath || undefined,
+                      projectName: projectName || undefined,
                       steps,
                     })
-                  )
-                }
+                  );
+                }}
               >
                 创建任务
               </Button>

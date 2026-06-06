@@ -17,7 +17,7 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const projectFilter = useUIStore((s) => s.projectFilter);
   const setProjectFilter = useUIStore((s) => s.setProjectFilter);
-  const setCreateModalOpen = useUIStore((s) => s.setCreateModalOpen);
+  const setCreatingTask = useUIStore((s) => s.setCreatingTask);
 
   return (
     <header
@@ -64,7 +64,7 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="primary" onClick={() => setCreateModalOpen(true)}>
+        <Button variant="primary" onClick={() => setCreatingTask(true)}>
           <Plus size={16} />
           新建任务
         </Button>

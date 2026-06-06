@@ -12,7 +12,6 @@ import type { TaskDTO, TaskStatus } from '@ai-task-flow/shared';
 import { TopBar } from './components/TopBar';
 import { KanbanColumn } from './components/KanbanColumn';
 import { TaskCard } from './components/TaskCard';
-import { CreateTaskModal } from './components/CreateTaskModal';
 import { TaskDrawer } from './components/TaskDrawer';
 import { Toaster, toast } from './components/ui/Toaster';
 import { useTaskStore } from './stores/taskStore';
@@ -130,7 +129,6 @@ function App() {
         </DndContext>
       </main>
 
-      <CreateTaskModal />
       <TaskDrawer />
       <Toaster />
     </div>

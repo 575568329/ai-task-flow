@@ -27,13 +27,14 @@ function applyTheme(theme: Theme): void {
 interface UIState {
   theme: Theme;
   selectedTaskId: string | null;
-  createModalOpen: boolean;
+  /** 以「创建模式」打开任务抽屉(空表单 + Markdown 预览) */
+  creatingTask: boolean;
   projectFilter: string | null;
   searchQuery: string;
 
   toggleTheme: () => void;
   setSelectedTask: (id: string | null) => void;
-  setCreateModalOpen: (open: boolean) => void;
+  setCreatingTask: (creating: boolean) => void;
   setProjectFilter: (project: string | null) => void;
   setSearchQuery: (query: string) => void;
 }
@@ -41,7 +42,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set, get) => ({
   theme: getInitialTheme(),
   selectedTaskId: null,
-  createModalOpen: false,
+  creatingTask: false,
   projectFilter: null,
   searchQuery: '',
 
@@ -51,8 +52,9 @@ export const useUIStore = create<UIState>((set, get) => ({
     applyTheme(next);
     set({ theme: next });
   },
-  setSelectedTask: (id) => set({ selectedTaskId: id }),
-  setCreateModalOpen: (open) => set({ createModalOpen: open }),
+  // 选中已有任务时,关闭创建模式,二者互斥
+  setSelectedTask: (id) => set({ selectedTaskId: id, creatingTask: id ? false : get().creatingTask }),
+  setCreatingTask: (creating) => set({ creatingTask: creating, selectedTaskId: creating ? null : get().selectedTaskId }),
   setProjectFilter: (project) => set({ projectFilter: project }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 }));
