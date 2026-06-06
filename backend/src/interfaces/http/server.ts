@@ -79,7 +79,9 @@ export async function startHttpServer(
 
   try {
     await server.listen({ port: config.port, host: config.host });
-    console.log(`HTTP Server listening on http://${config.host}:${config.port}`);
+    console.log('\n========================================');
+    console.log(`✓ Backend ready: http://localhost:${config.port}`);
+    console.log('========================================\n');
   } catch (err) {
     server.log.error(err);
     process.exit(1);
