@@ -1,0 +1,27 @@
+{
+  "name": "@ai-task-flow/cli",
+  "version": "0.1.0",
+  "description": "CLI for AI Task Flow - 个人 AI 任务编排看板 + MCP Server",
+  "type": "module",
+  "bin": {
+    "ai-task-flow": "./bin/ai-task-flow.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-task-flow/backend": "*",
+    "open": "^10.1.0"
+  },
+  "keywords": [
+    "ai",
+    "claude-code",
+    "mcp",
+    "task-management",
+    "kanban"
+  ]
+}

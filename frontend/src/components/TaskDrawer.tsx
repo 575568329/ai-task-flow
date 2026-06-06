@@ -9,13 +9,12 @@ import { Tag } from './ui/Tag';
 import { DiffViewer } from './DiffViewer';
 import { StepEditor } from './StepEditor';
 import { MarkdownPreview } from './MarkdownPreview';
-import { DirectoryPicker } from './DirectoryPicker';
 import { toast } from './ui/Toaster';
 import { taskApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/taskMeta';
-import { ChevronRight, ChevronLeft, Copy, FolderOpen } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Copy, FolderOpen, Send } from 'lucide-react';
 
 export function TaskDrawer() {
   const selectedId = useUIStore((s) => s.selectedTaskId);
@@ -66,6 +65,8 @@ export function TaskDrawer() {
           onSave={async (data) => {
             await update(task.id, data);
             toast.success('已保存');
+            // 延迟关闭抽屉，确保 toast 能显示出来
+            setTimeout(() => setSelectedTask(null), 500);
           }}
           onCreate={async (data) => {
             const created = await create(data);
@@ -124,6 +125,7 @@ interface BodyProps {
 function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove, onReject }: BodyProps) {
   const [prefix, setPrefix] = useState('WS');
   const [title, setTitle] = useState(task.title);
+  const [titleTouched, setTitleTouched] = useState(false);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<Priority>(task.priority);
@@ -134,7 +136,6 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
   const [busy, setBusy] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [descUploading, setDescUploading] = useState(false);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
@@ -143,6 +144,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
   // 切换任务时同步表单
   useEffect(() => {
     setTitle(task.title);
+    setTitleTouched(false);
     setDescription(task.description);
     setStatus(task.status);
     setPriority(task.priority);
@@ -172,7 +174,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
     }
 
     try {
-      const res = await fetch('http://localhost:3000/api/projects/inspect', {
+      const res = await fetch('/api/projects/inspect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: target }),
@@ -210,13 +212,14 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
     try {
       const formData = new FormData();
       formData.append('file', imageFile);
-      const res = await fetch('http://localhost:3000/api/upload/image', {
+      const res = await fetch('/api/upload/image', {
         method: 'POST',
         body: formData,
       });
       if (!res.ok) throw new Error(`上传失败: ${res.status}`);
       const data = await res.json();
-      const url = `http://localhost:3000${data.url}`;
+      // 图片 URL 必须是绝对路径,因为会被 Claude Code 通过 MCP 拉走显示
+      const url = `${window.location.origin}${data.url}`;
 
       // 在光标位置插入 markdown 图片语法
       const textarea = descRef.current;
@@ -272,21 +275,39 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
 
   return (
     <div className="flex h-full gap-4">
-      {/* 左侧:编辑区 */}
-      <div className={`flex-1 overflow-y-auto ${showPreview ? 'pr-2' : ''}`}>
-        <div className="flex flex-col gap-4">
-          {isNewTask && (
-            <Section label="ID 前缀">
-              <Input
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
-                placeholder="WS / BUG / FEAT"
-              />
-            </Section>
-          )}
+      {/* 左侧:编辑区(纵向布局,顶部表单滚动 + 底部操作固定) */}
+      <div className={`flex flex-1 flex-col overflow-hidden ${showPreview ? 'pr-2' : ''}`}>
+        {/* 顶部:可滚动表单区 */}
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-4 pb-4">
+            {isNewTask && (
+              <Section label="ID 前缀">
+                <Input
+                  value={prefix}
+                  onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+                  placeholder="WS / BUG / FEAT"
+                />
+              </Section>
+            )}
 
-          <Section label="标题">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="任务标题" />
+          <Section label="标题" required>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => setTitleTouched(true)}
+              placeholder="任务标题"
+              aria-invalid={titleTouched && !title.trim()}
+              style={
+                titleTouched && !title.trim()
+                  ? { borderColor: 'var(--error-8)' }
+                  : undefined
+              }
+            />
+            {titleTouched && !title.trim() && (
+              <span className="mt-1 text-xs" style={{ color: 'var(--error-8)' }}>
+                标题不能为空
+              </span>
+            )}
           </Section>
 
           <Section label={descUploading ? '描述(图片上传中…)' : '描述(可直接粘贴图片)'}>
@@ -327,10 +348,13 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               />
               <button
                 type="button"
-                onClick={() => setPickerOpen(true)}
+                onClick={() => {
+                  // 直接触发隐藏的 input
+                  document.getElementById('folder-picker-input')?.click();
+                }}
                 className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-3 py-2 text-sm transition-fast hover:opacity-80"
                 style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
-                title="打开目录选择器"
+                title="打开系统文件选择器"
               >
                 <FolderOpen size={14} />
                 浏览…
@@ -345,87 +369,50 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
             )}
           </Section>
 
+          {/* 隐藏的文件夹选择器 */}
+          <input
+            id="folder-picker-input"
+            type="file"
+            /* @ts-ignore */
+            webkitdirectory=""
+            directory=""
+            multiple
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+
+              // 从第一个文件提取文件夹名
+              const firstFile = files[0] as any;
+              const relativePath = firstFile.webkitRelativePath || '';
+              const folderName = relativePath.split('/')[0];
+
+              if (!folderName) {
+                toast.error('无法识别选择的目录');
+                return;
+              }
+
+              try {
+                const res = await fetch('/api/projects/resolve-path', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ folderName }),
+                });
+                if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+                const { path } = await res.json();
+                setRepoPath(path);
+                checkProjectPath(path);
+              } catch (err: any) {
+                toast.error(`路径解析失败: ${err.message}`);
+              }
+            }}
+          />
+
           <Section label="任务步骤">
             <StepEditor steps={steps} onChange={setSteps} />
           </Section>
 
-          <div className="flex gap-2">
-            {isNewTask ? (
-              <Button
-                variant="primary"
-                disabled={busy || !title.trim()}
-                onClick={() => {
-                  if (!/^[A-Z][A-Z0-9]*$/.test(prefix)) {
-                    toast.error('ID 前缀须为大写字母开头(可含数字),如 WS、BUG');
-                    return;
-                  }
-                  wrap(() =>
-                    onCreate({
-                      prefix,
-                      title,
-                      description,
-                      priority,
-                      repoPath: repoPath || undefined,
-                      projectName: projectName || undefined,
-                      steps,
-                    })
-                  );
-                }}
-              >
-                创建任务
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="primary"
-                  disabled={busy}
-                  onClick={() =>
-                    wrap(() =>
-                      onSave({
-                        title,
-                        description,
-                        status,
-                        priority,
-                        repoPath: repoPath || undefined,
-                        projectName: projectName || undefined,
-                        steps,
-                      })
-                    )
-                  }
-                >
-                  保存
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={async () => {
-                    const prompt = buildClaudeCodePrompt(task);
-                    try {
-                      await navigator.clipboard.writeText(prompt);
-                      toast.success('派发指令已复制,粘贴给 Claude Code 即可开工');
-                    } catch {
-                      toast.error('复制失败,请检查浏览器权限');
-                    }
-                  }}
-                  title="复制一段提示词,粘贴给 Claude Code 让它通过 MCP 拉取任务并开始执行"
-                >
-                  <Copy size={14} />
-                  复制派发指令
-                </Button>
-                <Button
-                  variant="danger"
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm(`确认删除任务 ${task.id}?`)) wrap(onDelete);
-                  }}
-                >
-                  删除
-                </Button>
-              </>
-            )}
-          </div>
-
-          {/* 审查闭环:仅 review 状态显示 */}
+          {/* 审查闭环:仅 review 状态显示(留在滚动区内,DiffViewer 体积大) */}
           {!isNewTask && task.status === TaskStatus.REVIEW && (
             <div className="mt-2 border-t pt-4" style={{ borderColor: 'var(--border-primary)' }}>
               <h4 className="mb-2 text-sm font-semibold">代码审查</h4>
@@ -457,6 +444,137 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               </div>
             </div>
           )}
+          </div>
+        </div>
+
+        {/* 底部:常驻操作栏(不被滚动条隐藏) */}
+        <div
+          className="flex shrink-0 gap-2 border-t px-1 py-3"
+          style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-lower)' }}
+        >
+          {isNewTask ? (
+            <Button
+              variant="primary"
+              disabled={busy || !title.trim()}
+              onClick={() => {
+                if (!title.trim()) {
+                  setTitleTouched(true);
+                  toast.error('标题不能为空');
+                  return;
+                }
+                if (!/^[A-Z][A-Z0-9]*$/.test(prefix)) {
+                  toast.error('ID 前缀须为大写字母开头(可含数字),如 WS、BUG');
+                  return;
+                }
+                wrap(() =>
+                  onCreate({
+                    prefix,
+                    title,
+                    description,
+                    priority,
+                    repoPath: repoPath || undefined,
+                    projectName: projectName || undefined,
+                    steps,
+                  })
+                );
+              }}
+            >
+              创建任务
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                disabled={busy || !title.trim()}
+                onClick={() => {
+                  if (!title.trim()) {
+                    setTitleTouched(true);
+                    toast.error('标题不能为空');
+                    return;
+                  }
+                  wrap(() =>
+                    onSave({
+                      title,
+                      description,
+                      status: TaskStatus.TODO, // 编辑任务后自动回到待办状态
+                      priority,
+                      repoPath: repoPath || undefined,
+                      projectName: projectName || undefined,
+                      steps,
+                    })
+                  );
+                }}
+              >
+                保存
+              </Button>
+              {status === TaskStatus.TODO && repoPath && (
+                <Button
+                  variant="secondary"
+                  disabled={busy || !title.trim()}
+                  onClick={async () => {
+                    if (!title.trim()) {
+                      setTitleTouched(true);
+                      toast.error('标题不能为空');
+                      return;
+                    }
+
+                    // 确认弹窗
+                    if (!confirm(`确认派发任务 ${task.id}？\n\n将执行以下操作：\n1. 保存当前修改\n2. 创建独立的 git worktree\n3. 自动复制派发指令\n\n是否继续？`)) {
+                      return;
+                    }
+
+                    // 先保存
+                    try {
+                      await onSave({
+                        title,
+                        description,
+                        status: TaskStatus.TODO,
+                        priority,
+                        repoPath: repoPath || undefined,
+                        projectName: projectName || undefined,
+                        steps,
+                      });
+                      // 再派发
+                      const dispatch = useTaskStore.getState().dispatch;
+                      await dispatch(task.id);
+                      toast.success('派发成功！指令已复制');
+                    } catch (err: any) {
+                      toast.error(`派发失败: ${err.message || '未知错误'}`);
+                    }
+                  }}
+                >
+                  <Send size={14} />
+                  保存并派发
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={async () => {
+                  const prompt = buildClaudeCodePrompt(task);
+                  try {
+                    await navigator.clipboard.writeText(prompt);
+                    toast.success('派发指令已复制,粘贴给 Claude Code 即可开工');
+                  } catch {
+                    toast.error('复制失败,请检查浏览器权限');
+                  }
+                }}
+                title="复制一段提示词,粘贴给 Claude Code 让它通过 MCP 拉取任务并开始执行"
+              >
+                <Copy size={14} />
+                复制派发指令
+              </Button>
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(`确认删除任务 ${task.id}?`)) wrap(onDelete);
+                }}
+              >
+                删除
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -477,33 +595,22 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
       {!showPreview && (
         <button
           onClick={() => setShowPreview(true)}
-          className="fade-in absolute right-4 top-4 rounded p-1 hover:opacity-70 transition-fast"
+          className="fade-in absolute right-4 top-16 rounded p-1 hover:opacity-70 transition-fast"
           style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
         >
           <ChevronLeft size={16} />
         </button>
       )}
-
-      {/* 项目目录选择器(Modal,fixed 定位不影响布局) */}
-      <DirectoryPicker
-        open={pickerOpen}
-        initialPath={repoPath || undefined}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(picked) => {
-          setRepoPath(picked);
-          // 选中后立即用新路径校验,而不是等下次 blur
-          checkProjectPath(picked);
-        }}
-      />
     </div>
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
         {label}
+        {required && <span className="ml-0.5" style={{ color: 'var(--error-8)' }}>*</span>}
       </span>
       {children}
     </div>

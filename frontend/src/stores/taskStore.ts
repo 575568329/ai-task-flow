@@ -12,6 +12,8 @@ interface TaskState {
   create: (data: CreateTaskRequest) => Promise<TaskDTO>;
   update: (id: string, data: UpdateTaskRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** 派发任务（创建 worktree） */
+  dispatch: (id: string) => Promise<void>;
   /** 拖拽乐观更新:先改本地,失败回滚 */
   optimisticMove: (id: string, status: TaskStatus) => Promise<void>;
   /** 收到 SSE 事件后,重新拉取该任务最新态合并进列表 */
@@ -47,6 +49,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   remove: async (id) => {
     await taskApi.remove(id);
     set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+  },
+
+  dispatch: async (id) => {
+    const updated = await taskApi.dispatch(id);
+    get().upsert(updated);
   },
 
   optimisticMove: async (id, status) => {

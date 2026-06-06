@@ -2,12 +2,12 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Clock, GitBranch, Copy, Trash2 } from 'lucide-react';
+import { Clock, GitBranch, Copy, Trash2, Send } from 'lucide-react';
 import { buildClaudeCodePrompt, type TaskDTO } from '@ai-task-flow/shared';
 import { Tag } from './ui/Tag';
 import { toast } from './ui/Toaster';
 import { useTaskStore } from '@/stores/taskStore';
-import { PRIORITY_COLORS, relativeTime } from '@/lib/taskMeta';
+import { PRIORITY_COLORS, STATUS_COLORS, relativeTime } from '@/lib/taskMeta';
 
 interface TaskCardProps {
   task: TaskDTO;
@@ -16,6 +16,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onClick }: TaskCardProps) {
   const remove = useTaskStore((s) => s.remove);
+  const dispatch = useTaskStore((s) => s.dispatch);
   const [busy, setBusy] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -27,7 +28,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     transition,
     opacity: isDragging ? 0.4 : 1,
     background: 'var(--bg-lower)',
-    borderLeft: `3px solid ${PRIORITY_COLORS[task.priority]}`,
+    borderLeft: `3px solid ${STATUS_COLORS[task.status]}`,
   };
 
   // 复制派发指令——阻止冒泡,避免触发拖拽/打开抽屉
@@ -38,6 +39,31 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       toast.success('派发指令已复制');
     } catch {
       toast.error('复制失败,请检查浏览器权限');
+    }
+  }
+
+  // 派发任务（创建 worktree）并自动复制指令
+  async function handleDispatch(e: React.MouseEvent) {
+    e.stopPropagation();
+
+    if (!task.repoPath) {
+      toast.error('请先设置项目路径');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await dispatch(task.id);
+
+      // 派发成功后自动复制指令
+      const prompt = buildClaudeCodePrompt(task);
+      await navigator.clipboard.writeText(prompt);
+
+      toast.success('派发成功！指令已复制，请粘贴给 Claude');
+    } catch (err: any) {
+      toast.error(`派发失败: ${err.message || '未知错误'}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -55,6 +81,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     }
   }
 
+  // 只有 todo 状态的任务才显示派发按钮
+  const canDispatch = task.status === 'todo';
+
   return (
     <div
       ref={setNodeRef}
@@ -62,33 +91,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className="group relative mb-2 cursor-pointer rounded-lg p-3 shadow-sm transition-shadow hover:shadow-md"
+      className="relative mb-2 cursor-pointer rounded-lg p-3 shadow-sm transition-shadow hover:shadow-md"
     >
-      {/* hover 时右上角悬浮操作 */}
-      <div
-        className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-        // 整块阻止指针事件冒泡,确保按钮区不会被拖拽监听吞掉
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={handleCopy}
-          className="rounded p-1 shadow-sm transition-fast hover:opacity-80"
-          style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
-          title="复制派发指令"
-        >
-          <Copy size={13} />
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={busy}
-          className="rounded p-1 shadow-sm transition-fast hover:opacity-80 disabled:opacity-40"
-          style={{ backgroundColor: 'var(--surface-2)', color: 'var(--error-8)' }}
-          title="删除任务"
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
-
+      {/* 顶部:ID + 优先级 tag(右上角独占) */}
       <div className="mb-1.5 flex items-center justify-between">
         <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-2)' }}>
           {task.id}
@@ -112,20 +117,55 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         </div>
       )}
 
+      {/* 底部:左侧元信息(时间/分支),右侧常驻操作按钮 */}
       <div
-        className="flex items-center justify-between text-xs"
+        className="flex items-center justify-between gap-2 text-xs"
         style={{ color: 'var(--text-2)' }}
       >
-        <span className="flex items-center gap-1">
-          <Clock size={12} />
-          {relativeTime(task.updatedAt)}
-        </span>
-        {task.worktree && (
-          <span className="flex items-center gap-1">
-            <GitBranch size={12} />
-            {task.worktree.branch}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <Clock size={12} />
+            {relativeTime(task.updatedAt)}
           </span>
-        )}
+          {task.worktree && (
+            <span className="flex items-center gap-1 truncate">
+              <GitBranch size={12} />
+              <span className="truncate">{task.worktree.branch}</span>
+            </span>
+          )}
+        </div>
+
+        {/* 常驻操作按钮(不再 hover 显隐),阻止指针事件冒泡避免触发拖拽 */}
+        <div className="flex shrink-0 gap-1" onPointerDown={(e) => e.stopPropagation()}>
+          {canDispatch && (
+            <button
+              onClick={handleDispatch}
+              disabled={busy}
+              className="rounded p-1 shadow-sm transition-all hover:scale-110 disabled:opacity-40"
+              style={{ backgroundColor: 'var(--primary-3)', color: 'var(--primary-9)' }}
+              title="派发任务：创建独立 worktree 并复制指令"
+            >
+              <Send size={13} />
+            </button>
+          )}
+          <button
+            onClick={handleCopy}
+            className="rounded p-1 shadow-sm transition-all hover:scale-110 hover:shadow-md"
+            style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
+            title="复制指令：直接复制任务文件路径（无需派发）"
+          >
+            <Copy size={13} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            className="rounded p-1 shadow-sm transition-all hover:scale-110 hover:shadow-md disabled:opacity-40"
+            style={{ backgroundColor: 'var(--surface-2)', color: 'var(--error-8)' }}
+            title="删除任务"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
     </div>
   );

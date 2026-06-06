@@ -1,15 +1,16 @@
 // backend/src/interfaces/http/routes/uploadRoutes.ts
 import { FastifyInstance } from 'fastify';
 import path from 'path';
+import os from 'os';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import crypto from 'crypto';
 import type { UploadImageResponse } from '@ai-task-flow/shared';
 
-export async function registerUploadRoutes(fastify: FastifyInstance) {
-  // 确保上传目录存在
-  const uploadsDir = path.join(process.cwd(), 'uploads');
+export async function registerUploadRoutes(fastify: FastifyInstance, customUploadsDir?: string) {
+  // 确保上传目录存在(默认 ~/.ai-task-flow/uploads,与 server.ts 中静态托管路径一致)
+  const uploadsDir = customUploadsDir ?? path.join(os.homedir(), '.ai-task-flow', 'uploads');
   await fs.mkdir(uploadsDir, { recursive: true });
 
   // POST /api/upload/image - 上传图片

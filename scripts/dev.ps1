@@ -24,19 +24,19 @@ Remove-Item $PID_FILE -Force -ErrorAction SilentlyContinue
 Write-Host "Starting shared..." -ForegroundColor Blue
 $sharedProc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c", "cd shared && npm run build:watch > ../$LOGS_DIR/shared.log 2>&1" `
-    -PassThru -NoNewWindow -WindowStyle Hidden
+    -PassThru -WindowStyle Hidden
 
 Write-Host "Starting backend..." -ForegroundColor Green
 $backendProc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c", "cd backend && npm run dev > ../$LOGS_DIR/backend.log 2>&1" `
-    -PassThru -NoNewWindow -WindowStyle Hidden
+    -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 2
 
 Write-Host "Starting frontend..." -ForegroundColor Magenta
 $frontendProc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c", "cd frontend && npm run dev > ../$LOGS_DIR/frontend.log 2>&1" `
-    -PassThru -NoNewWindow -WindowStyle Hidden
+    -PassThru -WindowStyle Hidden
 
 # 记录所有 PID
 "$($sharedProc.Id)`n$($backendProc.Id)`n$($frontendProc.Id)" | Out-File $PID_FILE -Encoding ASCII

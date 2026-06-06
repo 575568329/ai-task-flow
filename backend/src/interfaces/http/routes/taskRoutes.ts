@@ -85,12 +85,71 @@ export async function registerTaskRoutes(
         return reply.status(404).send({ error: 'Task not found' });
       }
 
+      const previousStatus = task.status;
+      const hasWorktree = !!task.worktree;
+
       // 通过领域方法更新，发布 TaskUpdated 事件以驱动前端 SSE 实时刷新
       task.applyUpdate(request.body);
+
+      // 如果状态从 dispatched 变为其他状态，清理 worktree
+      if (
+        previousStatus === TaskStatus.DISPATCHED &&
+        task.status !== TaskStatus.DISPATCHED &&
+        hasWorktree
+      ) {
+        try {
+          const worktree = task.worktree!;
+          await worktreeManager.destroy(worktree);
+          // 清空任务的 worktree 字段
+          task.worktree = undefined;
+          fastify.log.info(`Worktree cleaned for task ${task.id.value}: ${worktree.path}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          fastify.log.warn(`Failed to clean worktree for task ${task.id.value}: ${message}`);
+          // 不阻止任务状态更新，worktree 清理失败只记录警告
+        }
+      }
 
       await taskRepository.save(task);
 
       return task.toJSON();
+    }
+  );
+
+  // POST /api/tasks/:id/dispatch - 派发任务（创建 worktree）
+  fastify.post<{ Params: { id: string } }>(
+    '/api/tasks/:id/dispatch',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      if (task.status !== TaskStatus.TODO) {
+        return reply.status(400).send({ error: 'Only TODO tasks can be dispatched' });
+      }
+
+      if (!task.repoPath) {
+        return reply.status(400).send({ error: 'Task must have a repoPath to dispatch' });
+      }
+
+      try {
+        // 创建 worktree
+        const worktree = await worktreeManager.create(task.repoPath, task.id.value);
+
+        // 调用领域方法派发
+        task.dispatch(worktree);
+
+        // 保存任务
+        await taskRepository.save(task);
+
+        return task.toJSON();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return reply.status(500).send({ error: `Failed to dispatch: ${message}` });
+      }
     }
   );
 

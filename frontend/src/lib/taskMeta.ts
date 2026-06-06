@@ -23,7 +23,6 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
 export const BOARD_COLUMNS: TaskStatus[] = [
   TaskStatus.TODO,
   TaskStatus.DISPATCHED,
-  TaskStatus.REVIEW,
   TaskStatus.DONE,
   TaskStatus.BLOCKED,
 ];

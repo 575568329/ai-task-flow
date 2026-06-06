@@ -47,6 +47,47 @@ function parentOf(p: string): string | null {
 }
 
 export async function registerProjectRoutes(fastify: FastifyInstance) {
+  // POST /api/projects/resolve-path - 根据文件夹名推断完整路径
+  fastify.post<{ Body: { folderName: string } }>(
+    '/api/projects/resolve-path',
+    async (request, reply) => {
+      const { folderName } = request.body;
+      if (!folderName) {
+        return reply.status(400).send({ error: 'folderName is required' });
+      }
+
+      // 搜索范围：用户主目录、桌面、文档、OneDrive
+      const home = os.homedir();
+      const searchPaths = [
+        home,
+        path.join(home, 'Desktop'),
+        path.join(home, '桌面'),
+        path.join(home, 'Documents'),
+        path.join(home, '文档'),
+        path.join(home, 'OneDrive'),
+        path.join(home, 'OneDrive', 'Desktop'),
+        path.join(home, 'OneDrive', '桌面'),
+        path.join(home, 'OneDrive', 'Documents'),
+        path.join(home, 'OneDrive', '文档'),
+      ];
+
+      // 遍历搜索
+      for (const basePath of searchPaths) {
+        const candidatePath = path.join(basePath, folderName);
+        try {
+          const stat = await fs.stat(candidatePath);
+          if (stat.isDirectory()) {
+            return reply.send({ path: candidatePath });
+          }
+        } catch {
+          // 路径不存在，继续
+        }
+      }
+
+      return reply.status(404).send({ error: `找不到文件夹 "${folderName}"，请确保它在主目录、桌面或文档中` });
+    }
+  );
+
   // GET /api/projects/browse?path=... - 浏览目录子项（用于前端目录选择器）
   fastify.get<{ Querystring: { path?: string } }>(
     '/api/projects/browse',
@@ -91,11 +132,14 @@ export async function registerProjectRoutes(fastify: FastifyInstance) {
         }))
       );
 
+      // 只显示 git 仓库和非隐藏目录（让用户能导航到任何地方，但优先展示 git 项目）
+      const filteredEntries = entries;
+
       const response: BrowseDirResponse = {
         path: target,
         parent: parentOf(target),
         isGitRepo: await isGitRepoDir(target),
-        entries,
+        entries: filteredEntries,
         home: os.homedir(),
         drives: await listDrives(),
       };

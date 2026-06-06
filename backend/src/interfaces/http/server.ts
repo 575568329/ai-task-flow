@@ -4,6 +4,8 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
 import path from 'path';
+import os from 'os';
+import fs from 'fs';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
 import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
@@ -16,6 +18,16 @@ export interface HttpServerConfig {
   port: number;
   host: string;
   corsOrigin: string | string[];
+  /** 前端打包产物目录(含 index.html)。传入则单端口托管 SPA。 */
+  frontendDist?: string;
+  /** 上传目录,默认 ~/.ai-task-flow/uploads */
+  uploadsDir?: string;
+}
+
+/** 解析上传目录,默认放在用户数据目录下,与 tasks.json 同级 */
+function resolveUploadsDir(custom?: string): string {
+  if (custom) return custom;
+  return path.join(os.homedir(), '.ai-task-flow', 'uploads');
 }
 
 export async function createHttpServer(
@@ -43,9 +55,12 @@ export async function createHttpServer(
     },
   });
 
-  // 注册静态文件服务
+  // 注册上传目录静态服务(decorateReply: true,首个 staticPlugin 装饰 reply.sendFile)
+  const uploadsDir = resolveUploadsDir(config.uploadsDir);
+  // 提前创建,避免 @fastify/static 因目录不存在而报错
+  fs.mkdirSync(uploadsDir, { recursive: true });
   await fastify.register(staticPlugin, {
-    root: path.join(process.cwd(), 'uploads'),
+    root: uploadsDir,
     prefix: '/api/uploads/',
   });
 
@@ -54,17 +69,29 @@ export async function createHttpServer(
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // 注册任务路由
+  // 注册业务路由
   await registerTaskRoutes(fastify, taskRepository, worktreeManager);
-
-  // 注册 SSE 路由
   await registerSSERoutes(fastify, eventBus);
-
-  // 注册上传路由
-  await registerUploadRoutes(fastify);
-
-  // 注册项目检查路由
+  await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
+
+  // 生产模式:单端口托管前端 SPA(可选)
+  if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
+    await fastify.register(staticPlugin, {
+      root: config.frontendDist,
+      prefix: '/',
+      decorateReply: false, // 已被首个 staticPlugin 装饰过
+      wildcard: false,      // 由 setNotFoundHandler 实现 SPA fallback
+    });
+
+    // SPA fallback: 非 /api/* 的 GET 兜底返回 index.html,让 React Router 接管
+    fastify.setNotFoundHandler((request, reply) => {
+      if (request.method !== 'GET' || request.url.startsWith('/api/') || request.url === '/health') {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+      return reply.type('text/html').sendFile('index.html', config.frontendDist!);
+    });
+  }
 
   return fastify;
 }
@@ -79,9 +106,19 @@ export async function startHttpServer(
 
   try {
     await server.listen({ port: config.port, host: config.host });
-    console.log('\n========================================');
-    console.log(`✓ Backend ready: http://localhost:${config.port}`);
-    console.log('========================================\n');
+    const url = `http://localhost:${config.port}`;
+    if (config.frontendDist) {
+      console.log('\n========================================');
+      console.log(`✓ AI Task Flow ready: ${url}`);
+      console.log(`  - Web UI:  ${url}`);
+      console.log(`  - API:     ${url}/api`);
+      console.log('========================================\n');
+    } else {
+      console.log('\n========================================');
+      console.log(`✓ Backend ready: ${url}`);
+      console.log(`  (Frontend served separately via Vite at http://localhost:5173)`);
+      console.log('========================================\n');
+    }
   } catch (err) {
     server.log.error(err);
     process.exit(1);

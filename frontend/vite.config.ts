@@ -11,6 +11,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    // 打包到 backend/public,生产模式由后端单端口托管
+    outDir: fileURLToPath(new URL('../backend/public', import.meta.url)),
+    emptyOutDir: true,
+  },
   server: {
     port: 5173,
     proxy: {

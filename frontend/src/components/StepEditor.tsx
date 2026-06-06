@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Input';
-import { X, GripVertical, Type, Image as ImageIcon } from 'lucide-react';
+import { X, GripVertical, Type, Image as ImageIcon, Copy } from 'lucide-react';
 import type { TaskStep, StepBlock } from '@ai-task-flow/shared';
 import { toast } from './ui/Toaster';
 
@@ -28,7 +28,15 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
 
   /** 写回某个步骤的 blocks */
   function setStepBlocks(stepIndex: number, blocks: StepBlock[]) {
-    const next = steps.map((s, i) => (i === stepIndex ? { blocks } : s));
+    const next = steps.map((s, i) => (i === stepIndex ? { ...s, blocks } : s));
+    onChange(next);
+  }
+
+  /** 切换步骤完成状态 */
+  function toggleStepCompleted(stepIndex: number) {
+    const next = steps.map((s, i) =>
+      i === stepIndex ? { ...s, completed: !s.completed } : s
+    );
     onChange(next);
   }
 
@@ -82,13 +90,14 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('http://localhost:3000/api/upload/image', {
+      const res = await fetch('/api/upload/image', {
         method: 'POST',
         body: formData,
       });
       if (!res.ok) throw new Error('上传失败');
       const data = await res.json();
-      const url = `http://localhost:3000${data.url}`;
+      // 图片 URL 必须是绝对路径,因为会被 Claude Code 通过 MCP 拉走显示
+      const url = `${window.location.origin}${data.url}`;
       const blocks = [...getBlocks(steps[stepIndex]), { type: 'image', url } as StepBlock];
       setStepBlocks(stepIndex, blocks);
       toast.success('图片已添加');
@@ -115,6 +124,26 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
     }
   }
 
+  /** 复制单个步骤的内容（拼接文本和图片地址，交给 agent 执行） */
+  function copyStep(stepIndex: number) {
+    const blocks = getBlocks(steps[stepIndex]);
+    const lines: string[] = [`步骤 ${stepIndex + 1}:`];
+
+    blocks.forEach((block) => {
+      if (block.type === 'text' && block.content.trim()) {
+        lines.push(block.content);
+      } else if (block.type === 'image') {
+        lines.push(`![图片](${block.url})`);
+      }
+    });
+
+    const content = lines.join('\n\n');
+    navigator.clipboard.writeText(content).then(
+      () => toast.success(`步骤 ${stepIndex + 1} 已复制`),
+      () => toast.error('复制失败')
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <DragDropContext onDragEnd={handleStepDragEnd}>
@@ -136,7 +165,7 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                           ...prov.draggableProps.style,
                         }}
                       >
-                        {/* 步骤头：拖拽手柄 + 序号 + 删除 */}
+                        {/* 步骤头：拖拽手柄 + 复选框 + 序号 + 复制 + 删除 */}
                         <div className="mb-2 flex items-center gap-2">
                           <div
                             {...prov.dragHandleProps}
@@ -145,12 +174,34 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                           >
                             <GripVertical size={16} />
                           </div>
-                          <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                          <input
+                            type="checkbox"
+                            checked={step.completed || false}
+                            onChange={() => toggleStepCompleted(stepIndex)}
+                            className="cursor-pointer"
+                            title="标记步骤完成状态"
+                          />
+                          <span
+                            className="text-xs font-medium"
+                            style={{
+                              color: 'var(--text-2)',
+                              textDecoration: step.completed ? 'line-through' : 'none',
+                              opacity: step.completed ? 0.6 : 1,
+                            }}
+                          >
                             步骤 {stepIndex + 1}
                           </span>
                           <button
+                            onClick={() => copyStep(stepIndex)}
+                            className="ml-auto rounded p-1 transition-fast hover:opacity-80"
+                            style={{ color: 'var(--text-3)' }}
+                            title="复制步骤内容（含图片地址）"
+                          >
+                            <Copy size={14} />
+                          </button>
+                          <button
                             onClick={() => deleteStep(stepIndex)}
-                            className="ml-auto rounded p-1"
+                            className="rounded p-1"
                             style={{ color: 'var(--error-8)' }}
                             title="删除步骤"
                           >
@@ -247,59 +298,98 @@ function StepBlocks({ stepIndex, blocks, onBlockDragEnd, onUpdateText, onDeleteB
     <DragDropContext onDragEnd={onBlockDragEnd}>
       <Droppable droppableId={`blocks-${stepIndex}`}>
         {(provided) => (
-          <div {...provided.droppableProps} ref={provided.innerRef} className="flex flex-col gap-2">
-            {blocks.map((block, blockIndex) => (
-              <Draggable key={blockIndex} draggableId={`block-${stepIndex}-${blockIndex}`} index={blockIndex}>
-                {(prov, snapshot) => (
-                  <div
-                    ref={prov.innerRef}
-                    {...prov.draggableProps}
-                    className="flex items-start gap-2 rounded p-1"
-                    style={{
-                      backgroundColor: snapshot.isDragging ? 'var(--surface-2)' : 'transparent',
-                      ...prov.draggableProps.style,
-                    }}
-                  >
-                    <div
-                      {...prov.dragHandleProps}
-                      className="mt-2 cursor-grab active:cursor-grabbing"
-                      style={{ color: 'var(--text-3)' }}
-                      title="拖拽调整图文顺序"
-                    >
-                      <GripVertical size={14} />
-                    </div>
+          <div {...provided.droppableProps} ref={provided.innerRef}>
+            {/* 文本块：纵向排列 */}
+            <div className="flex flex-col gap-2 mb-2">
+              {blocks.filter(b => b.type === 'text').map((block) => {
+                const blockIndex = blocks.indexOf(block);
+                return (
+                  <Draggable key={blockIndex} draggableId={`block-${stepIndex}-${blockIndex}`} index={blockIndex}>
+                    {(prov, snapshot) => (
+                      <div
+                        ref={prov.innerRef}
+                        {...prov.draggableProps}
+                        className="flex items-start gap-2 rounded p-1"
+                        style={{
+                          backgroundColor: snapshot.isDragging ? 'var(--surface-2)' : 'transparent',
+                          ...prov.draggableProps.style,
+                        }}
+                      >
+                        <div
+                          {...prov.dragHandleProps}
+                          className="mt-2 cursor-grab active:cursor-grabbing"
+                          style={{ color: 'var(--text-3)' }}
+                          title="拖拽调整顺序"
+                        >
+                          <GripVertical size={14} />
+                        </div>
+                        <div className="flex-1">
+                          <Textarea
+                            rows={2}
+                            value={block.content}
+                            onChange={(e) => onUpdateText(blockIndex, e.target.value)}
+                            onPaste={onPaste}
+                            placeholder="输入文本（可粘贴图片）"
+                          />
+                        </div>
+                        <button
+                          onClick={() => onDeleteBlock(blockIndex)}
+                          className="mt-1 rounded p-1 transition-all hover:scale-110"
+                          style={{ color: 'var(--error-8)' }}
+                          title="删除文本"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+            </div>
 
-                    <div className="flex-1">
-                      {block.type === 'text' ? (
-                        <Textarea
-                          rows={2}
-                          value={block.content}
-                          onChange={(e) => onUpdateText(blockIndex, e.target.value)}
-                          onPaste={onPaste}
-                          placeholder="输入文本（可粘贴图片）"
-                        />
-                      ) : (
+            {/* 图片块：横向排列，删除按钮覆盖在图片上 */}
+            <div className="flex flex-wrap gap-2">
+              {blocks.filter(b => b.type === 'image').map((block) => {
+                const blockIndex = blocks.indexOf(block);
+                return (
+                  <Draggable key={blockIndex} draggableId={`block-${stepIndex}-${blockIndex}`} index={blockIndex}>
+                    {(prov) => (
+                      <div
+                        ref={prov.innerRef}
+                        {...prov.draggableProps}
+                        className="relative group"
+                        style={{
+                          ...prov.draggableProps.style,
+                        }}
+                      >
+                        <div
+                          {...prov.dragHandleProps}
+                          className="absolute top-1 left-1 z-10 cursor-grab active:cursor-grabbing rounded bg-black/50 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="拖拽调整顺序"
+                        >
+                          <GripVertical size={14} style={{ color: 'white' }} />
+                        </div>
                         <img
                           src={block.url}
                           alt={`步骤${stepIndex + 1}图片`}
-                          className="max-h-40 rounded border"
+                          className="h-32 w-auto rounded border cursor-pointer transition-transform hover:scale-105"
                           style={{ borderColor: 'var(--border-primary)' }}
+                          onClick={() => window.open(block.url, '_blank')}
+                          title="点击预览大图"
                         />
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => onDeleteBlock(blockIndex)}
-                      className="mt-1 rounded p-1"
-                      style={{ color: 'var(--error-8)' }}
-                      title={block.type === 'text' ? '删除文本' : '删除图片'}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-              </Draggable>
-            ))}
+                        <button
+                          onClick={() => onDeleteBlock(blockIndex)}
+                          className="absolute top-1 right-1 z-10 rounded-full bg-red-500 p-1 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 shadow-md"
+                          title="删除图片"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+            </div>
             {provided.placeholder}
           </div>
         )}

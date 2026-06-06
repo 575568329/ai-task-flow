@@ -39,6 +39,7 @@ export type StepBlock =
  */
 export interface TaskStep {
   blocks?: StepBlock[];
+  completed?: boolean; // 是否已完成（用户手动标记）
   /** @deprecated 旧格式字段，仅用于兼容历史数据 */
   description?: string;
   /** @deprecated 旧格式字段，仅用于兼容历史数据 */

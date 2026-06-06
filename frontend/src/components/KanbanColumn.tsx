@@ -33,7 +33,9 @@ export function KanbanColumn({ status, tasks, onTaskClick }: KanbanColumnProps) 
           className="h-2 w-2 rounded-full"
           style={{ background: STATUS_COLORS[status] }}
         />
-        <h3 className="text-sm font-semibold">{STATUS_LABELS[status]}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: STATUS_COLORS[status] }}>
+          {STATUS_LABELS[status]}
+        </h3>
         <Badge count={tasks.length} color={STATUS_COLORS[status]} />
       </div>
 
