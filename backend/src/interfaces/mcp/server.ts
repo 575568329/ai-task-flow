@@ -10,6 +10,7 @@ import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepo
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 import type { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
+import { stepsToMarkdown } from '@ai-task-flow/shared';
 
 /**
  * AI Task Flow MCP Server
@@ -241,18 +242,10 @@ class AITaskFlowServer {
       task.description || '（无描述）',
       '',
       '## 任务步骤',
+      '',
+      // 用 shared 统一生成，保证给 AI 的图文顺序 = 编辑器顺序 = 前端预览
+      stepsToMarkdown(task.steps),
     ];
-
-    if (task.steps.length > 0) {
-      task.steps.forEach((step, index) => {
-        lines.push(`${index + 1}. ${step.description}`);
-        if (step.imageUrl) {
-          lines.push(`   ![图片](${step.imageUrl})`);
-        }
-      });
-    } else {
-      lines.push('（无步骤）');
-    }
 
     lines.push('');
     lines.push('## 相关文件');

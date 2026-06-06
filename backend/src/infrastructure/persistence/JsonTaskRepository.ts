@@ -13,6 +13,7 @@ import { TaskRepository } from '../../domain/workflow/repositories/TaskRepositor
 import { EventBus } from '../pubsub/EventBus.js';
 import { EventStore } from '../pubsub/EventStore.js';
 import type { TaskDTO } from '@ai-task-flow/shared';
+import { normalizeSteps } from '@ai-task-flow/shared';
 
 /**
  * JSON 文件存储的 Task 仓储实现
@@ -143,7 +144,8 @@ export class JsonTaskRepository implements TaskRepository {
       dto.repoPath,
       dto.projectName,
       dto.relatedFiles,
-      dto.steps,
+      // 读取时规整步骤：旧格式 {description,imageUrl} 自动转为 blocks
+      normalizeSteps(dto.steps),
       worktree,
       executionResult,
       new Date(dto.createdAt),

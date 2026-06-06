@@ -7,6 +7,7 @@ import { TaskStatus } from '../../../domain/workflow/value-objects/TaskStatus.js
 import { Priority } from '../../../domain/workflow/value-objects/Priority.js';
 import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
 import type { CreateTaskRequest, UpdateTaskRequest } from '@ai-task-flow/shared';
+import { stepsToMarkdown } from '@ai-task-flow/shared';
 
 export async function registerTaskRoutes(
   fastify: FastifyInstance,
@@ -217,13 +218,8 @@ export async function registerTaskRoutes(
 
       if (task.steps.length > 0) {
         lines.push('## 任务步骤', '');
-        task.steps.forEach((step, index) => {
-          lines.push(`### 步骤 ${index + 1}`, '');
-          if (step.imageUrl) {
-            lines.push(`![步骤${index + 1}图片](${step.imageUrl})`, '');
-          }
-          lines.push(step.description, '');
-        });
+        // 复用 shared：图文顺序与编辑器、MCP、前端预览一致
+        lines.push(stepsToMarkdown(task.steps), '');
       }
 
       if (task.relatedFiles.length > 0) {

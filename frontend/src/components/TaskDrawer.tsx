@@ -1,6 +1,6 @@
 // frontend/src/components/TaskDrawer.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { TaskStatus, Priority, type TaskDTO, type TaskStep } from '@ai-task-flow/shared';
+import { TaskStatus, Priority, stepsToMarkdown, type TaskDTO, type TaskStep } from '@ai-task-flow/shared';
 import { Drawer } from './ui/Drawer';
 import { Button } from './ui/Button';
 import { Input, Textarea } from './ui/Input';
@@ -209,13 +209,8 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
 
     if (steps.length > 0) {
       lines.push('## 任务步骤', '');
-      steps.forEach((step, index) => {
-        lines.push(`### 步骤 ${index + 1}`, '');
-        if (step.imageUrl) {
-          lines.push(`![步骤${index + 1}图片](${step.imageUrl})`, '');
-        }
-        lines.push(step.description, '');
-      });
+      // 复用 shared：预览顺序 = 编辑器顺序 = 给 AI 的 Markdown 顺序
+      lines.push(stepsToMarkdown(steps));
     }
 
     return lines.join('\n');

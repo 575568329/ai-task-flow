@@ -23,10 +23,26 @@ export interface WorktreeRefDTO {
   createdAt: string;
 }
 
-/** 任务步骤(带可选图片) */
+/** 步骤内的有序内容块：文本或图片，按数组顺序渲染 */
+export type StepBlock =
+  | { type: 'text'; content: string }
+  | { type: 'image'; url: string };
+
+/**
+ * 任务步骤：由有序的图文块组成。
+ *
+ * blocks 数组的顺序即渲染顺序——编辑器里怎么排，
+ * 预览和给 AI 的 Markdown 就怎么排。
+ *
+ * 旧字段 description/imageUrl 仅为向后兼容保留，新代码一律用 blocks。
+ * 读取旧数据时通过 normalizeStep 自动转换。
+ */
 export interface TaskStep {
-  imageUrl?: string;     // 图片相对路径,如 /api/uploads/abc.png
-  description: string;   // 该步骤的任务描述
+  blocks?: StepBlock[];
+  /** @deprecated 旧格式字段，仅用于兼容历史数据 */
+  description?: string;
+  /** @deprecated 旧格式字段，仅用于兼容历史数据 */
+  imageUrl?: string;
 }
 
 export interface ExecutionResultDTO {

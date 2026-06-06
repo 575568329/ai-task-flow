@@ -37,6 +37,7 @@ describe('JsonTaskRepository', () => {
       undefined,
       undefined,
       [],
+      // 用旧格式输入，验证读取时自动规整为 blocks（向后兼容）
       [
         { description: 'AC1' },
         { description: 'AC2' }
@@ -50,7 +51,9 @@ describe('JsonTaskRepository', () => {
     expect(found?.id.value).toBe('TEST-001');
     expect(found?.title).toBe('Test Task');
     expect(found?.steps).toHaveLength(2);
-    expect(found?.steps[0].description).toBe('AC1');
+    // 旧格式 {description:'AC1'} 应被规整为 [{type:'text',content:'AC1'}]
+    expect(found?.steps[0].blocks).toEqual([{ type: 'text', content: 'AC1' }]);
+    expect(found?.steps[1].blocks).toEqual([{ type: 'text', content: 'AC2' }]);
   });
 
   it('should find tasks by status', async () => {
