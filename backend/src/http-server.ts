@@ -4,11 +4,13 @@ import { startHttpServer } from './interfaces/http/server.js';
 import { JsonTaskRepository } from './infrastructure/persistence/JsonTaskRepository.js';
 import { InMemoryEventBus } from './infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from './infrastructure/pubsub/EventStore.js';
+import { WorktreeManager } from './infrastructure/git/WorktreeManager.js';
 
 async function main() {
   const eventBus = new InMemoryEventBus();
   const eventStore = new JsonEventStore();
   const taskRepository = new JsonTaskRepository(undefined, eventBus, eventStore);
+  const worktreeManager = new WorktreeManager();
 
   const config = {
     port: parseInt(process.env.PORT || '3000', 10),
@@ -16,7 +18,7 @@ async function main() {
     corsOrigin: process.env.CORS_ORIGIN || '*',
   };
 
-  await startHttpServer(config, taskRepository, eventBus);
+  await startHttpServer(config, taskRepository, eventBus, worktreeManager);
 }
 
 main().catch((error) => {

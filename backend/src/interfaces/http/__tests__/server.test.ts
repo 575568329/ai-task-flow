@@ -5,6 +5,7 @@ import { createHttpServer } from '../server.js';
 import { JsonTaskRepository } from '../../../infrastructure/persistence/JsonTaskRepository.js';
 import { InMemoryEventBus } from '../../../infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from '../../../infrastructure/pubsub/EventStore.js';
+import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -31,7 +32,8 @@ describe('HTTP Server', () => {
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       taskRepository,
-      eventBus
+      eventBus,
+      new WorktreeManager()
     );
   });
 

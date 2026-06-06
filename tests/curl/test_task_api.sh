@@ -149,6 +149,35 @@ RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/tasks/E2E-002")
 CODE=$(echo "$RESP" | tail -1)
 assert_status "删除后查询返回 404" 404 "$CODE" ""
 
+# ============ 测试 11: 审查端点(错误分支)============
+# 注:正常审查路径需真实 worktree,此处覆盖关键校验分支
+echo ""
+echo "=== 测试 11: diff/approve/reject 端点校验 ==="
+
+# E2E-001 当前为 dispatched 且无真实 worktree → diff 端点行为
+# (dispatched 时 worktree 字段可能存在但目录不存在;此处主要验证端点可达与错误处理)
+RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/tasks/E2E-999/diff")
+CODE=$(echo "$RESP" | tail -1)
+assert_status "不存在任务的 diff 返回 404" 404 "$CODE" ""
+
+# 非 review 状态 approve → 400
+RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/tasks/E2E-001/approve" \
+  -H "Content-Type: application/json" --data-binary '{"mergeStrategy":"keep_branch"}')
+CODE=$(echo "$RESP" | tail -1)
+assert_status "非 review 任务 approve 返回 400" 400 "$CODE" ""
+
+# reject 缺 reason → 400
+RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/tasks/E2E-001/reject" \
+  -H "Content-Type: application/json" --data-binary '{}')
+CODE=$(echo "$RESP" | tail -1)
+assert_status "reject 缺 reason 返回 400" 400 "$CODE" ""
+
+# 不存在任务 approve → 404
+RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/tasks/E2E-999/approve" \
+  -H "Content-Type: application/json" --data-binary '{}')
+CODE=$(echo "$RESP" | tail -1)
+assert_status "不存在任务 approve 返回 404" 404 "$CODE" ""
+
 # ============ 汇总 ============
 echo ""
 echo "=============================="

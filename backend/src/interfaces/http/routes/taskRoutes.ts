@@ -5,10 +5,12 @@ import { TaskId } from '../../../domain/workflow/value-objects/TaskId.js';
 import { Task } from '../../../domain/workflow/entities/Task.js';
 import { TaskStatus } from '../../../domain/workflow/value-objects/TaskStatus.js';
 import { Priority } from '../../../domain/workflow/value-objects/Priority.js';
+import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
 
 export async function registerTaskRoutes(
   fastify: FastifyInstance,
-  taskRepository: TaskRepository
+  taskRepository: TaskRepository,
+  worktreeManager: WorktreeManager
 ) {
   // GET /api/tasks - 获取所有任务
   fastify.get('/api/tasks', async (request, reply) => {
@@ -120,4 +122,84 @@ export async function registerTaskRoutes(
 
     return reply.status(204).send();
   });
+
+  // GET /api/tasks/:id/diff - 获取任务 worktree 的 git diff
+  fastify.get<{ Params: { id: string }; Querystring: { base?: string } }>(
+    '/api/tasks/:id/diff',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      if (!task.worktree) {
+        return reply.status(409).send({ error: 'Task has no worktree (not dispatched)' });
+      }
+
+      const baseBranch = request.query.base || 'main';
+      try {
+        const diff = await worktreeManager.getDiff(task.worktree, baseBranch);
+        return {
+          taskId: task.id.value,
+          branch: task.worktree.branch,
+          baseBranch,
+          diff,
+        };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return reply.status(500).send({ error: `Failed to compute diff: ${message}` });
+      }
+    }
+  );
+
+  // POST /api/tasks/:id/approve - 审查通过(review → done)
+  fastify.post<{ Params: { id: string }; Body: { mergeStrategy?: 'merge' | 'keep_branch' } }>(
+    '/api/tasks/:id/approve',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      try {
+        task.approve(request.body?.mergeStrategy ?? 'keep_branch');
+        await taskRepository.save(task);
+        return task.toJSON();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return reply.status(400).send({ error: message });
+      }
+    }
+  );
+
+  // POST /api/tasks/:id/reject - 审查打回(review → todo)
+  fastify.post<{ Params: { id: string }; Body: { reason: string } }>(
+    '/api/tasks/:id/reject',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      const reason = request.body?.reason;
+      if (!reason) {
+        return reply.status(400).send({ error: 'reason is required' });
+      }
+
+      try {
+        task.reject(reason);
+        await taskRepository.save(task);
+        return task.toJSON();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return reply.status(400).send({ error: message });
+      }
+    }
+  );
 }

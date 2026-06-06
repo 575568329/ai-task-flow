@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
+import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
 import { registerTaskRoutes } from './routes/taskRoutes.js';
 import { registerSSERoutes } from './routes/sseRoutes.js';
 
@@ -15,7 +16,8 @@ export interface HttpServerConfig {
 export async function createHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
-  eventBus: EventBus
+  eventBus: EventBus,
+  worktreeManager: WorktreeManager
 ) {
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : {
@@ -35,7 +37,7 @@ export async function createHttpServer(
   });
 
   // 注册任务路由
-  await registerTaskRoutes(fastify, taskRepository);
+  await registerTaskRoutes(fastify, taskRepository, worktreeManager);
 
   // 注册 SSE 路由
   await registerSSERoutes(fastify, eventBus);
@@ -46,9 +48,10 @@ export async function createHttpServer(
 export async function startHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
-  eventBus: EventBus
+  eventBus: EventBus,
+  worktreeManager: WorktreeManager
 ) {
-  const server = await createHttpServer(config, taskRepository, eventBus);
+  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager);
 
   try {
     await server.listen({ port: config.port, host: config.host });
