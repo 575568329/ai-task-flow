@@ -92,7 +92,11 @@ export class JsonTaskRepository implements TaskRepository {
     try {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
       const content = await fs.readFile(this.filePath, 'utf-8');
-      const dtos: TaskDTO[] = JSON.parse(content);
+      const data = JSON.parse(content);
+
+      // 兼容两种格式：直接数组或包含 tasks 字段的对象
+      const dtos: TaskDTO[] = Array.isArray(data) ? data : (data.tasks || []);
+
       return dtos.map(dto => this.dtoToEntity(dto));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
