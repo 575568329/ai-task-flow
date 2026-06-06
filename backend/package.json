@@ -1,21 +1,63 @@
 {
   "name": "@ai-task-flow/backend",
-  "version": "0.1.0",
+  "version": "0.1.2",
+  "description": "HTTP + MCP backend server for AI Task Flow (含前端打包产物)",
   "type": "module",
+  "main": "./dist/http-server.js",
+  "types": "./dist/http-server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/http-server.d.ts",
+      "default": "./dist/http-server.js"
+    },
+    "./mcp": {
+      "types": "./dist/interfaces/mcp/server.d.ts",
+      "default": "./dist/interfaces/mcp/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "public",
+    "README.md"
+  ],
   "scripts": {
     "dev": "tsx watch src/http-server.ts",
     "build": "tsc",
     "test": "vitest",
     "mcp": "node dist/interfaces/mcp/server.js",
     "mcp:dev": "tsx src/interfaces/mcp/server.ts",
-    "http": "tsx src/http-server.ts"
+    "http": "tsx src/http-server.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/575568329/ai-task-flow.git",
+    "directory": "backend"
+  },
+  "homepage": "https://github.com/575568329/ai-task-flow#readme",
+  "bugs": {
+    "url": "https://github.com/575568329/ai-task-flow/issues"
+  },
+  "author": "yufj <yufj@intest.cn>",
+  "license": "MIT",
+  "keywords": [
+    "ai-task-flow",
+    "fastify",
+    "mcp",
+    "claude-code"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
+    "@ai-task-flow/shared": "^0.1.2",
     "@fastify/cors": "^10.0.1",
     "@fastify/multipart": "^9.0.1",
     "@fastify/static": "^8.0.1",
     "@modelcontextprotocol/sdk": "^0.5.0",
-    "electron": "^42.3.3",
     "fastify": "^5.2.0",
     "nanoid": "^5.0.5",
     "reflect-metadata": "^0.2.2",

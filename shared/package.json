@@ -1,6 +1,7 @@
 {
   "name": "@ai-task-flow/shared",
-  "version": "0.1.0",
+  "version": "0.1.2",
+  "description": "Shared TypeScript types and utilities for AI Task Flow",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,9 +11,33 @@
       "default": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
-    "build:watch": "tsc -w --preserveWatchOutput"
+    "build:watch": "tsc -w --preserveWatchOutput",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/575568329/ai-task-flow.git",
+    "directory": "shared"
+  },
+  "homepage": "https://github.com/575568329/ai-task-flow#readme",
+  "bugs": {
+    "url": "https://github.com/575568329/ai-task-flow/issues"
+  },
+  "author": "yufj <yufj@intest.cn>",
+  "license": "MIT",
+  "keywords": [
+    "ai-task-flow",
+    "types",
+    "shared"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

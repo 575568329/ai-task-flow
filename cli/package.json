@@ -1,27 +1,47 @@
 {
   "name": "@ai-task-flow/cli",
-  "version": "0.1.0",
-  "description": "CLI for AI Task Flow - 个人 AI 任务编排看板 + MCP Server",
+  "version": "0.1.2",
+  "description": "CLI for AI Task Flow - 个人 AI 任务编排看板 + Claude Code MCP Server",
   "type": "module",
   "bin": {
     "ai-task-flow": "./bin/ai-task-flow.js"
   },
   "files": [
-    "bin/",
+    "bin",
     "README.md"
   ],
+  "scripts": {
+    "start": "node bin/ai-task-flow.js",
+    "prepublishOnly": "cd .. && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/575568329/ai-task-flow.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/575568329/ai-task-flow#readme",
+  "bugs": {
+    "url": "https://github.com/575568329/ai-task-flow/issues"
+  },
+  "author": "yufj <yufj@intest.cn>",
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "ai-task-flow",
+    "claude-code",
+    "mcp",
+    "task-management",
+    "kanban",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@ai-task-flow/backend": "*",
+    "@ai-task-flow/backend": "^0.1.2",
     "open": "^10.1.0"
-  },
-  "keywords": [
-    "ai",
-    "claude-code",
-    "mcp",
-    "task-management",
-    "kanban"
-  ]
+  }
 }

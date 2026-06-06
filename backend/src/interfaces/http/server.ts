@@ -36,9 +36,12 @@ export async function createHttpServer(
   eventBus: EventBus,
   worktreeManager: WorktreeManager
 ) {
+  // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
+  // test 环境完全静默,避免 vitest 输出被日志淹没
+  const logLevel = process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'development' ? 'info' : 'warn');
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : {
-      level: 'info',
+      level: logLevel,
     },
   });
 
@@ -64,9 +67,17 @@ export async function createHttpServer(
     prefix: '/api/uploads/',
   });
 
-  // 健康检查
+  // 健康检查 + 服务身份标识(供 CLI probe 是否同应用,避免重复启动/冲突)
+  // - service: 标识"这是 ai-task-flow"
+  // - web: 标识"这个实例是否托管了前端 SPA",false 表示纯 API(dev 模式),CLI 不应 reuse
+  const hasWeb = !!(config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html')));
   fastify.get('/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+    return {
+      status: 'ok',
+      service: 'ai-task-flow',
+      web: hasWeb,
+      timestamp: new Date().toISOString(),
+    };
   });
 
   // 注册业务路由
@@ -108,19 +119,38 @@ export async function startHttpServer(
     await server.listen({ port: config.port, host: config.host });
     const url = `http://localhost:${config.port}`;
     if (config.frontendDist) {
-      console.log('\n========================================');
+      console.log('========================================');
       console.log(`✓ AI Task Flow ready: ${url}`);
       console.log(`  - Web UI:  ${url}`);
       console.log(`  - API:     ${url}/api`);
-      console.log('========================================\n');
+      console.log('========================================');
     } else {
-      console.log('\n========================================');
+      console.log('========================================');
       console.log(`✓ Backend ready: ${url}`);
       console.log(`  (Frontend served separately via Vite at http://localhost:5173)`);
-      console.log('========================================\n');
+      console.log('========================================');
     }
   } catch (err) {
-    server.log.error(err);
+    // 把常见错误翻译成友好提示;不再 dump 整个 fastify JSON 日志
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'EADDRINUSE') {
+      console.error('');
+      console.error(`✗ 端口 ${config.port} 已被占用`);
+      console.error('');
+      console.error('  解决办法(任选一个):');
+      console.error(`    1. 用其他端口:   ai-task-flow --port 8080`);
+      console.error(`    2. 释放该端口后重试`);
+      console.error('');
+    } else if (code === 'EACCES') {
+      console.error('');
+      console.error(`✗ 没有权限监听端口 ${config.port}`);
+      console.error('  小于 1024 的端口需要管理员权限,建议换 3000 / 8080 等');
+      console.error('');
+    } else {
+      console.error('');
+      console.error(`✗ 启动失败: ${(err as Error)?.message ?? String(err)}`);
+      console.error('');
+    }
     process.exit(1);
   }
 
