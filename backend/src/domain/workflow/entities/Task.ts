@@ -10,6 +10,7 @@ import { TaskUpdated } from '../events/TaskUpdated.js';
 import { TaskApproved } from '../events/TaskApproved.js';
 import { TaskRejected } from '../events/TaskRejected.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
+import type { TaskStep } from '@ai-task-flow/shared';
 
 export class Task {
   private _domainEvents: DomainEvent[] = [];
@@ -20,9 +21,10 @@ export class Task {
     public description: string,
     public status: TaskStatus,
     public priority: Priority,
-    public projects: string[],
+    public repoPath: string | undefined,
+    public projectName: string | undefined,
     public relatedFiles: string[],
-    public acceptanceCriteria: string[],
+    public steps: TaskStep[],
     public worktree?: WorktreeRef,
     public executionResult?: ExecutionResult,
     public createdAt: Date = new Date(),
@@ -88,9 +90,10 @@ export class Task {
     description?: string;
     status?: TaskStatus;
     priority?: Priority;
-    projects?: string[];
+    repoPath?: string;
+    projectName?: string;
     relatedFiles?: string[];
-    acceptanceCriteria?: string[];
+    steps?: TaskStep[];
   }): void {
     const previousStatus = this.status;
 
@@ -98,11 +101,10 @@ export class Task {
     if (updates.description !== undefined) this.description = updates.description;
     if (updates.status !== undefined) this.status = updates.status;
     if (updates.priority !== undefined) this.priority = updates.priority;
-    if (updates.projects !== undefined) this.projects = updates.projects;
+    if (updates.repoPath !== undefined) this.repoPath = updates.repoPath;
+    if (updates.projectName !== undefined) this.projectName = updates.projectName;
     if (updates.relatedFiles !== undefined) this.relatedFiles = updates.relatedFiles;
-    if (updates.acceptanceCriteria !== undefined) {
-      this.acceptanceCriteria = updates.acceptanceCriteria;
-    }
+    if (updates.steps !== undefined) this.steps = updates.steps;
 
     this.updatedAt = new Date();
     this._domainEvents.push(
@@ -117,9 +119,10 @@ export class Task {
       description: this.description,
       status: this.status,
       priority: this.priority,
-      projects: this.projects,
+      repoPath: this.repoPath,
+      projectName: this.projectName,
       relatedFiles: this.relatedFiles,
-      acceptanceCriteria: this.acceptanceCriteria,
+      steps: this.steps,
       worktree: this.worktree ? {
         path: this.worktree.path,
         branch: this.worktree.branch,

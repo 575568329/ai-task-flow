@@ -6,6 +6,7 @@ import { Task } from '../../../domain/workflow/entities/Task.js';
 import { TaskStatus } from '../../../domain/workflow/value-objects/TaskStatus.js';
 import { Priority } from '../../../domain/workflow/value-objects/Priority.js';
 import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
+import type { CreateTaskRequest, UpdateTaskRequest } from '@ai-task-flow/shared';
 
 export async function registerTaskRoutes(
   fastify: FastifyInstance,
@@ -45,18 +46,8 @@ export async function registerTaskRoutes(
   });
 
   // POST /api/tasks - 创建任务
-  fastify.post<{
-    Body: {
-      prefix: string;
-      title: string;
-      description: string;
-      priority?: Priority;
-      projects?: string[];
-      relatedFiles?: string[];
-      acceptanceCriteria?: string[];
-    };
-  }>('/api/tasks', async (request, reply) => {
-    const { prefix, title, description, priority, projects, relatedFiles, acceptanceCriteria } = request.body;
+  fastify.post<{ Body: CreateTaskRequest }>('/api/tasks', async (request, reply) => {
+    const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps } = request.body;
 
     // 生成 ID（简化版：查询最大序号 + 1）
     const allTasks = await taskRepository.findAll();
@@ -71,9 +62,10 @@ export async function registerTaskRoutes(
       description,
       TaskStatus.TODO,
       priority || Priority.P1,
-      projects || [],
+      repoPath,
+      projectName,
       relatedFiles || [],
-      acceptanceCriteria || []
+      steps || []
     );
 
     await taskRepository.save(task);
@@ -82,32 +74,24 @@ export async function registerTaskRoutes(
   });
 
   // PATCH /api/tasks/:id - 更新任务
-  fastify.patch<{
-    Params: { id: string };
-    Body: {
-      title?: string;
-      description?: string;
-      status?: TaskStatus;
-      priority?: Priority;
-      projects?: string[];
-      relatedFiles?: string[];
-      acceptanceCriteria?: string[];
-    };
-  }>('/api/tasks/:id', async (request, reply) => {
-    const taskId = TaskId.fromString(request.params.id);
-    const task = await taskRepository.findById(taskId);
+  fastify.patch<{ Params: { id: string }; Body: UpdateTaskRequest }>(
+    '/api/tasks/:id',
+    async (request, reply) => {
+      const taskId = TaskId.fromString(request.params.id);
+      const task = await taskRepository.findById(taskId);
 
-    if (!task) {
-      return reply.status(404).send({ error: 'Task not found' });
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      // 通过领域方法更新，发布 TaskUpdated 事件以驱动前端 SSE 实时刷新
+      task.applyUpdate(request.body);
+
+      await taskRepository.save(task);
+
+      return task.toJSON();
     }
-
-    // 通过领域方法更新，发布 TaskUpdated 事件以驱动前端 SSE 实时刷新
-    task.applyUpdate(request.body);
-
-    await taskRepository.save(task);
-
-    return task.toJSON();
-  });
+  );
 
   // DELETE /api/tasks/:id - 删除任务
   fastify.delete<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {

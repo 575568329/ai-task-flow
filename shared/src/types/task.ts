@@ -23,6 +23,12 @@ export interface WorktreeRefDTO {
   createdAt: string;
 }
 
+/** 任务步骤(带可选图片) */
+export interface TaskStep {
+  imageUrl?: string;     // 图片相对路径,如 /api/uploads/abc.png
+  description: string;   // 该步骤的任务描述
+}
+
 export interface ExecutionResultDTO {
   status: 'done' | 'partial' | 'blocked';
   changedFiles: string[];
@@ -38,9 +44,10 @@ export interface TaskDTO {
   description: string;
   status: TaskStatus;
   priority: Priority;
-  projects: string[];
+  repoPath?: string;              // 本地仓库路径
+  projectName?: string;           // 项目名(从 repoPath 提取,可手动改)
   relatedFiles: string[];
-  acceptanceCriteria: string[];
+  steps: TaskStep[];              // 任务步骤列表(替代 acceptanceCriteria)
   worktree?: WorktreeRefDTO;
   executionResult?: ExecutionResultDTO;
   createdAt: string;
@@ -54,9 +61,10 @@ export interface CreateTaskRequest {
   title: string;
   description: string;
   priority?: Priority;
-  projects?: string[];
+  repoPath?: string;
+  projectName?: string;
   relatedFiles?: string[];
-  acceptanceCriteria?: string[];
+  steps?: TaskStep[];
 }
 
 export interface UpdateTaskRequest {
@@ -64,9 +72,10 @@ export interface UpdateTaskRequest {
   description?: string;
   status?: TaskStatus;
   priority?: Priority;
-  projects?: string[];
+  repoPath?: string;
+  projectName?: string;
   relatedFiles?: string[];
-  acceptanceCriteria?: string[];
+  steps?: TaskStep[];
 }
 
 export type MergeStrategy = 'merge' | 'keep_branch';
@@ -84,4 +93,27 @@ export interface TaskDiffResponse {
   branch: string;
   baseBranch: string;
   diff: string;
+}
+
+// ---- 新增接口契约 ----
+
+/** POST /api/upload/image 响应 */
+export interface UploadImageResponse {
+  url: string;  // 图片访问路径,如 /api/uploads/abc.png
+}
+
+/** POST /api/projects/inspect 请求 */
+export interface InspectProjectRequest {
+  path: string;  // 本地仓库路径
+}
+
+/** POST /api/projects/inspect 响应 */
+export interface InspectProjectResponse {
+  projectName: string;  // 提取的项目名(git remote 或文件夹名)
+  valid: boolean;       // 是否为有效 git 仓库
+}
+
+/** GET /api/tasks/:id/markdown 响应 */
+export interface TaskMarkdownResponse {
+  markdown: string;  // 完整的 markdown 文本
 }
