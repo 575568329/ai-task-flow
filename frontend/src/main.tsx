@@ -1,7 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { initTheme } from './stores/uiStore.ts';
 import './index.css';
+
+initTheme();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {
