@@ -1,0 +1,4 @@
+{
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "typescript.tsdk": "node_modules/typescript/lib"
+}
