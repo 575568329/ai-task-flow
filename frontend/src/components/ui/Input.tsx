@@ -1,5 +1,5 @@
 // frontend/src/components/ui/Input.tsx
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 const fieldBase =
@@ -11,22 +11,28 @@ const fieldStyle: React.CSSProperties = {
   color: 'var(--text-1)',
 };
 
-export function Input({ className, style, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input className={cn(fieldBase, className)} style={{ ...fieldStyle, ...style }} {...props} />
-  );
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className, style, ...props }, ref) {
+    return (
+      <input
+        ref={ref}
+        className={cn(fieldBase, className)}
+        style={{ ...fieldStyle, ...style }}
+        {...props}
+      />
+    );
+  }
+);
 
-export function Textarea({
-  className,
-  style,
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={cn(fieldBase, 'resize-y', className)}
-      style={{ ...fieldStyle, ...style }}
-      {...props}
-    />
-  );
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className, style, ...props }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        className={cn(fieldBase, 'resize-y', className)}
+        style={{ ...fieldStyle, ...style }}
+        {...props}
+      />
+    );
+  }
+);

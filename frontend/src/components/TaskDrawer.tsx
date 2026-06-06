@@ -1,5 +1,5 @@
 // frontend/src/components/TaskDrawer.tsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { TaskStatus, Priority, stepsToMarkdown, buildClaudeCodePrompt, type TaskDTO, type TaskStep } from '@ai-task-flow/shared';
 import { Drawer } from './ui/Drawer';
 import { Button } from './ui/Button';
@@ -135,6 +135,8 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
   const [showPreview, setShowPreview] = useState(true);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [descUploading, setDescUploading] = useState(false);
+  const descRef = useRef<HTMLTextAreaElement>(null);
 
   const isNewTask = creating;
 
@@ -191,6 +193,55 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
     }
   }
 
+  // 描述区粘贴图片:上传到后端并把 ![](url) 插入到光标位置
+  async function handleDescriptionPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData.items;
+    let imageFile: File | null = null;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        imageFile = items[i].getAsFile();
+        break;
+      }
+    }
+    if (!imageFile) return; // 不是图片,走默认粘贴
+
+    e.preventDefault();
+    setDescUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', imageFile);
+      const res = await fetch('http://localhost:3000/api/upload/image', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`上传失败: ${res.status}`);
+      const data = await res.json();
+      const url = `http://localhost:3000${data.url}`;
+
+      // 在光标位置插入 markdown 图片语法
+      const textarea = descRef.current;
+      const insert = `\n![图片](${url})\n`;
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const next = description.slice(0, start) + insert + description.slice(end);
+        setDescription(next);
+        // 光标移到插入文本之后(下一帧再设置,等 React 渲染完)
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + insert.length, start + insert.length);
+        });
+      } else {
+        setDescription(description + insert);
+      }
+      toast.success('图片已插入');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '图片上传失败');
+    } finally {
+      setDescUploading(false);
+    }
+  }
+
   // __CONTINUE_HERE__
 
   const markdown = useMemo(() => {
@@ -238,8 +289,15 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="任务标题" />
           </Section>
 
-          <Section label="描述">
-            <Textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="详细描述..." />
+          <Section label={descUploading ? '描述(图片上传中…)' : '描述(可直接粘贴图片)'}>
+            <Textarea
+              ref={descRef}
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onPaste={handleDescriptionPaste}
+              placeholder="详细描述...(支持粘贴图片,自动上传并插入 markdown)"
+            />
           </Section>
 
           <div className="grid grid-cols-2 gap-3">
@@ -270,7 +328,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               <button
                 type="button"
                 onClick={() => setPickerOpen(true)}
-                className="inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-sm transition-fast hover:opacity-80"
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-3 py-2 text-sm transition-fast hover:opacity-80"
                 style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
                 title="打开目录选择器"
               >
