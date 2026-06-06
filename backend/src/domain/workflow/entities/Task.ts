@@ -7,6 +7,8 @@ import { ExecutionResult } from '../value-objects/ExecutionResult.js';
 import { TaskDispatched } from '../events/TaskDispatched.js';
 import { TaskResultRecorded } from '../events/TaskResultRecorded.js';
 import { TaskUpdated } from '../events/TaskUpdated.js';
+import { TaskApproved } from '../events/TaskApproved.js';
+import { TaskRejected } from '../events/TaskRejected.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
 
 export class Task {
@@ -61,7 +63,7 @@ export class Task {
     }
     this.status = TaskStatus.DONE;
     this.updatedAt = new Date();
-    // TaskApproved event 省略，MVP 阶段简化
+    this._domainEvents.push(new TaskApproved(this.id.value, mergeStrategy));
   }
 
   reject(reason: string): void {
@@ -72,7 +74,7 @@ export class Task {
     this.worktree = undefined;
     this.executionResult = undefined;
     this.updatedAt = new Date();
-    // TaskRejected event 省略
+    this._domainEvents.push(new TaskRejected(this.id.value, reason));
   }
 
   /**

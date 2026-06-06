@@ -108,4 +108,58 @@ describe('Task', () => {
     expect(task.projects).toEqual(['proj-a']);
     expect(task.status).toBe(TaskStatus.BLOCKED);
   });
+
+  it('should approve a review task and emit TaskApproved', () => {
+    const task = new Task(
+      TaskId.create('WS', 6),
+      'Reviewable',
+      'desc',
+      TaskStatus.REVIEW,
+      Priority.P1,
+      [],
+      [],
+      []
+    );
+
+    task.approve('merge');
+
+    expect(task.status).toBe(TaskStatus.DONE);
+    expect(task.domainEvents).toHaveLength(1);
+    expect(task.domainEvents[0].eventType).toBe('TaskApproved');
+  });
+
+  it('should reject a review task and emit TaskRejected', () => {
+    const task = new Task(
+      TaskId.create('WS', 7),
+      'Reviewable',
+      'desc',
+      TaskStatus.REVIEW,
+      Priority.P1,
+      [],
+      [],
+      []
+    );
+
+    task.reject('需要补测试');
+
+    expect(task.status).toBe(TaskStatus.TODO);
+    expect(task.executionResult).toBeUndefined();
+    expect(task.domainEvents).toHaveLength(1);
+    expect(task.domainEvents[0].eventType).toBe('TaskRejected');
+  });
+
+  it('should not approve a non-review task', () => {
+    const task = new Task(
+      TaskId.create('WS', 8),
+      't',
+      'd',
+      TaskStatus.TODO,
+      Priority.P2,
+      [],
+      [],
+      []
+    );
+
+    expect(() => task.approve('merge')).toThrow('Only review tasks');
+  });
 });
