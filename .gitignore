@@ -2,6 +2,7 @@ node_modules/
 dist/
 .ai-workspaces/
 *.log
+.logs/
 .env
 .DS_Store
 
