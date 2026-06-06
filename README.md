@@ -39,11 +39,12 @@
 | 层 | 技术 |
 |----|------|
 | 后端 | Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git + tsyringe |
-| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia |
+| 前端 | React 18 + TypeScript + Vite + Tailwind CSS v4 + Zustand + @dnd-kit + react-diff-view |
 | 架构 | DDD 四层(domain / application / infrastructure / interfaces)+ EventBus |
 | 存储 | JSON 文件(`~/.ai-task-flow/tasks.json`)+ EventStore(JSONL) |
 | 实时 | SSE(Server-Sent Events) |
 | 隔离 | git worktree(每任务一个) |
+| 共享 | `shared/` 包(前后端共享 TS 类型契约) |
 
 ---
 
@@ -112,6 +113,9 @@ npm run build:backend
 | POST | `/api/tasks` | 创建任务 |
 | PATCH | `/api/tasks/:id` | 更新任务(发布 `TaskUpdated` 事件,驱动 SSE) |
 | DELETE | `/api/tasks/:id` | 删除任务 |
+| GET | `/api/tasks/:id/diff` | 获取 worktree 的 git diff(支持 `?base=`) |
+| POST | `/api/tasks/:id/approve` | 审查通过(review→done,发布 `TaskApproved`) |
+| POST | `/api/tasks/:id/reject` | 审查打回(review→todo,发布 `TaskRejected`) |
 | GET | `/api/events` | SSE 事件流(实时推送) |
 
 ---
@@ -135,9 +139,10 @@ ai-task-flow/
 ├── frontend/
 │   └── src/
 │       ├── api/                     # HTTP 封装 + SSE 客户端
-│       ├── components/              # 看板列 / 卡片 / 详情抽屉 / 新建对话框
-│       ├── stores/                  # Pinia
-│       └── types/                   # 前端类型定义
+│       ├── components/              # 看板/卡片/抽屉/弹窗 + ui/(自建 Tailwind 组件)
+│       ├── stores/                  # Zustand(taskStore / uiStore)
+│       └── lib/                     # cn / 状态映射 / 工具
+├── shared/                          # 前后端共享类型包(@ai-task-flow/shared)
 ├── tests/curl/                      # E2E API 测试(curl)
 └── docs/                            # 设计、审查、对比文档
 ```
