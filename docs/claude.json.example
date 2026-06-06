@@ -1,0 +1,20 @@
+{
+  "_comment": "AI Task Flow - Claude Code MCP 配置示例。复制相关片段到你的 ~/.claude.json 的 mcpServers 字段。",
+  "_usage": "1) 先在项目根目录执行 npm run build 生成 dist;2) 把下面 args 中的路径改成你机器上的绝对路径;3) 重启 Claude Code。",
+  "mcpServers": {
+    "ai-task-flow": {
+      "command": "node",
+      "args": [
+        "/绝对路径/ai-task-flow/backend/dist/interfaces/mcp/server.js"
+      ],
+      "_args_windows_example": [
+        "C:/Users/你的用户名/ai-task-flow/backend/dist/interfaces/mcp/server.js"
+      ],
+      "_dev_alternative": {
+        "_comment": "开发期免构建,可改用 tsx 直跑源码:",
+        "command": "npx",
+        "args": ["tsx", "/绝对路径/ai-task-flow/backend/src/interfaces/mcp/server.ts"]
+      }
+    }
+  }
+}
