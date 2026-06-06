@@ -130,7 +130,7 @@ function TaskDrawerBody({ task, onSave, onDelete, onApprove, onReject }: BodyPro
 
       {task.acceptanceCriteria.length > 0 && (
         <Section label="验收标准">
-          <ul className="list-decimal pl-5 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <ul className="list-decimal pl-5 text-sm" style={{ color: 'var(--text-2)' }}>
             {task.acceptanceCriteria.map((ac, i) => (
               <li key={i}>{ac}</li>
             ))}
@@ -140,7 +140,7 @@ function TaskDrawerBody({ task, onSave, onDelete, onApprove, onReject }: BodyPro
 
       {task.worktree && (
         <Section label="Worktree">
-          <div className="rounded-lg border p-2 font-mono text-xs" style={{ borderColor: 'var(--border)' }}>
+          <div className="rounded-lg border p-2 font-mono text-xs" style={{ borderColor: 'var(--border-primary)' }}>
             <div>分支:{task.worktree.branch}</div>
             <div className="truncate">路径:{task.worktree.path}</div>
           </div>
@@ -168,7 +168,7 @@ function TaskDrawerBody({ task, onSave, onDelete, onApprove, onReject }: BodyPro
 
       {/* 审查闭环:仅 review 状态显示 */}
       {task.status === TaskStatus.REVIEW && (
-        <div className="mt-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+        <div className="mt-2 border-t pt-4" style={{ borderColor: 'var(--border-primary)' }}>
           <h4 className="mb-2 text-sm font-semibold">代码审查</h4>
           <DiffViewer taskId={task.id} />
           <div className="mt-3 flex flex-col gap-2">
@@ -205,7 +205,7 @@ function TaskDrawerBody({ task, onSave, onDelete, onApprove, onReject }: BodyPro
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
         {label}
       </span>
       {children}

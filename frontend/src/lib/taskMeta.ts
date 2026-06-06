@@ -11,12 +11,12 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.PLANNING]: 'var(--status-planning)',
-  [TaskStatus.TODO]: 'var(--status-todo)',
-  [TaskStatus.DISPATCHED]: 'var(--status-dispatched)',
-  [TaskStatus.REVIEW]: 'var(--status-review)',
-  [TaskStatus.DONE]: 'var(--status-done)',
-  [TaskStatus.BLOCKED]: 'var(--status-blocked)',
+  [TaskStatus.PLANNING]: 'var(--grey-6)',      // 中性灰
+  [TaskStatus.TODO]: 'var(--primary-6)',       // 蓝色
+  [TaskStatus.DISPATCHED]: 'var(--warning-6)', // 橙色
+  [TaskStatus.REVIEW]: 'var(--primary-8)',     // 深蓝
+  [TaskStatus.DONE]: 'var(--success-6)',       // 绿色
+  [TaskStatus.BLOCKED]: 'var(--error-6)',      // 红色
 };
 
 /** 看板列展示顺序 */
@@ -29,9 +29,9 @@ export const BOARD_COLUMNS: TaskStatus[] = [
 ];
 
 export const PRIORITY_COLORS: Record<Priority, string> = {
-  [Priority.P0]: 'var(--priority-p0)',
-  [Priority.P1]: 'var(--priority-p1)',
-  [Priority.P2]: 'var(--priority-p2)',
+  [Priority.P0]: 'var(--error-6)',    // 红色 - 紧急
+  [Priority.P1]: 'var(--warning-6)',  // 橙色 - 高
+  [Priority.P2]: 'var(--grey-6)',     // 灰色 - 普通
 };
 
 export function relativeTime(iso: string): string {

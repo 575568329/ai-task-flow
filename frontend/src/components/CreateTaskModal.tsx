@@ -134,7 +134,7 @@ export function CreateTaskModal() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
         {label}
       </span>
       {children}

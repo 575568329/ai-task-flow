@@ -21,13 +21,13 @@ export function KanbanColumn({ status, tasks, onTaskClick }: KanbanColumnProps) 
       ref={setNodeRef}
       className="flex max-h-[calc(100vh-140px)] min-w-[280px] flex-1 flex-col rounded-xl p-3 transition-colors"
       style={{
-        background: 'var(--bg)',
+        background: 'var(--bg-bottom)',
         outline: isOver ? `2px dashed ${STATUS_COLORS[status]}` : 'none',
       }}
     >
       <div
         className="mb-3 flex items-center gap-2 border-b pb-2"
-        style={{ borderColor: 'var(--border)' }}
+        style={{ borderColor: 'var(--border-primary)' }}
       >
         <span
           className="h-2 w-2 rounded-full"
@@ -47,7 +47,7 @@ export function KanbanColumn({ status, tasks, onTaskClick }: KanbanColumnProps) 
         {tasks.length === 0 && (
           <div
             className="flex flex-col items-center justify-center gap-2 py-8 text-xs"
-            style={{ color: 'var(--text-muted)' }}
+            style={{ color: 'var(--text-2)' }}
           >
             <Inbox size={28} className="opacity-40" />
             暂无任务

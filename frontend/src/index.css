@@ -1,57 +1,244 @@
 @import "tailwindcss";
 
-/* 暗色主题通过 .dark 类触发(挂在 <html>) */
+/*
+ * Spark-design Token 系统移植到 Tailwind
+ * 基于 Spark-design assets/root.scss + font.scss
+ * 保留明暗主题切换机制
+ */
+
 @custom-variant dark (&:where(.dark, .dark *));
 
-/*
- * 设计 token —— 语义化颜色变量,亮/暗双套。
- * 组件统一用 var(--xxx) 或 Tailwind 的 bg-[--xxx],不硬编码颜色。
- */
+/* ======================================================================== */
+/* ======================= 第一层:基础色板 ================================ */
+/* ======================================================================== */
+
 :root {
-  --bg: #f1f5f9;          /* 页面底色 slate-100 */
-  --surface: #ffffff;     /* 卡片/面板 */
-  --surface-hover: #f8fafc;
-  --border: #e2e8f0;      /* slate-200 */
-  --text: #0f172a;        /* slate-900 */
-  --text-muted: #64748b;  /* slate-500 */
-  --primary: #6366f1;     /* indigo-500 */
-  --primary-hover: #4f46e5;
+  /* ==================== 主色系 Primary(蓝色) ==================== */
+  --primary-1: #EBF5FF;
+  --primary-2: #C2DEFF;
+  --primary-3: #99C5FF;
+  --primary-4: #70A9FF;
+  --primary-5: #478AFF;
+  --primary-6: #216BFF;
+  --primary-7: #0F4BD9;
+  --primary-8: #0432B3;
+  --primary-9: #00208C;
+  --primary-10: #001466;
 
-  /* 状态色(6 态) */
-  --status-planning: #94a3b8;
-  --status-todo: #3b82f6;
-  --status-dispatched: #f59e0b;
-  --status-review: #a855f7;
-  --status-done: #22c55e;
-  --status-blocked: #ef4444;
+  /* ==================== 成功色系 Success(绿色) ==================== */
+  --success-1: #DEF2DA;
+  --success-2: #B2E6AA;
+  --success-3: #87D97E;
+  --success-4: #5ECC56;
+  --success-5: #36BF32;
+  --success-6: #12B312;
+  --success-7: #078C0B;
+  --success-8: #006607;
+  --success-9: #004006;
+  --success-10: #001A03;
 
-  /* 优先级色 */
-  --priority-p0: #ef4444;
-  --priority-p1: #f59e0b;
-  --priority-p2: #94a3b8;
+  /* ==================== 警告色系 Warning(橙色) ==================== */
+  --warning-1: #FFF7E6;
+  --warning-2: #FFE2B0;
+  --warning-3: #FFCF87;
+  --warning-4: #FFB95E;
+  --warning-5: #FFA136;
+  --warning-6: #FA830C;
+  --warning-7: #D46300;
+  --warning-8: #AD4B00;
+  --warning-9: #873600;
+  --warning-10: #612400;
+
+  /* ==================== 错误色系 Error(红色) ==================== */
+  --error-1: #FFF1F0;
+  --error-2: #FFE0DE;
+  --error-3: #FFB7B5;
+  --error-4: #FF8C8C;
+  --error-5: #FF6369;
+  --error-6: #FA3946;
+  --error-7: #D42638;
+  --error-8: #AD172B;
+  --error-9: #870B20;
+  --error-10: #610719;
+
+  /* ==================== 中性灰 Grey ==================== */
+  --grey-1: #FAFAFA;
+  --grey-2: #F5F5F5;
+  --grey-3: #F0F0F0;
+  --grey-4: #E5E5E5;
+  --grey-5: #D9D9D9;
+  --grey-6: #BFBFBF;
+  --grey-7: #8C8C8C;
+  --grey-8: #595959;
+  --grey-9: #262626;
+  --grey-10: #000000;
+
+  /* ======================================================================== */
+  /* =================== 第二层:语义化 Token(亮色主题) ======================= */
+  /* ======================================================================== */
+
+  /* ==================== 品牌色 Brand ==================== */
+  --brand-primary: var(--primary-6);
+  --brand-hover: var(--primary-5);
+  --brand-pressed: var(--primary-7);
+  --brand-disabled: var(--primary-3);
+  --brand-light: var(--primary-1);
+  --brand-light-hover: var(--primary-2);
+  --brand-light-active: var(--primary-3);
+  --brand-bg: var(--primary-1);
+
+  /* ==================== 成功色 Success ==================== */
+  --success-primary: var(--success-6);
+  --success-hover: var(--success-5);
+  --success-pressed: var(--success-7);
+  --success-disabled: var(--success-3);
+  --success-bg: var(--success-1);
+
+  /* ==================== 危险/错误色 Danger ==================== */
+  --danger-primary: var(--error-6);
+  --danger-hover: var(--error-5);
+  --danger-pressed: var(--error-7);
+  --danger-disabled: var(--error-3);
+  --danger-bg: var(--error-1);
+
+  /* ==================== 警告色 Warning ==================== */
+  --warning-primary: var(--warning-6);
+  --warning-hover: var(--warning-5);
+  --warning-pressed: var(--warning-7);
+  --warning-disabled: var(--warning-3);
+  --warning-bg: var(--warning-1);
+
+  /* ==================== 背景色 Background ==================== */
+  --bg-white: #FFFFFF;
+  --bg-bottom: var(--grey-1);
+  --bg-lower: var(--bg-white);
+  --bg-middle: var(--bg-white);
+  --bg-upper: var(--bg-white);
+
+  /* ==================== 文本色 Text ==================== */
+  --text-1: rgba(0, 0, 0, 0.85);
+  --text-2: rgba(0, 0, 0, 0.65);
+  --text-3: rgba(0, 0, 0, 0.45);
+  --text-4: rgba(0, 0, 0, 0.25);
+  --text-darkbg: #FFFFFF;
+
+  /* ==================== 图标色 Icon ==================== */
+  --icon-1: rgba(0, 0, 0, 0.85);
+  --icon-2: rgba(0, 0, 0, 0.65);
+  --icon-3: rgba(0, 0, 0, 0.45);
+  --icon-4: rgba(0, 0, 0, 0.25);
+  --icon-darkbg: #FFFFFF;
+
+  /* ==================== 描边色 Border ==================== */
+  --border-primary: var(--grey-5);
+  --border-secondary: var(--grey-3);
+  --border-hover: rgba(0, 0, 0, 0.25);
+
+  /* ==================== 填充色 Fill ==================== */
+  --fill-default: var(--bg-white);
+  --fill-hover: var(--grey-2);
+  --fill-active: var(--grey-4);
+  --fill-disabled: var(--grey-2);
+
+  /* ==================== 遮罩色 Mask ==================== */
+  --mask-primary: rgba(0, 0, 0, 0.8);
+  --mask-light: rgba(0, 0, 0, 0.7);
+  --mask-lighter: rgba(0, 0, 0, 0.32);
+
+  /* ==================== 阴影 Shadow ==================== */
+  --shadow-base: 0 8px 20px 0 rgba(0, 0, 0, 0.1);
+  --shadow-light: 0 4px 10px 0 rgba(0, 0, 0, 0.1);
+  --shadow-dark: 0 16px 40px 0 rgba(0, 0, 0, 0.1);
+
+  /* ==================== 圆角 Radius ==================== */
+  --radius-none: 0;
+  --radius-small: 2px;
+  --radius-medium: 4px;
+  --radius-large: 8px;
+  --radius-extraLarge: 9999px;
+  --radius-circle: 50%;
+
+  /* ==================== 间距 Spacing ==================== */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-7: 40px;
+
+  /* ==================== 边框 Border ==================== */
+  --border-width: 1px;
+  --border-style: solid;
+
+  /* ==================== 字体 Font ==================== */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+  --font-size-12: 12px;
+  --font-size-14: 14px;
+  --font-size-16: 16px;
+  --font-size-18: 18px;
+  --font-size-22: 22px;
+  --font-size-28: 28px;
+
+  --line-height-18: 18px;
+  --line-height-20: 20px;
+  --line-height-24: 24px;
+  --line-height-28: 28px;
+  --line-height-32: 32px;
+  --line-height-36: 36px;
+  --line-height-42: 42px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
 }
+
+/* ======================================================================== */
+/* ===================== 暗色主题覆盖 ===================================== */
+/* ======================================================================== */
 
 .dark {
-  --bg: #0f172a;          /* slate-900 */
-  --surface: #1e293b;     /* slate-800 */
-  --surface-hover: #334155;
-  --border: #334155;      /* slate-700 */
-  --text: #f1f5f9;        /* slate-100 */
-  --text-muted: #94a3b8;  /* slate-400 */
-  --primary: #818cf8;     /* indigo-400 */
-  --primary-hover: #a5b4fc;
+  /* 背景色反转 */
+  --bg-bottom: var(--grey-10);
+  --bg-lower: var(--grey-9);
+  --bg-middle: var(--grey-9);
+  --bg-upper: var(--grey-8);
 
-  --status-planning: #64748b;
-  --status-todo: #60a5fa;
-  --status-dispatched: #fbbf24;
-  --status-review: #c084fc;
-  --status-done: #4ade80;
-  --status-blocked: #f87171;
+  /* 文本色反转 */
+  --text-1: rgba(255, 255, 255, 0.9);
+  --text-2: rgba(255, 255, 255, 0.7);
+  --text-3: rgba(255, 255, 255, 0.5);
+  --text-4: rgba(255, 255, 255, 0.3);
 
-  --priority-p0: #f87171;
-  --priority-p1: #fbbf24;
-  --priority-p2: #64748b;
+  /* 图标色反转 */
+  --icon-1: rgba(255, 255, 255, 0.9);
+  --icon-2: rgba(255, 255, 255, 0.7);
+  --icon-3: rgba(255, 255, 255, 0.5);
+  --icon-4: rgba(255, 255, 255, 0.3);
+
+  /* 描边色反转 */
+  --border-primary: var(--grey-7);
+  --border-secondary: var(--grey-8);
+  --border-hover: rgba(255, 255, 255, 0.3);
+
+  /* 填充色反转 */
+  --fill-default: var(--grey-9);
+  --fill-hover: var(--grey-8);
+  --fill-active: var(--grey-7);
+  --fill-disabled: var(--grey-8);
+
+  /* 品牌色在暗色下稍亮 */
+  --brand-primary: var(--primary-5);
+  --brand-hover: var(--primary-4);
+  --brand-pressed: var(--primary-6);
 }
+
+/* ======================================================================== */
+/* ===================== 全局样式 ========================================= */
+/* ======================================================================== */
 
 html,
 body,
@@ -61,10 +248,11 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  background-color: var(--bg);
-  color: var(--text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-14);
+  line-height: var(--line-height-20);
+  background-color: var(--bg-bottom);
+  color: var(--text-1);
 }
 
 /* 自定义滚动条 */
@@ -73,6 +261,9 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+  background: var(--border-primary);
+  border-radius: var(--radius-medium);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
 }

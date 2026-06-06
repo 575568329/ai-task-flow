@@ -28,13 +28,13 @@ export function Modal({ open, onClose, title, children, footer, width = 560 }: M
     >
       <div
         className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl shadow-2xl"
-        style={{ background: 'var(--surface)', color: 'var(--text)', maxWidth: width }}
+        style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
           <div
             className="flex items-center justify-between border-b px-5 py-3.5"
-            style={{ borderColor: 'var(--border)' }}
+            style={{ borderColor: 'var(--border-primary)' }}
           >
             <h3 className="text-base font-semibold">{title}</h3>
             <button onClick={onClose} className="rounded p-1 hover:opacity-70" aria-label="关闭">
@@ -46,7 +46,7 @@ export function Modal({ open, onClose, title, children, footer, width = 560 }: M
         {footer && (
           <div
             className="flex justify-end gap-2 border-t px-5 py-3"
-            style={{ borderColor: 'var(--border)' }}
+            style={{ borderColor: 'var(--border-primary)' }}
           >
             {footer}
           </div>

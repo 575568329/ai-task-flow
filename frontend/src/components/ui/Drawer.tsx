@@ -25,12 +25,12 @@ export function Drawer({ open, onClose, title, children, width = 520 }: DrawerPr
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
       <div
         className="flex h-full flex-col shadow-2xl"
-        style={{ background: 'var(--surface)', color: 'var(--text)', width }}
+        style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', width }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           className="flex items-center justify-between border-b px-5 py-3.5"
-          style={{ borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border-primary)' }}
         >
           <div className="text-base font-semibold">{title}</div>
           <button onClick={onClose} className="rounded p-1 hover:opacity-70" aria-label="关闭">

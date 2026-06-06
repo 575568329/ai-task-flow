@@ -35,28 +35,28 @@ export function DiffViewer({ taskId }: DiffViewerProps) {
   }, [taskId]);
 
   if (loading) {
-    return <p className="text-sm" style={{ color: 'var(--text-muted)' }}>加载 diff…</p>;
+    return <p className="text-sm" style={{ color: 'var(--text-2)' }}>加载 diff…</p>;
   }
   if (error) {
     return (
-      <p className="text-sm" style={{ color: 'var(--status-blocked)' }}>
+      <p className="text-sm" style={{ color: 'var(--error-6)' }}>
         {error}
       </p>
     );
   }
   if (!diffText || !diffText.trim()) {
-    return <p className="text-sm" style={{ color: 'var(--text-muted)' }}>无变更</p>;
+    return <p className="text-sm" style={{ color: 'var(--text-2)' }}>无变更</p>;
   }
 
   const files = parseDiff(diffText);
 
   return (
-    <div className="overflow-x-auto rounded-lg border text-xs" style={{ borderColor: 'var(--border)' }}>
+    <div className="overflow-x-auto rounded-lg border text-xs" style={{ borderColor: 'var(--border-primary)' }}>
       {files.map((file, i) => (
         <div key={i}>
           <div
             className="px-3 py-1.5 font-mono font-semibold"
-            style={{ background: 'var(--surface-hover)' }}
+            style={{ background: 'var(--fill-hover)' }}
           >
             {file.oldPath === file.newPath ? file.newPath : `${file.oldPath} → ${file.newPath}`}
           </div>

@@ -34,12 +34,12 @@ export function Button({
 }: ButtonProps) {
   const variantStyle: React.CSSProperties =
     variant === 'primary'
-      ? { background: 'var(--primary)' }
+      ? { background: 'var(--brand-primary)' }
       : variant === 'danger'
-        ? { background: 'var(--status-blocked)' }
+        ? { background: 'var(--danger-primary)' }
         : variant === 'secondary'
-          ? { borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--surface)' }
-          : { color: 'var(--text)' };
+          ? { borderColor: 'var(--border-primary)', color: 'var(--text-1)', background: 'var(--bg-lower)' }
+          : { color: 'var(--text-1)' };
 
   return (
     <button

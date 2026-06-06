@@ -10,7 +10,7 @@ interface TagProps {
 }
 
 /** 小标签:filled 实心(白字),否则描边 */
-export function Tag({ children, color = 'var(--text-muted)', filled = false, className }: TagProps) {
+export function Tag({ children, color = 'var(--text-2)', filled = false, className }: TagProps) {
   const style: CSSProperties = filled
     ? { background: color, color: '#fff' }
     : { borderColor: color, color, borderWidth: 1, borderStyle: 'solid' };
@@ -26,7 +26,7 @@ export function Tag({ children, color = 'var(--text-muted)', filled = false, cla
 }
 
 /** 数字徽标 */
-export function Badge({ count, color = 'var(--text-muted)' }: { count: number; color?: string }) {
+export function Badge({ count, color = 'var(--text-2)' }: { count: number; color?: string }) {
   return (
     <span
       className="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold text-white"

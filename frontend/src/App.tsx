@@ -103,7 +103,7 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+    <div className="flex min-h-screen flex-col" style={{ background: 'var(--bg-bottom)', color: 'var(--text-1)' }}>
       <TopBar projects={allProjects} sseConnected={sseConnected} />
 
       <main className="flex-1 overflow-x-auto p-5">

@@ -35,9 +35,9 @@ export const toast = {
 };
 
 const colorMap: Record<ToastType, string> = {
-  success: 'var(--status-done)',
-  error: 'var(--status-blocked)',
-  info: 'var(--status-todo)',
+  success: 'var(--success-6)',
+  error: 'var(--error-6)',
+  info: 'var(--primary-6)',
 };
 
 export function Toaster() {
@@ -61,7 +61,7 @@ function ToastItem({ toast: t, onClose }: { toast: Toast; onClose: () => void })
   return (
     <div
       className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg"
-      style={{ background: 'var(--surface)', color: 'var(--text)', borderLeft: `3px solid ${colorMap[t.type]}` }}
+      style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', borderLeft: `3px solid ${colorMap[t.type]}` }}
       onClick={onClose}
     >
       <Icon size={16} style={{ color: colorMap[t.type] }} />

@@ -22,7 +22,7 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
   return (
     <header
       className="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b px-6 py-3"
-      style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      style={{ background: 'var(--bg-lower)', borderColor: 'var(--border-primary)' }}
     >
       <div className="flex items-center gap-2">
         <h1 className="text-lg font-semibold">AI Task Flow</h1>
@@ -32,8 +32,8 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
         >
           <Circle
             size={10}
-            fill={sseConnected ? 'var(--status-done)' : 'var(--status-blocked)'}
-            color={sseConnected ? 'var(--status-done)' : 'var(--status-blocked)'}
+            fill={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
+            color={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
           />
         </span>
       </div>
@@ -42,7 +42,7 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
         <Search
           size={15}
           className="absolute left-2.5 top-1/2 -translate-y-1/2"
-          style={{ color: 'var(--text-muted)' }}
+          style={{ color: 'var(--text-2)' }}
         />
         <Input
           value={searchQuery}

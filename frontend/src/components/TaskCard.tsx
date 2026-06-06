@@ -20,7 +20,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    background: 'var(--surface)',
+    background: 'var(--bg-lower)',
     borderLeft: `3px solid ${PRIORITY_COLORS[task.priority]}`,
   };
 
@@ -34,7 +34,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       className="mb-2 cursor-pointer rounded-lg p-3 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-muted)' }}>
+        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-2)' }}>
           {task.id}
         </span>
         <Tag color={PRIORITY_COLORS[task.priority]} filled>
@@ -45,7 +45,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       <h4 className="mb-1.5 text-sm font-semibold leading-snug">{task.title}</h4>
 
       {task.description && (
-        <p className="mb-2 line-clamp-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <p className="mb-2 line-clamp-2 text-xs" style={{ color: 'var(--text-2)' }}>
           {task.description}
         </p>
       )}
@@ -60,7 +60,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
 
       <div
         className="flex items-center justify-between text-xs"
-        style={{ color: 'var(--text-muted)' }}
+        style={{ color: 'var(--text-2)' }}
       >
         <span className="flex items-center gap-1">
           <Clock size={12} />

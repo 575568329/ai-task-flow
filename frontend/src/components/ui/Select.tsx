@@ -19,9 +19,9 @@ export function Select({ options, className, style, ...props }: SelectProps) {
         className
       )}
       style={{
-        background: 'var(--surface)',
-        borderColor: 'var(--border)',
-        color: 'var(--text)',
+        background: 'var(--bg-lower)',
+        borderColor: 'var(--border-primary)',
+        color: 'var(--text-1)',
         ...style,
       }}
       {...props}
