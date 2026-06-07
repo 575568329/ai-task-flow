@@ -152,3 +152,8 @@ export interface BrowseDirResponse {
 export interface TaskMarkdownResponse {
   markdown: string;  // 完整的 markdown 文本
 }
+
+/** POST /api/tasks/:id/dispatch 响应 */
+export interface DispatchTaskResponse extends TaskDTO {
+  claudeCommand: string;  // 生成的 Claude 指令（包含 /rename + 任务拉取指令）
+}

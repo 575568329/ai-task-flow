@@ -10,7 +10,7 @@ import { DiffViewer } from './DiffViewer';
 import { StepEditor } from './StepEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { toast } from './ui/Toaster';
-import { taskApi } from '@/api/task';
+import { taskApi, systemApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { STATUS_LABELS, STATUS_COLORS, PRIORITY_COLORS } from '@/lib/taskMeta';
@@ -354,9 +354,16 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               />
               <button
                 type="button"
-                onClick={() => {
-                  // 直接触发隐藏的 input
-                  document.getElementById('folder-picker-input')?.click();
+                onClick={async () => {
+                  try {
+                    const { path } = await systemApi.selectDirectory();
+                    if (path) {
+                      setRepoPath(path);
+                      await checkProjectPath();
+                    }
+                  } catch (error) {
+                    toast.error('打开文件夹选择器失败');
+                  }
                 }}
                 className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-3 py-2 text-sm transition-fast hover:opacity-80"
                 style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
@@ -525,7 +532,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
                     }
 
                     // 确认弹窗
-                    if (!confirm(`确认派发任务 ${task.id}？\n\n将执行以下操作：\n1. 保存当前修改\n2. 创建独立的 git worktree\n3. 自动复制派发指令\n\n是否继续？`)) {
+                    if (!confirm(`确认派发任务 ${task.id}？\n\n将执行以下操作：\n1. 保存当前修改\n2. 创建独立的 git worktree\n3. 自动打开终端并运行 claude\n4. 自动复制派发指令到剪贴板\n\n是否继续？`)) {
                       return;
                     }
 
@@ -543,7 +550,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
                       // 再派发
                       const dispatch = useTaskStore.getState().dispatch;
                       await dispatch(task.id);
-                      toast.success('派发成功！指令已复制');
+                      toast.success('派发成功！终端已打开，请在 Claude 窗口 Ctrl+V 粘贴指令');
                     } catch (err: any) {
                       toast.error(`派发失败: ${err.message || '未知错误'}`);
                     }

@@ -13,6 +13,7 @@ import { registerTaskRoutes } from './routes/taskRoutes.js';
 import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
 import { registerProjectRoutes } from './routes/projectRoutes.js';
+import systemRoutes from './routes/system.js';
 
 export interface HttpServerConfig {
   port: number;
@@ -85,6 +86,7 @@ export async function createHttpServer(
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
+  await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {

@@ -9,6 +9,7 @@ import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js'
 import type { CreateTaskRequest, UpdateTaskRequest } from '@ai-task-flow/shared';
 import { buildTaskMarkdown, writeTaskDoc, removeTaskDoc } from '../../../infrastructure/persistence/taskDoc.js';
 import { taskDocPath } from '../../../config/dataDir.js';
+import { TerminalLauncher } from '../../../infrastructure/system/TerminalLauncher.js';
 
 export async function registerTaskRoutes(
   fastify: FastifyInstance,
@@ -179,7 +180,24 @@ export async function registerTaskRoutes(
           fastify.log.warn(`Failed to write task doc on dispatch for ${task.id.value}: ${message}`);
         }
 
-        return toDTO(task);
+        // 生成 Claude 指令（包含 /rename 命令 + 任务拉取指令）
+        const taskMdPath = taskDocPath(task.id.value);
+        const claudeCommand = `/rename ${task.id.value}\n请拉取任务 ${task.id.value} 并执行，详情见 ${taskMdPath}`;
+
+        // 尝试自动打开终端并运行 claude（失败不阻断派发）
+        try {
+          await TerminalLauncher.openAndRunClaude(task.repoPath);
+          fastify.log.info(`Launched terminal for task ${task.id.value} at ${task.repoPath}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          fastify.log.warn(`Failed to launch terminal for ${task.id.value}: ${message}`);
+        }
+
+        // 返回任务 DTO + Claude 指令（前端负责复制到剪贴板）
+        return {
+          ...toDTO(task),
+          claudeCommand,
+        };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return reply.status(500).send({ error: `Failed to dispatch: ${message}` });
