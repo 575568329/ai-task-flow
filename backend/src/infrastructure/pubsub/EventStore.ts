@@ -2,7 +2,7 @@
 import { DomainEvent } from '../../domain/_shared/DomainEvent.js';
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
+import { eventsFilePath } from '../../config/dataDir.js';
 
 /**
  * EventStore 接口
@@ -38,7 +38,7 @@ export class JsonEventStore implements EventStore {
   private filePath: string;
 
   constructor(filePath?: string) {
-    this.filePath = filePath || path.join(os.homedir(), '.ai-task-flow', 'events.jsonl');
+    this.filePath = filePath || eventsFilePath();
   }
 
   async append(event: DomainEvent): Promise<void> {
