@@ -7,17 +7,27 @@ import { TaskStatus } from '../../../domain/workflow/value-objects/TaskStatus.js
 import { Priority } from '../../../domain/workflow/value-objects/Priority.js';
 import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
 import type { CreateTaskRequest, UpdateTaskRequest } from '@ai-task-flow/shared';
-import { stepsToMarkdown } from '@ai-task-flow/shared';
+import { buildTaskMarkdown, writeTaskDoc, removeTaskDoc } from '../../../infrastructure/persistence/taskDoc.js';
+import { taskDocPath } from '../../../config/dataDir.js';
 
 export async function registerTaskRoutes(
   fastify: FastifyInstance,
   taskRepository: TaskRepository,
   worktreeManager: WorktreeManager
 ) {
+  /**
+   * Task → DTO,补充 taskFilePath(markdown 存档的绝对路径)。
+   * 前端据此生成派发指令,指向真实存在的文件,而非凭空拼路径。
+   */
+  const toDTO = (task: Task) => ({
+    ...task.toJSON(),
+    taskFilePath: taskDocPath(task.id.value),
+  });
+
   // GET /api/tasks - 获取所有任务
   fastify.get('/api/tasks', async (request, reply) => {
     const tasks = await taskRepository.findAll();
-    return tasks.map(task => task.toJSON());
+    return tasks.map(toDTO);
   });
 
   // GET /api/tasks/:id - 获取单个任务
@@ -29,7 +39,7 @@ export async function registerTaskRoutes(
       return reply.status(404).send({ error: 'Task not found' });
     }
 
-    return task.toJSON();
+    return toDTO(task);
   });
 
   // GET /api/tasks/status/:status - 按状态查询任务
@@ -43,7 +53,7 @@ export async function registerTaskRoutes(
     }
 
     const tasks = await taskRepository.findByStatus(status);
-    return tasks.map(task => task.toJSON());
+    return tasks.map(toDTO);
   });
 
   // POST /api/tasks - 创建任务
@@ -71,7 +81,15 @@ export async function registerTaskRoutes(
 
     await taskRepository.save(task);
 
-    return reply.status(201).send(task.toJSON());
+    // 落盘 markdown 存档(失败不阻断创建)
+    try {
+      await writeTaskDoc(task);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      fastify.log.warn(`Failed to write task doc for ${task.id.value}: ${message}`);
+    }
+
+    return reply.status(201).send(toDTO(task));
   });
 
   // PATCH /api/tasks/:id - 更新任务
@@ -112,7 +130,15 @@ export async function registerTaskRoutes(
 
       await taskRepository.save(task);
 
-      return task.toJSON();
+      // 同步更新 markdown 存档(失败不阻断)
+      try {
+        await writeTaskDoc(task);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        fastify.log.warn(`Failed to update task doc for ${task.id.value}: ${message}`);
+      }
+
+      return toDTO(task);
     }
   );
 
@@ -145,7 +171,15 @@ export async function registerTaskRoutes(
         // 保存任务
         await taskRepository.save(task);
 
-        return task.toJSON();
+        // 落盘 markdown 存档(含 worktree 信息),派发指令指向此真实文件
+        try {
+          await writeTaskDoc(task);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          fastify.log.warn(`Failed to write task doc on dispatch for ${task.id.value}: ${message}`);
+        }
+
+        return toDTO(task);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return reply.status(500).send({ error: `Failed to dispatch: ${message}` });
@@ -163,6 +197,14 @@ export async function registerTaskRoutes(
     }
 
     await taskRepository.delete(taskId);
+
+    // 删除 markdown 存档(失败不阻断)
+    try {
+      await removeTaskDoc(taskId.value);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      fastify.log.warn(`Failed to remove task doc for ${taskId.value}: ${message}`);
+    }
 
     return reply.status(204).send();
   });
@@ -212,7 +254,7 @@ export async function registerTaskRoutes(
       try {
         task.approve(request.body?.mergeStrategy ?? 'keep_branch');
         await taskRepository.save(task);
-        return task.toJSON();
+        return toDTO(task);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return reply.status(400).send({ error: message });
@@ -239,7 +281,7 @@ export async function registerTaskRoutes(
       try {
         task.reject(reason);
         await taskRepository.save(task);
-        return task.toJSON();
+        return toDTO(task);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         return reply.status(400).send({ error: message });
@@ -258,64 +300,8 @@ export async function registerTaskRoutes(
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      const lines = [
-        `# ${task.title}`,
-        '',
-        `**任务ID**: ${task.id.value}`,
-        `**优先级**: ${task.priority}`,
-        `**状态**: ${task.status}`,
-      ];
-
-      if (task.projectName) {
-        lines.push(`**项目**: ${task.projectName}`);
-      }
-      if (task.repoPath) {
-        lines.push(`**仓库路径**: \`${task.repoPath}\``);
-      }
-
-      lines.push('', '## 描述', '', task.description || '（无描述）', '');
-
-      if (task.steps.length > 0) {
-        lines.push('## 任务步骤', '');
-        // 复用 shared：图文顺序与编辑器、MCP、前端预览一致
-        lines.push(stepsToMarkdown(task.steps), '');
-      }
-
-      if (task.relatedFiles.length > 0) {
-        lines.push('## 相关文件', '');
-        task.relatedFiles.forEach(file => {
-          lines.push(`- \`${file}\``);
-        });
-        lines.push('');
-      }
-
-      if (task.worktree) {
-        lines.push(
-          '## Worktree 信息',
-          '',
-          `- **路径**: \`${task.worktree.path}\``,
-          `- **分支**: \`${task.worktree.branch}\``,
-          `- **基准提交**: \`${task.worktree.baseCommit}\``,
-          ''
-        );
-      }
-
-      if (task.executionResult) {
-        lines.push(
-          '## 执行结果',
-          '',
-          `**状态**: ${task.executionResult.status}`,
-          '',
-          '**变更文件**:',
-          ''
-        );
-        task.executionResult.changedFiles.forEach(file => {
-          lines.push(`- \`${file}\``);
-        });
-        lines.push('', `**备注**: ${task.executionResult.notes}`, '');
-      }
-
-      return { markdown: lines.join('\n') };
+      // 复用统一的 markdown 生成器,保证接口返回与落盘存档完全一致
+      return { markdown: buildTaskMarkdown(task) };
     }
   );
 }

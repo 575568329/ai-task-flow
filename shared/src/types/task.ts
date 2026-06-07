@@ -67,6 +67,8 @@ export interface TaskDTO {
   steps: TaskStep[];              // 任务步骤列表(替代 acceptanceCriteria)
   worktree?: WorktreeRefDTO;
   executionResult?: ExecutionResultDTO;
+  /** 任务 markdown 存档的绝对路径(后端落盘,供 Claude Code 派发指令直接引用) */
+  taskFilePath?: string;
   createdAt: string;
   updatedAt: string;
 }

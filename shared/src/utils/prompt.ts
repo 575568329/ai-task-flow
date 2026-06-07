@@ -3,7 +3,7 @@
 //
 // 设计原则:
 // - 直接指向任务 markdown 文件路径，Claude 读取后执行
-// - 使用绝对路径，方便 agent 直接定位
+// - 路径来自后端真实落盘的 taskFilePath（绝对路径），保证文件确实存在
 // - 简洁清晰，一句话说明任务目标和文件位置
 
 import type { TaskDTO } from '../types/task.js';
@@ -14,21 +14,20 @@ import type { TaskDTO } from '../types/task.js';
  * @param task 任务 DTO（HTTP/MCP 返回的标准结构）
  */
 export function buildClaudeCodePrompt(task: TaskDTO): string {
-  const { id, title, repoPath } = task;
+  const { id, title, taskFilePath, repoPath } = task;
 
-  // 优先使用项目路径下的 .ai-task-flow/tasks/ 目录（绝对路径）
-  // 如果没有项目路径，回退到相对表示（但提示用户需要在项目目录下执行）
-  let taskFilePath: string;
-  if (repoPath) {
-    // Windows 路径使用反斜杠，统一转换为正斜杠方便跨平台
-    const normalizedPath = repoPath.replace(/\\/g, '/');
-    taskFilePath = `${normalizedPath}/.ai-task-flow/tasks/${id}.md`;
+  // 优先用后端落盘的真实 markdown 路径（绝对路径，确保 agent 能直接读到）。
+  // 回退：旧数据或未派发场景没有 taskFilePath 时，按数据目录约定拼一个提示路径。
+  let filePath: string;
+  if (taskFilePath) {
+    filePath = taskFilePath.replace(/\\/g, '/');
+  } else if (repoPath) {
+    filePath = `${repoPath.replace(/\\/g, '/')}/.ai-task-flow/tasks/${id}.md`;
   } else {
-    // 无项目路径时，使用当前工作目录
-    taskFilePath = `.ai-task-flow/tasks/${id}.md`;
+    filePath = `.ai-task-flow/tasks/${id}.md`;
   }
 
-  return `请按照文件执行任务。路径: ${taskFilePath}
+  return `请按照文件执行任务。路径: ${filePath}
 
 任务: [${id}] ${title}`;
 }

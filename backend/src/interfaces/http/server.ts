@@ -4,8 +4,8 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
 import path from 'path';
-import os from 'os';
 import fs from 'fs';
+import { uploadsDirPath } from '../../config/dataDir.js';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
 import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
@@ -27,7 +27,7 @@ export interface HttpServerConfig {
 /** 解析上传目录,默认放在用户数据目录下,与 tasks.json 同级 */
 function resolveUploadsDir(custom?: string): string {
   if (custom) return custom;
-  return path.join(os.homedir(), '.ai-task-flow', 'uploads');
+  return uploadsDirPath();
 }
 
 export async function createHttpServer(

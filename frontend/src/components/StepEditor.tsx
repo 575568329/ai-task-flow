@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Input';
-import { X, GripVertical, Type, Image as ImageIcon, Copy } from 'lucide-react';
+import { Switch } from './ui/Switch';
+import { X, GripVertical, Type, Image as ImageIcon, Copy, ClipboardCopy } from 'lucide-react';
 import type { TaskStep, StepBlock } from '@ai-task-flow/shared';
 import { toast } from './ui/Toaster';
 
@@ -25,6 +26,8 @@ function getBlocks(step: TaskStep): StepBlock[] {
 export function StepEditor({ steps, onChange }: StepEditorProps) {
   // 正在上传的块定位：`${stepIndex}-${blockIndex}`
   const [uploading, setUploading] = useState<string | null>(null);
+  // 多选:被勾选用于「组合复制派发指令」的步骤序号集合
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   /** 写回某个步骤的 blocks */
   function setStepBlocks(stepIndex: number, blocks: StepBlock[]) {
@@ -38,6 +41,42 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
       i === stepIndex ? { ...s, completed: !s.completed } : s
     );
     onChange(next);
+  }
+
+  /** 切换步骤的多选状态(用于组合复制) */
+  function toggleStepSelected(stepIndex: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepIndex)) next.delete(stepIndex);
+      else next.add(stepIndex);
+      return next;
+    });
+  }
+
+  /** 把一个步骤渲染成纯文本(文本原样 + 图片转 markdown) */
+  function stepToText(stepIndex: number): string {
+    const blocks = getBlocks(steps[stepIndex]);
+    const lines: string[] = [`步骤 ${stepIndex + 1}:`];
+    blocks.forEach((block) => {
+      if (block.type === 'text' && block.content.trim()) lines.push(block.content);
+      else if (block.type === 'image') lines.push(`![图片](${block.url})`);
+    });
+    return lines.join('\n\n');
+  }
+
+  /** 组合复制:把已勾选的多个步骤拼成一条派发指令交给 agent 执行 */
+  function copySelected() {
+    const indices = [...selected].sort((a, b) => a - b);
+    if (indices.length === 0) {
+      toast.error('请先勾选要组合的步骤');
+      return;
+    }
+    const body = indices.map((i) => stepToText(i)).join('\n\n---\n\n');
+    const content = `请按顺序执行以下 ${indices.length} 个步骤:\n\n${body}`;
+    navigator.clipboard.writeText(content).then(
+      () => toast.success(`已复制 ${indices.length} 个步骤的派发指令`),
+      () => toast.error('复制失败')
+    );
   }
 
   // ---- 步骤级操作 ----
@@ -165,7 +204,7 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                           ...prov.draggableProps.style,
                         }}
                       >
-                        {/* 步骤头：拖拽手柄 + 复选框 + 序号 + 复制 + 删除 */}
+                        {/* 步骤头：拖拽手柄 + 多选框 + 序号 + 完成滑块 + 复制 + 删除 */}
                         <div className="mb-2 flex items-center gap-2">
                           <div
                             {...prov.dragHandleProps}
@@ -174,12 +213,13 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                           >
                             <GripVertical size={16} />
                           </div>
+                          {/* 多选框:勾选后可组合复制派发指令 */}
                           <input
                             type="checkbox"
-                            checked={step.completed || false}
-                            onChange={() => toggleStepCompleted(stepIndex)}
+                            checked={selected.has(stepIndex)}
+                            onChange={() => toggleStepSelected(stepIndex)}
                             className="cursor-pointer"
-                            title="标记步骤完成状态"
+                            title="勾选以组合复制派发指令"
                           />
                           <span
                             className="text-xs font-medium"
@@ -191,9 +231,20 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
                           >
                             步骤 {stepIndex + 1}
                           </span>
+                          {/* 完成状态:用滑块表示 */}
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                              {step.completed ? '已完成' : '未完成'}
+                            </span>
+                            <Switch
+                              checked={step.completed || false}
+                              onChange={() => toggleStepCompleted(stepIndex)}
+                              title="标记步骤完成状态"
+                            />
+                          </div>
                           <button
                             onClick={() => copyStep(stepIndex)}
-                            className="ml-auto rounded p-1 transition-fast hover:opacity-80"
+                            className="rounded p-1 transition-fast hover:opacity-80"
                             style={{ color: 'var(--text-3)' }}
                             title="复制步骤内容（含图片地址）"
                           >
@@ -265,6 +316,35 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
           )}
         </Droppable>
       </DragDropContext>
+
+      {/* 多选时:组合复制派发指令 */}
+      {selected.size > 0 && (
+        <div
+          className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
+          style={{ borderColor: 'var(--primary-6)', backgroundColor: 'var(--primary-1)' }}
+        >
+          <span className="text-xs font-medium" style={{ color: 'var(--primary-9)' }}>
+            已选 {selected.size} 个步骤
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelected(new Set())}
+              className="rounded px-2 py-1 text-xs transition-fast hover:opacity-80"
+              style={{ color: 'var(--text-2)' }}
+            >
+              取消
+            </button>
+            <button
+              onClick={copySelected}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-fast hover:opacity-90"
+              style={{ backgroundColor: 'var(--primary-6)', color: '#fff' }}
+            >
+              <ClipboardCopy size={13} />
+              复制派发指令
+            </button>
+          </div>
+        </div>
+      )}
 
       <Button variant="secondary" onClick={addStep}>
         + 添加步骤

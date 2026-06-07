@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 
 const HELP = `
 ai-task-flow — 个人 AI 任务编排看板 + MCP Server
@@ -19,17 +20,19 @@ ai-task-flow — 个人 AI 任务编排看板 + MCP Server
 选项:
   -p, --port <port>    HTTP 端口 (默认 3000)
       --host <host>    监听地址 (默认 0.0.0.0)
+      --data-dir <dir> 数据存储目录 (默认 ~/.ai-task-flow)
       --no-open        不自动打开浏览器
       --frontend <dir> 自定义前端 dist 目录(开发者用)
   -v, --version        显示版本
   -h, --help           显示帮助
 
 示例:
-  ai-task-flow                  # 在 :3000 启动并自动打开
-  ai-task-flow start -p 8080    # 用 8080 端口
-  ai-task-flow --no-open        # 不自动打开浏览器
+  ai-task-flow                       # 在 :3000 启动并自动打开
+  ai-task-flow start -p 8080         # 用 8080 端口
+  ai-task-flow --data-dir D:/atf     # 数据存到 D:/atf
+  ai-task-flow --no-open             # 不自动打开浏览器
 
-数据存储位置: ~/.ai-task-flow/
+数据存储位置: ~/.ai-task-flow/ (可用 --data-dir 自定义)
 `;
 
 function parseArgs(argv) {
@@ -39,6 +42,7 @@ function parseArgs(argv) {
     host: undefined,
     open: true,
     frontend: undefined,
+    dataDir: undefined,
     help: false,
     version: false,
   };
@@ -61,6 +65,9 @@ function parseArgs(argv) {
         break;
       case '--host':
         opts.host = args[++i];
+        break;
+      case '--data-dir':
+        opts.dataDir = args[++i];
         break;
       case '--no-open':
         opts.open = false;
@@ -282,19 +289,26 @@ async function main() {
     process.exit(1);
   }
 
+  // 数据目录:--data-dir > 环境变量 > 默认 ~/.ai-task-flow(与 backend 解析逻辑一致)
+  const dataDir = opts.dataDir
+    ? path.resolve(opts.dataDir)
+    : (process.env.AI_TASK_FLOW_DATA_DIR
+      ? path.resolve(process.env.AI_TASK_FLOW_DATA_DIR)
+      : path.join(os.homedir(), '.ai-task-flow'));
+
   console.log(`\n启动 AI Task Flow...\n`);
   console.log(`  端口:     ${port}`);
-  console.log(`  数据目录: ${path.join(process.env.HOME || process.env.USERPROFILE || '~', '.ai-task-flow')}`);
+  console.log(`  数据目录: ${dataDir}`);
   console.log(`  前端:     ${frontendDist}`);
   if (coexistWithDev) {
     console.log('');
     console.log(`  ⚠ 数据竞争风险:`);
-    console.log(`    检测到 dev backend 也在跑,两个进程会同时写 ~/.ai-task-flow/tasks.json`);
+    console.log(`    检测到 dev backend 也在跑,两个进程会同时写 ${path.join(dataDir, 'tasks.json')}`);
     console.log(`    建议同时只用一个,避免数据丢失`);
   }
   console.log('');
 
-  await startApp({ port, host, frontendDist });
+  await startApp({ port, host, frontendDist, dataDir });
 
   if (opts.open) {
     try {

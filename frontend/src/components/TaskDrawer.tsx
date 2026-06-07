@@ -13,7 +13,7 @@ import { toast } from './ui/Toaster';
 import { taskApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
-import { STATUS_LABELS, STATUS_COLORS } from '@/lib/taskMeta';
+import { STATUS_LABELS, STATUS_COLORS, PRIORITY_COLORS } from '@/lib/taskMeta';
 import { ChevronRight, ChevronLeft, Copy, FolderOpen, Send } from 'lucide-react';
 
 export function TaskDrawer() {
@@ -330,11 +330,17 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               />
             </Section>
             <Section label="优先级">
-              <Select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as Priority)}
-                options={Object.values(Priority).map((p) => ({ label: p, value: p }))}
-              />
+              <div className="flex items-center gap-2">
+                <Select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as Priority)}
+                  options={Object.values(Priority).map((p) => ({ label: p, value: p }))}
+                  style={{ color: PRIORITY_COLORS[priority], fontWeight: 600 }}
+                />
+                <Tag color={PRIORITY_COLORS[priority]} filled>
+                  {priority}
+                </Tag>
+              </div>
             </Section>
           </div>
 
