@@ -58,13 +58,15 @@
     "@fastify/multipart": "^9.0.1",
     "@fastify/static": "^8.0.1",
     "@modelcontextprotocol/sdk": "^0.5.0",
+    "duck-duck-scrape": "^2.2.7",
+    "eventsource-parser": "^3.1.0",
     "fastify": "^5.2.0",
     "nanoid": "^5.0.5",
     "node-file-dialog": "^1.0.3",
     "reflect-metadata": "^0.2.2",
     "simple-git": "^3.22.0",
-    "tsyringe": "^4.8.0",
-    "zod": "^3.22.4"
+    "tsyringe": "^4.10.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

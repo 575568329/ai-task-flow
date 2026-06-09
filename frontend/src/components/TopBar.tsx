@@ -1,5 +1,5 @@
 // frontend/src/components/TopBar.tsx
-import { Moon, Sun, Plus, Search, Circle } from 'lucide-react';
+import { Moon, Sun, Plus, Search, Circle, MessageSquare } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Select } from './ui/Select';
@@ -8,9 +8,10 @@ import { useUIStore } from '@/stores/uiStore';
 interface TopBarProps {
   projects: string[];
   sseConnected: boolean;
+  onNavigateToChat?: () => void;
 }
 
-export function TopBar({ projects, sseConnected }: TopBarProps) {
+export function TopBar({ projects, sseConnected, onNavigateToChat }: TopBarProps) {
   const theme = useUIStore((s) => s.theme);
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const searchQuery = useUIStore((s) => s.searchQuery);
@@ -63,11 +64,21 @@ export function TopBar({ projects, sseConnected }: TopBarProps) {
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
         <Button variant="primary" onClick={() => setCreatingTask(true)}>
           <Plus size={16} />
           新建任务
         </Button>
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--border-primary)' }} />
+
+        {onNavigateToChat && (
+          <Button variant="secondary" onClick={onNavigateToChat}>
+            <MessageSquare size={16} />
+            资料调研
+          </Button>
+        )}
+
         <Button variant="ghost" onClick={toggleTheme} aria-label="切换主题">
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
