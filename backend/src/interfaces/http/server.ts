@@ -13,7 +13,10 @@ import { registerTaskRoutes } from './routes/taskRoutes.js';
 import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
 import { registerProjectRoutes } from './routes/projectRoutes.js';
+import { registerChatRoutes } from './routes/chatRoutes.js';
 import systemRoutes from './routes/system.js';
+import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
+import type { ChatService } from '../../application/research/ChatService.js';
 
 export interface HttpServerConfig {
   port: number;
@@ -35,7 +38,9 @@ export async function createHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager
+  worktreeManager: WorktreeManager,
+  chatRepository: ChatRepository,
+  chatService: ChatService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -86,6 +91,7 @@ export async function createHttpServer(
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
+  await registerChatRoutes(fastify, chatRepository, chatService);
   await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)
@@ -113,9 +119,11 @@ export async function startHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager
+  worktreeManager: WorktreeManager,
+  chatRepository: ChatRepository,
+  chatService: ChatService,
 ) {
-  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager);
+  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService);
 
   try {
     await server.listen({ port: config.port, host: config.host });
@@ -129,7 +137,7 @@ export async function startHttpServer(
     } else {
       console.log('========================================');
       console.log(`✓ Backend ready: ${url}`);
-      console.log(`  (Frontend served separately via Vite at http://localhost:5173)`);
+      console.log(`  (Frontend served separately via Vite at http://localhost:5678)`);
       console.log('========================================');
     }
   } catch (err) {

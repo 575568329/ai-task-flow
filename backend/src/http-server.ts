@@ -11,6 +11,13 @@ import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// 调研聊天 Agent
+import { JsonChatRepository } from './infrastructure/persistence/JsonChatRepository.js';
+import { OpenAiCompatibleProvider } from './infrastructure/llm/OpenAiCompatibleProvider.js';
+import { DuckDuckGoClient } from './infrastructure/search/DuckDuckGoClient.js';
+import { ArxivClient } from './infrastructure/search/ArxivClient.js';
+import { SearchOrchestrator } from './application/research/SearchOrchestrator.js';
+import { ChatService } from './application/research/ChatService.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 3000 */
@@ -53,6 +60,18 @@ export async function startApp(options: StartAppOptions = {}) {
   const eventStore = new JsonEventStore();
   const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore);
   const worktreeManager = new WorktreeManager();
+
+  // 调研聊天 Agent 初始化（MVP 用环境变量配置）
+  const chatRepository = new JsonChatRepository();
+  const llmProvider = new OpenAiCompatibleProvider(
+    process.env.LLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
+    process.env.LLM_API_KEY || '',
+    process.env.LLM_MODEL || 'glm-4-plus',
+  );
+  const ddgClient = new DuckDuckGoClient();
+  const arxivClient = new ArxivClient();
+  const searchOrchestrator = new SearchOrchestrator(ddgClient, arxivClient);
+  const chatService = new ChatService(chatRepository, llmProvider, searchOrchestrator);
 
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
@@ -102,7 +121,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  return startHttpServer(config, taskRepository, eventBus, worktreeManager);
+  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService);
 }
 
 // 当作为脚本直接执行时(npm run http / dev),立即启动

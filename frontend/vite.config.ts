@@ -35,7 +35,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: 5678, // 使用不容易被占用的端口
     proxy: {
       '/api': {
         target: `http://localhost:${getBackendPort()}`,

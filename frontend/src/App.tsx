@@ -18,8 +18,13 @@ import { useTaskStore } from './stores/taskStore';
 import { useUIStore } from './stores/uiStore';
 import { sseClient } from './api/sse';
 import { BOARD_COLUMNS } from './lib/taskMeta';
+import { ChatView } from './components/chat/ChatView';
+import { AppNav } from './components/AppNav';
+
+type View = 'kanban' | 'chat';
 
 function App() {
+  const [currentView, setCurrentView] = useState<View>('kanban');
   const tasks = useTaskStore((s) => s.tasks);
   const fetchAll = useTaskStore((s) => s.fetchAll);
   const optimisticMove = useTaskStore((s) => s.optimisticMove);
@@ -105,31 +110,44 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col" style={{ background: 'var(--bg-bottom)', color: 'var(--text-1)' }}>
-      <TopBar projects={allProjects} sseConnected={sseConnected} />
+      {currentView === 'chat' && <AppNav currentView={currentView} onViewChange={setCurrentView} />}
 
-      <main className="flex-1 overflow-x-auto p-5">
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex gap-4" style={{ minWidth: 'fit-content' }}>
-            {BOARD_COLUMNS.map((status) => (
-              <KanbanColumn
-                key={status}
-                status={status}
-                tasks={byStatus[status]}
-                onTaskClick={(t) => setSelectedTask(t.id)}
-              />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeTask ? <TaskCard task={activeTask} onClick={() => {}} /> : null}
-          </DragOverlay>
-        </DndContext>
-      </main>
+      {currentView === 'kanban' ? (
+        <>
+          <TopBar
+            projects={allProjects}
+            sseConnected={sseConnected}
+            onNavigateToChat={() => setCurrentView('chat')}
+          />
 
-      <TaskDrawer />
+          <main className="flex-1 overflow-x-auto p-5">
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="flex gap-4" style={{ minWidth: 'fit-content' }}>
+                {BOARD_COLUMNS.map((status) => (
+                  <KanbanColumn
+                    key={status}
+                    status={status}
+                    tasks={byStatus[status]}
+                    onTaskClick={(t) => setSelectedTask(t.id)}
+                  />
+                ))}
+              </div>
+              <DragOverlay>
+                {activeTask ? <TaskCard task={activeTask} onClick={() => {}} /> : null}
+              </DragOverlay>
+            </DndContext>
+          </main>
+
+          <TaskDrawer />
+        </>
+      ) : (
+        <ChatView />
+      )}
+
       <Toaster />
     </div>
   );

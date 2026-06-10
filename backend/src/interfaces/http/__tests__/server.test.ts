@@ -6,6 +6,12 @@ import { JsonTaskRepository } from '../../../infrastructure/persistence/JsonTask
 import { InMemoryEventBus } from '../../../infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from '../../../infrastructure/pubsub/EventStore.js';
 import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
+import { JsonChatRepository } from '../../../infrastructure/persistence/JsonChatRepository.js';
+import { OpenAiCompatibleProvider } from '../../../infrastructure/llm/OpenAiCompatibleProvider.js';
+import { DuckDuckGoClient } from '../../../infrastructure/search/DuckDuckGoClient.js';
+import { ArxivClient } from '../../../infrastructure/search/ArxivClient.js';
+import { SearchOrchestrator } from '../../../application/research/SearchOrchestrator.js';
+import { ChatService } from '../../../application/research/ChatService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -29,11 +35,21 @@ describe('HTTP Server', () => {
     const eventStore = new JsonEventStore(testEventsPath);
     taskRepository = new JsonTaskRepository(testFilePath, eventBus, eventStore);
 
+    // 调研聊天 Agent 测试依赖（MVP 最小配置）
+    const chatRepository = new JsonChatRepository();
+    const llmProvider = new OpenAiCompatibleProvider('https://api.openai.com/v1', 'test-key', 'gpt-4');
+    const ddgClient = new DuckDuckGoClient();
+    const arxivClient = new ArxivClient();
+    const searchOrchestrator = new SearchOrchestrator(ddgClient, arxivClient);
+    const chatService = new ChatService(chatRepository, llmProvider, searchOrchestrator);
+
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       taskRepository,
       eventBus,
-      new WorktreeManager()
+      new WorktreeManager(),
+      chatRepository,
+      chatService,
     );
   });
 
