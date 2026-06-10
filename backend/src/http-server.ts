@@ -10,6 +10,7 @@ import { resolveDataDir, taskDocPath } from './config/dataDir.js';
 import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 3000 */
@@ -77,12 +78,21 @@ export async function startApp(options: StartAppOptions = {}) {
     console.log(`\n⚠ 端口 ${preferredPort} 被占用，已切换到 ${actualPort}\n`);
   }
 
-  // 将实际端口写入临时文件，供 frontend vite.config.ts 读取
-  const logsDir = path.join(process.cwd(), '.logs');
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+  // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
+  // 路径基于本模块位置解析到仓库根的 .logs/, 不依赖 process.cwd()——
+  // 否则 `cd backend && npm run dev` 会把文件写到 backend/.logs, 而 vite 读的是根 .logs, 两边对不上。
+  if (!options.frontendDist) {
+    try {
+      // backend/src/http-server.ts 或 backend/dist/http-server.js → 仓库根都是上溯两级
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+      const logsDir = path.join(repoRoot, '.logs');
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(path.join(logsDir, 'backend-port.txt'), actualPort.toString(), 'utf-8');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`! 写入端口文件失败(不影响后端, 仅 vite 代理可能落到默认端口): ${message}`);
+    }
   }
-  fs.writeFileSync(path.join(logsDir, 'backend-port.txt'), actualPort.toString(), 'utf-8');
 
   const config = {
     port: actualPort,

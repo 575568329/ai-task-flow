@@ -48,8 +48,8 @@ Write-Host "=========================================" -ForegroundColor Green
 Write-Host "All services started" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host "  Shared:   PID $($sharedProc.Id)"
-Write-Host "  Backend:  PID $($backendProc.Id)  -> http://localhost:3000" -ForegroundColor Cyan
-Write-Host "  Frontend: PID $($frontendProc.Id) -> http://localhost:5173" -ForegroundColor Magenta
+Write-Host "  Backend:  PID $($backendProc.Id)  -> 端口见下方 [backend] 日志(默认 3000,被占自动顺延)" -ForegroundColor Cyan
+Write-Host "  Frontend: PID $($frontendProc.Id) -> http://localhost:5173 (访问这个; /api 自动代理到 backend 实际端口)" -ForegroundColor Magenta
 Write-Host ""
 Write-Host "Logs: tail -f .logs/backend.log  or  .logs/frontend.log"
 Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
