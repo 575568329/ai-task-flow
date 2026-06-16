@@ -170,4 +170,29 @@ describe('Task', () => {
 
     expect(() => task.approve('merge')).toThrow('Only review tasks');
   });
+
+  it('should default source to manual when not provided', () => {
+    const task = new Task(
+      TaskId.create('WS', 10), 't', 'd',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [], [],
+    );
+    expect(task.source).toBe('manual');
+    expect(task.sourceUrl).toBeUndefined();
+  });
+
+  it('should persist source/sourceUrl in toJSON and applyUpdate', () => {
+    const task = new Task(
+      TaskId.create('WS', 11), 't', 'd',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [], [],
+      undefined, undefined, new Date(), new Date(),
+      'web', 'https://example.com/bug/1',
+    );
+    expect(task.source).toBe('web');
+    expect(task.sourceUrl).toBe('https://example.com/bug/1');
+    expect(task.toJSON().source).toBe('web');
+    expect(task.toJSON().sourceUrl).toBe('https://example.com/bug/1');
+
+    task.applyUpdate({ sourceUrl: 'https://example.com/bug/2' });
+    expect(task.sourceUrl).toBe('https://example.com/bug/2');
+  });
 });

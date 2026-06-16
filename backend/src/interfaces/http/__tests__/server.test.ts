@@ -288,5 +288,39 @@ describe('HTTP Server', () => {
       expect(dispatchedTasks).toHaveLength(1);
       expect(dispatchedTasks[0].id).toBe('WS-001');
     });
+
+    it('should create web-sourced task with sourceUrl', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/tasks',
+        payload: {
+          prefix: 'WS', title: 'Clipped', description: 'from web',
+          source: 'web', sourceUrl: 'https://example.com/bug/1',
+        },
+      });
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.source).toBe('web');
+      expect(body.sourceUrl).toBe('https://example.com/bug/1');
+    });
+
+    it('should filter tasks by source via query', async () => {
+      await server.inject({ method: 'POST', url: '/api/tasks', payload: {
+        prefix: 'WS', title: 'Web one', description: 'd', source: 'web', sourceUrl: 'u1',
+      }});
+      await server.inject({ method: 'POST', url: '/api/tasks', payload: {
+        prefix: 'WS', title: 'Manual one', description: 'd',
+      }});
+
+      const webResp = await server.inject({ method: 'GET', url: '/api/tasks?source=web' });
+      const manualResp = await server.inject({ method: 'GET', url: '/api/tasks?source=manual' });
+
+      const webTasks = JSON.parse(webResp.body);
+      const manualTasks = JSON.parse(manualResp.body);
+      expect(webTasks).toHaveLength(1);
+      expect(webTasks[0].source).toBe('web');
+      expect(manualTasks).toHaveLength(1);
+      expect(manualTasks[0].source).toBe('manual');
+    });
   });
 });

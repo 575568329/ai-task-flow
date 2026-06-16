@@ -147,7 +147,9 @@ export class JsonTaskRepository implements TaskRepository {
       worktree,
       executionResult,
       new Date(dto.createdAt),
-      new Date(dto.updatedAt)
+      new Date(dto.updatedAt),
+      dto.source ?? 'manual',   // 旧数据无 source 字段 → 视为手动
+      dto.sourceUrl,
     );
   }
 }

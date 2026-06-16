@@ -133,5 +133,18 @@ describe('JsonTaskRepository', () => {
     const found = await repository.findById(task.id);
     expect(found).toBeNull();
   });
+
+  it('should round-trip source/sourceUrl and default legacy tasks to manual', async () => {
+    const webTask = new Task(
+      TaskId.create('TEST', 5), 'Web task', 'desc',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [], [],
+      undefined, undefined, new Date(), new Date(),
+      'web', 'https://example.com/page',
+    );
+    await repository.save(webTask);
+    const found = await repository.findById(webTask.id);
+    expect(found?.source).toBe('web');
+    expect(found?.sourceUrl).toBe('https://example.com/page');
+  });
 });
 

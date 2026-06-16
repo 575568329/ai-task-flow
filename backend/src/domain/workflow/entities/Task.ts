@@ -10,7 +10,7 @@ import { TaskUpdated } from '../events/TaskUpdated.js';
 import { TaskApproved } from '../events/TaskApproved.js';
 import { TaskRejected } from '../events/TaskRejected.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
-import type { TaskStep } from '@ai-task-flow/shared';
+import type { TaskStep, TaskSource } from '@ai-task-flow/shared';
 
 export class Task {
   private _domainEvents: DomainEvent[] = [];
@@ -29,6 +29,8 @@ export class Task {
     public executionResult?: ExecutionResult,
     public createdAt: Date = new Date(),
     public updatedAt: Date = new Date(),
+    public source: TaskSource = 'manual',
+    public sourceUrl?: string,
   ) {}
 
   get domainEvents(): DomainEvent[] {
@@ -94,6 +96,8 @@ export class Task {
     projectName?: string;
     relatedFiles?: string[];
     steps?: TaskStep[];
+    source?: TaskSource;
+    sourceUrl?: string;
   }): void {
     const previousStatus = this.status;
 
@@ -105,6 +109,8 @@ export class Task {
     if (updates.projectName !== undefined) this.projectName = updates.projectName;
     if (updates.relatedFiles !== undefined) this.relatedFiles = updates.relatedFiles;
     if (updates.steps !== undefined) this.steps = updates.steps;
+    if (updates.source !== undefined) this.source = updates.source;
+    if (updates.sourceUrl !== undefined) this.sourceUrl = updates.sourceUrl;
 
     this.updatedAt = new Date();
     this._domainEvents.push(
@@ -121,6 +127,8 @@ export class Task {
       priority: this.priority,
       repoPath: this.repoPath,
       projectName: this.projectName,
+      source: this.source,
+      sourceUrl: this.sourceUrl,
       relatedFiles: this.relatedFiles,
       steps: this.steps,
       worktree: this.worktree ? {

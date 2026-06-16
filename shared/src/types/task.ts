@@ -16,6 +16,9 @@ export enum Priority {
   P2 = 'P2',
 }
 
+/** 任务来源：web = 浏览器插件剪藏；manual = 看板手动新建 */
+export type TaskSource = 'web' | 'manual';
+
 export interface WorktreeRefDTO {
   path: string;
   branch: string;
@@ -63,6 +66,8 @@ export interface TaskDTO {
   priority: Priority;
   repoPath?: string;              // 本地仓库路径
   projectName?: string;           // 项目名(从 repoPath 提取,可手动改)
+  source: TaskSource;            // 任务来源(web/manual)
+  sourceUrl?: string;            // 仅 web 来源:抓取页面的 URL
   relatedFiles: string[];
   steps: TaskStep[];              // 任务步骤列表(替代 acceptanceCriteria)
   worktree?: WorktreeRefDTO;
@@ -82,6 +87,8 @@ export interface CreateTaskRequest {
   priority?: Priority;
   repoPath?: string;
   projectName?: string;
+  source?: TaskSource;
+  sourceUrl?: string;
   relatedFiles?: string[];
   steps?: TaskStep[];
 }
@@ -93,6 +100,8 @@ export interface UpdateTaskRequest {
   priority?: Priority;
   repoPath?: string;
   projectName?: string;
+  source?: TaskSource;
+  sourceUrl?: string;
   relatedFiles?: string[];
   steps?: TaskStep[];
 }

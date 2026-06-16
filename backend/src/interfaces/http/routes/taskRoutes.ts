@@ -25,10 +25,12 @@ export async function registerTaskRoutes(
     taskFilePath: taskDocPath(task.id.value),
   });
 
-  // GET /api/tasks - 获取所有任务
-  fastify.get('/api/tasks', async (request, reply) => {
+  // GET /api/tasks - 获取所有任务(可选 ?source=web|manual 过滤)
+  fastify.get<{ Querystring: { source?: string } }>('/api/tasks', async (request) => {
     const tasks = await taskRepository.findAll();
-    return tasks.map(toDTO);
+    const { source } = request.query;
+    const filtered = source ? tasks.filter((t) => t.source === source) : tasks;
+    return filtered.map(toDTO);
   });
 
   // GET /api/tasks/:id - 获取单个任务
@@ -59,7 +61,7 @@ export async function registerTaskRoutes(
 
   // POST /api/tasks - 创建任务
   fastify.post<{ Body: CreateTaskRequest }>('/api/tasks', async (request, reply) => {
-    const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps } = request.body;
+    const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps, source, sourceUrl } = request.body;
 
     // 生成 ID（简化版：查询最大序号 + 1）
     const allTasks = await taskRepository.findAll();
@@ -77,7 +79,13 @@ export async function registerTaskRoutes(
       repoPath,
       projectName,
       relatedFiles || [],
-      steps || []
+      steps || [],
+      undefined,        // worktree
+      undefined,        // executionResult
+      new Date(),       // createdAt
+      new Date(),       // updatedAt
+      source ?? 'manual',
+      sourceUrl,
     );
 
     await taskRepository.save(task);
