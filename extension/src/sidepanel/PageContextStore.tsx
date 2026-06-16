@@ -23,6 +23,7 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const listener = (message: CaptureMessage) => {
+      console.log('[clip] onMessage', { type: message.type, hasPayload: !!message.payload });
       if (message.type === 'CAPTURE_RESULT' && message.payload) {
         setPageContext(message.payload);
         setError(null);

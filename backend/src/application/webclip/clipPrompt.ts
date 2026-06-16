@@ -17,7 +17,9 @@ export const CLIP_SYSTEM_PROMPT = `你是任务拆解助手。用户会给你一
 只有不同页面才拆成不同任务(通常只产出 1 个任务,含多个步骤)。
 
 每个任务输出:title、description(整体说明,可含页面位置)、steps(步骤数组)。
-steps 内的 image block 用 {type:"image",ref:"img-1"} 引用图片占位,由后端替换为真实 url。
+图片引用:若内容末尾列出了图片清单(如 img-1、img-2),对涉及界面/视觉/截图的步骤,
+应在该步骤的 blocks 里用 {type:"image",ref:"img-1"} 引用对应图片(ref 必须用清单里的名称),
+让用户能看到与步骤相关的图。ref 必须指向清单里真实存在的名称,不要编造。
 只输出 JSON,不要任何解释文字。`;
 
 export function buildClipUserPrompt(pageText: string): string {

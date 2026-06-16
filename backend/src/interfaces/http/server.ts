@@ -23,6 +23,10 @@ import type { WebClipService } from '../../application/webclip/WebClipService.js
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 
+/** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
+ *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
+const BODY_LIMIT_BYTES = 25 * 1024 * 1024;
+
 export interface HttpServerConfig {
   port: number;
   host: string;
@@ -56,12 +60,40 @@ export async function createHttpServer(
     logger: process.env.NODE_ENV === 'test' ? false : {
       level: logLevel,
     },
+    bodyLimit: BODY_LIMIT_BYTES,
   });
 
   // 注册 CORS
+  // 不启用 credentials:跨域调用方(扩展 side panel/service worker、vite 代理后的前端)
+  // 均走同源或请求时不带 cookie,无需跨域凭证。关键:credentials:true 与 origin:'*' 组合
+  // 违反 CORS 规范——带凭证时 allow-origin 必须是具体值而非通配 *,否则浏览器拒绝预检,
+  // 表现为扩展 POST(触发预检)Failed to fetch,而 GET(简单请求无预检)正常通过。
   await fastify.register(cors, {
     origin: config.corsOrigin,
-    credentials: true,
+    credentials: false,
+  });
+
+  // Private Network Access(PNA):允许扩展(chrome-extension:// origin)跨域访问本地后端。
+  // Chrome 142+ 的 Local Network Access 对"扩展页/公网页 → localhost(私有网络)"做 PNA 预检,
+  // 要求预检响应 access-control-allow-private-network: true,否则实际请求被浏览器拦截
+  // (表现为 Failed to fetch,请求不到达后端)。@fastify/cors 不处理此头,故用 onSend hook 补上。
+  fastify.addHook('onSend', async (request, reply, payload) => {
+    if (request.headers['access-control-request-private-network'] === 'true') {
+      reply.header('access-control-allow-private-network', 'true');
+    }
+    return payload;
+  });
+
+  // 接受扩展以 text/plain 发送 JSON。扩展(chrome-extension://)经 service worker 访问 localhost,
+  // 若用 application/json 会触发 CORS 预检,而 PNA(Private Network Access)会拦截到私有网络
+  // (localhost)的预检请求 → Failed to fetch。改用 text/plain:CORS 简单请求不触发预检,
+  // 从而不被 PNA 拦(和 GET 同层,GET 能过是铁证)。Chrome 官方文档:PNA 只 gate 触发预检的请求。
+  fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_request, body, done) => {
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      done(err instanceof Error ? err : new Error('text/plain body 不是合法 JSON'));
+    }
   });
 
   // 注册文件上传插件

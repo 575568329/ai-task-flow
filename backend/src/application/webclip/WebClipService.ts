@@ -33,6 +33,20 @@ export class WebClipService {
       throw new Error('尚未配置 API Key,请先在「设置」配置 LLM 后再剪藏');
     }
 
+    // 诊断:采集结果散落在扩展端(content script 跑在网页上下文、SW 控制台),后端够不着。
+    // 请求到达后端时记录一次,用于排查"草案为何没有图片"——imageCount=0 是采集层问题,
+    // imageCount>0 但引用=0 是 LLM 没引用图片。
+    logger.info('收到剪藏请求', {
+      sourceUrl: request.sourceUrl,
+      textLen: request.content.text.length,
+      imageCount: request.images?.length ?? 0,
+      images: (request.images ?? []).map((i) => ({
+        name: i.name,
+        bytes: i.base64.length,
+        prefix: i.base64.slice(0, 40), // 诊断:看实际是 data:image/png;base64, 还是 data:;base64,(空 mime)
+      })),
+    });
+
     // 1. 落盘图片:name → /api/uploads/xxx url
     const imageMap = new Map<string, string>();
     for (const img of request.images ?? []) {
@@ -44,6 +58,7 @@ export class WebClipService {
         logger.warn('保存图片失败,跳过', { name: img.name, error: String(error) });
       }
     }
+    logger.info('图片落盘完成', { saved: imageMap.size, total: request.images?.length ?? 0 });
 
     // 2. LLM 拆解,失败回退单任务
     let drafts: ClipDraft[];
@@ -53,6 +68,18 @@ export class WebClipService {
       logger.warn('LLM 拆解失败,回退为单任务', { error: String(error) });
       drafts = [this.fallbackDraft(request, imageMap)];
     }
+
+    // 诊断:统计草案引用的图片。saved>0 而 referenced=0 即"采到图但 LLM 没引用"。
+    const imageSummary = this.summarizeImages(drafts);
+    logger.info('草案图片引用', {
+      saved: imageMap.size,
+      referencedBlocks: imageSummary.blocks,
+      uniqueUrls: imageSummary.urls.size,
+    });
+
+    // 兜底:LLM 常不主动把图片引用进步骤。把已落盘但未被引用的图补进第一个草案,
+    // 保证采集到的图不丢失(用户能在草案里看到对应图)。
+    drafts = this.attachUnusedImages(drafts, imageMap, imageSummary.urls);
 
     return { drafts, sourceUrl: request.sourceUrl };
   }
@@ -86,6 +113,40 @@ export class WebClipService {
       return { blocks };
     });
     return { title: raw.title, description: raw.description, steps };
+  }
+
+  /** 汇总草案中被引用的图片:image block 总数 + 去重 url 集合(诊断与兜底共用) */
+  private summarizeImages(drafts: ClipDraft[]): { blocks: number; urls: Set<string> } {
+    const urls = new Set<string>();
+    let blocks = 0;
+    for (const draft of drafts) {
+      for (const step of draft.steps) {
+        for (const block of step.blocks) {
+          if (block.type === 'image' && block.url) {
+            blocks++;
+            urls.add(block.url);
+          }
+        }
+      }
+    }
+    return { blocks, urls };
+  }
+
+  /** 把已落盘但未被引用的图片追加到第一个草案末尾(作为"页面附图"步骤),保证不丢图 */
+  private attachUnusedImages(
+    drafts: ClipDraft[],
+    imageMap: Map<string, string>,
+    usedUrls: Set<string>,
+  ): ClipDraft[] {
+    if (imageMap.size === 0) return drafts;
+    const unused = [...imageMap.values()].filter((url) => !usedUrls.has(url));
+    if (unused.length === 0) return drafts;
+    const imageBlocks: StepBlock[] = unused.map((url) => ({ type: 'image', url }));
+    if (drafts.length === 0) {
+      return [{ title: '页面附图', description: '', steps: [{ blocks: imageBlocks }] }];
+    }
+    const [first, ...rest] = drafts;
+    return [{ ...first, steps: [...first.steps, { blocks: imageBlocks }] }, ...rest];
   }
 
   /** 回退:原文进 description,所有图作为单任务步骤 */

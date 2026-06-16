@@ -4,6 +4,7 @@ import type { ClipDraft } from '@ai-task-flow/shared';
 import { usePageContext } from '../PageContextStore.js';
 import { captureToDrafts, createTaskFromDraft } from '../api/backend.js';
 import { DraftCard } from '../components/DraftCard.js';
+import { ensureHostPermission } from '../permissions.js';
 
 /** 从 crxjs 编译后的 manifest 动态读取 content script 产物路径（哈希随内容变，不可硬编码） */
 function getClipPath(): string {
@@ -31,8 +32,13 @@ export function ClipView() {
     setMsg(null);
     setBusy('capturing');
     try {
+      // tab.url/title 需 manifest 的 tabs 权限才能读到(否则被隐私保护置空)
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log('[clip] handleCapture 开始', { tabId: tab?.id, url: tab?.url });
       if (!tab.id) throw new Error('找不到当前标签页');
+      // side panel 内 executeScript 的 activeTab 不延续生效,需运行时按需请求目标站主机权限(首次弹一次框)
+      await ensureHostPermission(tab.url);
+      console.log('[clip] 主机权限就绪,注入 content script');
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [getClipPath()] });
       setMsg({ kind: 'info', text: '已发起抓取，等待页面返回…' });
     } catch (e) {
