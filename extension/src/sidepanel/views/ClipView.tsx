@@ -1,5 +1,9 @@
 // extension/src/sidepanel/views/ClipView.tsx
+import { useEffect, useState } from 'react';
+import type { ClipDraft } from '@ai-task-flow/shared';
 import { usePageContext } from '../PageContextStore.js';
+import { captureToDrafts, createTaskFromDraft } from '../api/backend.js';
+import { DraftCard } from '../components/DraftCard.js';
 
 /** 从 crxjs 编译后的 manifest 动态读取 content script 产物路径（哈希随内容变，不可硬编码） */
 function getClipPath(): string {
@@ -9,22 +13,115 @@ function getClipPath(): string {
   return path;
 }
 
-/** 抓取桩：点按钮注入 content script，结果经 onMessage 进 store。完整草案编辑在 Task 7。 */
-export function ClipView() {
-  const { pageContext, error } = usePageContext();
+interface EditableDraft extends ClipDraft {
+  id: string; // 渲染 key 用
+}
 
+type Busy = 'idle' | 'capturing' | 'creating';
+
+export function ClipView() {
+  const { pageContext, setPageContext, error } = usePageContext();
+  const [drafts, setDrafts] = useState<EditableDraft[]>([]);
+  const [prefix, setPrefix] = useState('WEB');
+  const [busy, setBusy] = useState<Busy>('idle');
+  const [msg, setMsg] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+
+  // 抓取按钮：注入 content script，结果经 onMessage 进 store（pageContext）
   async function handleCapture() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.id) return;
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [getClipPath()] });
+    setMsg(null);
+    setBusy('capturing');
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) throw new Error('找不到当前标签页');
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [getClipPath()] });
+      setMsg({ kind: 'info', text: '已发起抓取，等待页面返回…' });
+    } catch (e) {
+      setMsg({ kind: 'error', text: `抓取失败：${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      setBusy('idle');
+    }
+  }
+
+  // pageContext 一更新就触发拆解（抓取结果异步经消息到达）
+  useEffect(() => {
+    if (!pageContext) return;
+    let cancelled = false;
+    setBusy('capturing');
+    captureToDrafts(pageContext)
+      .then((resp) => {
+        if (cancelled) return;
+        setDrafts(resp.drafts.map((d, i) => ({ ...d, id: `d${i}` })));
+        setMsg({ kind: 'info', text: `拆解出 ${resp.drafts.length} 个任务草案` });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setMsg({ kind: 'error', text: `拆解失败：${e instanceof Error ? e.message : String(e)}` });
+      })
+      .finally(() => {
+        if (!cancelled) setBusy('idle');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageContext]);
+
+  function updateDraft(index: number, next: ClipDraft) {
+    const list = drafts.slice();
+    list[index] = { ...next, id: list[index].id };
+    setDrafts(list);
+  }
+
+  // 批量建任务：逐条 POST，部分失败继续，最后汇总
+  async function handleCreate() {
+    if (!pageContext || drafts.length === 0) return;
+    setBusy('creating');
+    setMsg(null);
+    let ok = 0;
+    for (const draft of drafts) {
+      try {
+        await createTaskFromDraft(draft, pageContext.sourceUrl, prefix);
+        ok++;
+      } catch (e) {
+        setMsg({ kind: 'error', text: `建任务失败：${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+    if (ok > 0) {
+      setMsg({ kind: 'info', text: `已创建 ${ok}/${drafts.length} 个任务，看板将自动刷新` });
+    }
+    setBusy('idle');
+    if (ok === drafts.length) {
+      setDrafts([]);
+      setPageContext(null);
+    }
   }
 
   return (
     <div>
-      <button className="btn btn-primary" onClick={handleCapture}>✂️ 抓取本页</button>
-      <p className="msg msg-info">划词优先（先选中内容），否则自动提取正文 + 图片。</p>
+      <div className="row-between">
+        <button className="btn btn-primary" onClick={handleCapture} disabled={busy !== 'idle'}>
+          {busy === 'capturing' ? '抓取中…' : '✂️ 抓取本页'}
+        </button>
+        {drafts.length > 0 && (
+          <button className="btn btn-primary" onClick={handleCreate} disabled={busy !== 'idle'}>
+            {busy === 'creating' ? '创建中…' : `建任务（${drafts.length}）`}
+          </button>
+        )}
+      </div>
+      <p className="muted">划词优先（先选中内容再抓），否则自动提取正文+图片。</p>
+
+      {drafts.length > 0 && (
+        <div className="row">
+          <span className="muted">任务前缀：</span>
+          <input className="input" value={prefix} onChange={(e) => setPrefix(e.target.value)} style={{ width: 80 }} />
+        </div>
+      )}
+
+      {msg && <p className={`msg msg-${msg.kind}`}>{msg.text}</p>}
       {error && <p className="msg msg-error">{error}</p>}
-      {pageContext && <p className="msg msg-info">已抓取：{pageContext.title || pageContext.sourceUrl}</p>}
+
+      {drafts.map((draft, i) => (
+        <DraftCard key={draft.id} draft={draft} draftId={draft.id} onChange={(next) => updateDraft(i, next)} />
+      ))}
     </div>
   );
 }
