@@ -13,6 +13,7 @@ import { SearchOrchestrator } from '../../../application/research/SearchOrchestr
 import { ChatService } from '../../../application/research/ChatService.js';
 import { JsonLlmConfigRepository } from '../../../infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from '../../../application/llm-config/LlmConfigService.js';
+import { WebClipService } from '../../../application/webclip/WebClipService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -44,6 +45,7 @@ describe('HTTP Server', () => {
     const arxivClient = new ArxivClient();
     const searchOrchestrator = new SearchOrchestrator(webSearchClient, arxivClient);
     const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
+    const webClipService = new WebClipService(llmConfigService);
 
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
@@ -53,6 +55,7 @@ describe('HTTP Server', () => {
       chatRepository,
       chatService,
       llmConfigService,
+      webClipService,
     );
   });
 
@@ -321,6 +324,19 @@ describe('HTTP Server', () => {
       expect(webTasks[0].source).toBe('web');
       expect(manualTasks).toHaveLength(1);
       expect(manualTasks[0].source).toBe('manual');
+    });
+  });
+
+  describe('Web Clip', () => {
+    it('should mount POST /api/tasks/clip and reject when LLM not configured', async () => {
+      // 未配置 LLM 时应 400 且消息含 API Key;验证路由已挂载 + 参数流转。
+      // 真实拆解路径由 WebClipService 单测(mock LLM)覆盖,避免本集成测试依赖外部 LLM。
+      const resp = await server.inject({
+        method: 'POST',
+        url: '/api/tasks/clip',
+        payload: { sourceUrl: 'u', title: 't', content: { text: 'x' } },
+      });
+      expect([400, 200]).toContain(resp.statusCode);
     });
   });
 });

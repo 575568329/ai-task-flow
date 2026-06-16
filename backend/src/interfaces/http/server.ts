@@ -19,7 +19,9 @@ import systemRoutes from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
+import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
+import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 
 export interface HttpServerConfig {
   port: number;
@@ -45,6 +47,7 @@ export async function createHttpServer(
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
+  webClipService: WebClipService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -107,6 +110,7 @@ export async function createHttpServer(
   await registerProjectRoutes(fastify);
   await registerChatRoutes(fastify, chatRepository, chatService);
   await registerLlmConfigRoutes(fastify, llmConfigService);
+  await registerWebClipRoutes(fastify, webClipService);
   await registerFileRoutes(fastify);
   await fastify.register(systemRoutes);
 
@@ -139,8 +143,9 @@ export async function startHttpServer(
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
+  webClipService: WebClipService,
 ) {
-  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService);
+  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService);
 
   try {
     await server.listen({ port: config.port, host: config.host });

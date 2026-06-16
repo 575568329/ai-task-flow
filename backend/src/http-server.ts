@@ -19,6 +19,7 @@ import { SearchOrchestrator } from './application/research/SearchOrchestrator.js
 import { ChatService } from './application/research/ChatService.js';
 import { JsonLlmConfigRepository } from './infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from './application/llm-config/LlmConfigService.js';
+import { WebClipService } from './application/webclip/WebClipService.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 3000 */
@@ -73,6 +74,8 @@ export async function startApp(options: StartAppOptions = {}) {
   const arxivClient = new ArxivClient();
   const searchOrchestrator = new SearchOrchestrator(webSearchClient, arxivClient);
   const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
+  // 网页剪藏服务(存图 + LLM 拆解 + 回退),复用 LLM 配置
+  const webClipService = new WebClipService(llmConfigService);
 
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
@@ -122,7 +125,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService);
+  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService);
 }
 
 // 当作为脚本直接执行时(npm run http / dev),立即启动
