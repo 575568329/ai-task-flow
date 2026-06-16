@@ -7,6 +7,7 @@
 [![tests](https://img.shields.io/badge/tests-52%20passed-brightgreen)]()
 [![build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![stage](https://img.shields.io/badge/stage-MVP-blue)]()
+[![version](https://img.shields.io/badge/version-0.2.0-blue)]()
 
 ---
 
@@ -102,6 +103,18 @@ npm run build:backend
 
 ---
 
+## 资料调研(Chat)
+
+看板内置一个独立的「资料调研」聊天模块,用于快速检索资料并生成带引用的回答:
+
+- **LLM 双协议**:按 baseURL 自动选择 OpenAI 兼容(`/chat/completions`)或 Anthropic(`/v1/messages`)协议,适配智谱 paas/v4、智谱 Coding Plan(glm-5.2)、DeepSeek、Claude 官方等
+- **检索增强(RAG)**:并行调用 GLM Web Search(网页,每次必搜)与 arXiv(论文,学术问题才搜),去重后取最多 6 条来源,回答内联 `[1][2]` 引用
+- **配置热更新**:在「设置 → LLM 配置」填地址/Key/模型,保存即生效;支持「测试连接」验证,并实时显示命中的协议
+- 对话持久化到 `~/.ai-task-flow/chats.json`(文件存储,重启不丢失)
+- 详见 [资料调研设计](docs/plans/2026-06-09-research-chat-agent-design.md)
+
+---
+
 ## HTTP API(给前端 / 脚本)
 
 | 方法 | 路径 | 说明 |
@@ -117,6 +130,11 @@ npm run build:backend
 | POST | `/api/tasks/:id/approve` | 审查通过(review→done,发布 `TaskApproved`) |
 | POST | `/api/tasks/:id/reject` | 审查打回(review→todo,发布 `TaskRejected`) |
 | GET | `/api/events` | SSE 事件流(实时推送) |
+| GET | `/api/llm-config` | LLM 配置(apiKey 脱敏) |
+| PUT | `/api/llm-config` | 保存 LLM 配置(保存即热生效) |
+| POST | `/api/llm-config/test` | 测试连接(验证 端点/Key/模型,不保存) |
+| GET | `/api/system/storage` | 数据目录存储占用(分类统计) |
+| POST | `/api/system/storage/clear` | 按类别清理存储 |
 
 ---
 
@@ -147,9 +165,12 @@ ai-task-flow/
 └── docs/                            # 设计、审查、对比文档
 ```
 
-数据/隔离目录(运行时生成):
+数据/隔离目录(运行时生成,根目录可用 `--data-dir` 或环境变量 `AI_TASK_FLOW_DATA_DIR` 覆盖):
 - `~/.ai-task-flow/tasks.json` —— 任务数据
 - `~/.ai-task-flow/events.jsonl` —— 事件流
+- `~/.ai-task-flow/chats.json` —— 资料调研对话
+- `~/.ai-task-flow/llm-config.json` —— LLM 配置(含明文 Key,权限 `0600`)
+- `~/.ai-task-flow/{uploads,tasks,logs}` —— 上传图片/任务 Markdown 存档/运行日志
 - `<你的项目>/.ai-workspaces/<task-id>/` —— 每任务的 git worktree
 
 ---
@@ -178,7 +199,7 @@ BASE_URL=http://localhost:3001 bash tests/run_all.sh   # 终端 B
 
 - **仅支持 Claude Code**(设计可扩展,暂未接其他 agent)
 - **无 AI 任务拆解**(任务靠人工录入)
-- **无鉴权**:默认 HTTP 监听 `0.0.0.0`,仅建议在可信本地网络使用;若公开暴露请自行加鉴权并改监听地址
+- **无鉴权**:默认 HTTP 监听 `0.0.0.0`(局域网可访问,便于团队共用)。敏感入口(如设置)按来源 IP 判定本机,非本机自动隐藏;但这**不是真正的鉴权**,公网暴露请自行加鉴权并改监听地址
 - **JSON 文件存储**:无事务/并发控制,适合单人本地场景
 - `applyUpdate`(看板拖拽改状态)不强制状态机校验,允许任意状态跳转
 
@@ -186,8 +207,11 @@ BASE_URL=http://localhost:3001 bash tests/run_all.sh   # 终端 B
 
 ## 文档
 
+- [更新日志 (CHANGELOG)](CHANGELOG.md)
 - [设计文档](.claude/2026-06-05-ai-task-flow-design.md)
 - [实施计划](.claude/2026-06-05-ai-task-flow-implementation-plan.md)
+- [LLM 配置功能设计](docs/20260610233000_LLM配置功能设计.md)
+- [资料调研(Chat)设计](docs/plans/2026-06-09-research-chat-agent-design.md)
 - [代码审查报告](docs/20260605223000_代码审查报告.md)
 - [竞品对比分析](docs/20260605223500_竞品对比分析.md)
 
