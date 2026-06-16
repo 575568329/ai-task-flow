@@ -1,0 +1,117 @@
+/* frontend/src/components/chat/CustomPromptPanel.css */
+.cpp-panel {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  padding: var(--sp-spacing-4);
+  background: var(--sp-bg-page, #fafafa);
+  border-left: 1px solid var(--sp-border-secondary, #e5e7eb);
+  overflow-y: auto;
+}
+
+.cpp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-spacing-2);
+}
+
+.cpp-header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-spacing-2);
+  font-size: var(--sp-font-size-base, 14px);
+  font-weight: 600;
+  color: var(--sp-text-primary, #111827);
+}
+
+.cpp-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: var(--sp-text-tertiary, #9ca3af);
+  border-radius: var(--sp-radius-md, 8px);
+  cursor: pointer;
+  transition: background var(--sp-transition-fast, 0.15s);
+}
+.cpp-collapse-btn:hover {
+  background: var(--sp-fill-hover, rgba(0, 0, 0, 0.06));
+}
+
+.cpp-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sp-text-tertiary, #9ca3af);
+  margin: 0 0 var(--sp-spacing-3);
+}
+
+.cpp-textarea {
+  flex: 1;
+  min-height: 160px;
+  padding: var(--sp-spacing-3);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sp-text-primary, #111827);
+  background: var(--sp-bg, #fff);
+  border: 1px solid var(--sp-border-secondary, #e5e7eb);
+  border-radius: var(--sp-radius-md, 8px);
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--sp-transition-fast, 0.15s);
+}
+.cpp-textarea:focus {
+  border-color: var(--sp-color-primary, #4f46e5);
+}
+
+.cpp-save-btn {
+  margin-top: var(--sp-spacing-3);
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--sp-radius-md, 8px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-text-tertiary, #9ca3af);
+  background: var(--sp-fill-hover, rgba(0, 0, 0, 0.04));
+  cursor: not-allowed;
+  transition: all var(--sp-transition-fast, 0.15s);
+}
+.cpp-save-btn.active {
+  color: var(--sp-text-on-primary, #fff);
+  background: var(--sp-color-primary, #4f46e5);
+  cursor: pointer;
+}
+.cpp-save-btn.active:hover {
+  background: var(--sp-color-primary-hover, #4338ca);
+}
+
+/* 折叠态:悬浮小按钮 */
+.cpp-collapsed {
+  position: absolute;
+  top: var(--sp-spacing-4);
+  right: var(--sp-spacing-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--sp-border-secondary, #e5e7eb);
+  background: var(--sp-bg, #fff);
+  color: var(--sp-color-primary, #4f46e5);
+  border-radius: var(--sp-radius-md, 8px);
+  cursor: pointer;
+  z-index: 5;
+  transition: background var(--sp-transition-fast, 0.15s);
+}
+.cpp-collapsed:hover {
+  background: var(--sp-color-primary-light-9, #eef2ff);
+}

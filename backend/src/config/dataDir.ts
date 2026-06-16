@@ -62,3 +62,8 @@ export function taskDocsDirPath(dataDir?: string): string {
 export function taskDocPath(taskId: string, dataDir?: string): string {
   return path.join(taskDocsDirPath(dataDir), `${taskId}.md`);
 }
+
+/** 日志目录(后端运行日志,如聊天链路全量日志) */
+export function logsDirPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'logs');
+}

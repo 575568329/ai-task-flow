@@ -97,6 +97,12 @@ export class JsonChatRepository implements ChatRepository {
     await this.saveAll(data);
   }
 
+  async deleteMessage(id: string): Promise<void> {
+    const data = await this.loadAll();
+    data.messages = data.messages.filter(m => m.id !== id);
+    await this.saveAll(data);
+  }
+
   // Private helpers
   private async loadAll(): Promise<ChatStorageData> {
     try {

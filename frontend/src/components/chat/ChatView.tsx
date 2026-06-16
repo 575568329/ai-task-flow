@@ -1,19 +1,27 @@
 // frontend/src/components/chat/ChatView.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Send, Square, Globe, Bot } from 'lucide-react';
+import { Plus, Trash2, Send, Square, Globe, Bot, Copy, RefreshCw, Check } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
-import { getConversations, createConversation, deleteConversation, getMessages } from '../../api/chat';
+import {
+  getConversations,
+  createConversation,
+  deleteConversation,
+  getMessages,
+  updateConversation,
+} from '../../api/chat';
 import { streamChat } from '../../api/chatStream';
 import type { ChatMessage } from '@ai-task-flow/shared';
+import { toast } from '../ui/Toaster';
+import { MessageContent } from './MessageContent';
+import { SourceList } from './SourceList';
+import { CustomPromptPanel } from './CustomPromptPanel';
 import './ChatView.css';
 
 /**
  * 调研聊天主视图
- * 严格遵循 Spark-design AI 对话页规范（Ai_chat.md）：
- * - 侧栏 240px / 对话区 max-w 800px
- * - 用户气泡右对齐主色，AI 左对齐
- * - 引用角标圆形上标
- * - 输入框圆角 12px，发送按钮圆形 32px
+ * - 富文本(Markdown)渲染 + 可点引用角标
+ * - assistant 消息工具栏:复制 / 重新回答
+ * - 侧边自定义需求面板(每对话独立,每轮生效)
  */
 export const ChatView: React.FC = () => {
   const {
@@ -27,6 +35,8 @@ export const ChatView: React.FC = () => {
     setConversations,
     setCurrentConversation,
     setMessages,
+    patchConversation,
+    removeLastAssistantMessage,
     startStreaming,
     appendDelta,
     setSources,
@@ -39,7 +49,10 @@ export const ChatView: React.FC = () => {
   const [useWebSearch, setUseWebSearch] = useState(() => {
     return localStorage.getItem('chat-web-search') !== 'false';
   });
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const currentConversation = conversations.find((c) => c.id === currentConversationId);
 
   // 初始化：加载会话列表
   useEffect(() => {
@@ -79,6 +92,59 @@ export const ChatView: React.FC = () => {
     }
   };
 
+  /** 保存当前会话的自定义需求 */
+  const handleSaveCustomPrompt = async (prompt: string) => {
+    if (!currentConversationId) return;
+    try {
+      await updateConversation(currentConversationId, { customPrompt: prompt });
+      patchConversation(currentConversationId, { customPrompt: prompt });
+      toast.success('自定义需求已保存');
+    } catch (error) {
+      toast.error('保存失败,请重试');
+      throw error;
+    }
+  };
+
+  /** 跑一轮流式对话(发送 or 重新回答) */
+  const runStream = async (params: {
+    message: string;
+    regenerate?: boolean;
+    /** 本轮失败时的回调(用于 regenerate 失败后恢复消息) */
+    onFailure?: () => void;
+  }) => {
+    if (!currentConversationId) return;
+    startStreaming();
+    try {
+      for await (const event of streamChat({
+        conversationId: currentConversationId,
+        message: params.message,
+        useWebSearch,
+        regenerate: params.regenerate,
+      })) {
+        if (event.type === 'progress') {
+          addProgressStep(event.output);
+        } else if (event.type === 'source') {
+          setSources(event.sources);
+        } else if (event.type === 'text-delta') {
+          appendDelta(event.delta);
+        } else if (event.type === 'done') {
+          finishStreaming(event.messageId);
+        } else if (event.type === 'error') {
+          console.error('SSE error:', event.message);
+          toast.error(event.message || '对话出错,请稍后重试');
+          resetStream();
+          params.onFailure?.();
+        }
+      }
+    } catch (error) {
+      console.error('Stream failed:', error);
+      const msg = error instanceof Error ? error.message : '网络异常,请检查后端服务';
+      toast.error(msg);
+      resetStream();
+      params.onFailure?.();
+    }
+  };
+
   const handleSend = async () => {
     if (!userInput.trim() || isStreaming || !currentConversationId) return;
 
@@ -93,70 +159,39 @@ export const ChatView: React.FC = () => {
     setMessages([...messages, userMessage]);
     const sentInput = userInput;
     setUserInput('');
-    startStreaming();
+    await runStream({ message: sentInput });
+  };
 
+  /** 重新回答:乐观移除最后一条 assistant,带最新自定义需求重新生成;
+   *  失败时从后端重新拉取恢复(后端在新答成功前不会删旧答)。 */
+  const handleRegenerate = async () => {
+    if (isStreaming || !currentConversationId) return;
+    const convId = currentConversationId;
+    removeLastAssistantMessage();
+    // message 字段在 regenerate 模式下后端会忽略(复用已存最后一条 user)
+    await runStream({
+      message: '',
+      regenerate: true,
+      onFailure: () => {
+        // 后端未删旧答,重新拉取即可恢复界面与数据一致
+        getMessages(convId).then(setMessages).catch(console.error);
+      },
+    });
+  };
+
+  /** 复制 assistant 正文 */
+  const handleCopy = async (content: string, messageId: string) => {
     try {
-      for await (const event of streamChat({
-        conversationId: currentConversationId,
-        message: sentInput,
-        useWebSearch,
-      })) {
-        if (event.type === 'progress') {
-          addProgressStep(event.output);
-        } else if (event.type === 'source') {
-          setSources(event.sources);
-        } else if (event.type === 'text-delta') {
-          appendDelta(event.delta);
-        } else if (event.type === 'done') {
-          finishStreaming(event.messageId);
-        } else if (event.type === 'error') {
-          console.error('SSE error:', event.message);
-          resetStream();
-        }
-      }
-    } catch (error) {
-      console.error('Stream failed:', error);
-      resetStream();
+      await navigator.clipboard.writeText(content);
+      setCopiedId(messageId);
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch {
+      toast.error('复制失败');
     }
   };
 
-  // 渲染引用角标（圆形上标，Spark Ai_chat.md 规范）
-  const renderMessageContent = (content: string, sources?: ChatMessage['sources']) => {
-    if (!sources || sources.length === 0) {
-      return <div className="sp-msg-text">{content}</div>;
-    }
-
-    const citationRegex = /\[(\d+)\]/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = citationRegex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(content.slice(lastIndex, match.index));
-      }
-      const num = parseInt(match[1]);
-      const source = sources[num - 1];
-      if (source) {
-        parts.push(
-          <sup
-            key={match.index}
-            className="sp-citation"
-            title={source.title}
-            onClick={() => window.open(source.url, '_blank')}
-          >
-            {num}
-          </sup>
-        );
-      }
-      lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < content.length) {
-      parts.push(content.slice(lastIndex));
-    }
-
-    return <div className="sp-msg-text">{parts}</div>;
-  };
+  // 当前对话最后一条 assistant 消息 id(只有它能"重新回答")
+  const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   return (
     <div className="sp-chat-layout">
@@ -205,13 +240,43 @@ export const ChatView: React.FC = () => {
                           <Bot size={18} strokeWidth={2} />
                         </div>
                         <span className="sp-ai-name">调研助手</span>
-                        {msg.sources && msg.sources.length > 0 && (
-                          <span className="sp-source-tag">{msg.sources.length} 篇内容来源 ›</span>
-                        )}
                       </div>
                     )}
                     <div className={`sp-bubble ${msg.role}`}>
-                      {renderMessageContent(msg.content, msg.sources)}
+                      {msg.role === 'assistant' ? (
+                        <>
+                          <MessageContent content={msg.content} sources={msg.sources} />
+                          <SourceList sources={msg.sources ?? []} />
+                          {/* 工具栏:复制 / 重新回答 */}
+                          <div className="sp-msg-toolbar">
+                            <button
+                              className="sp-msg-tool"
+                              onClick={() => handleCopy(msg.content, msg.id)}
+                              title="复制"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check size={15} strokeWidth={2} />
+                              ) : (
+                                <Copy size={15} strokeWidth={2} />
+                              )}
+                              <span>{copiedId === msg.id ? '已复制' : '复制'}</span>
+                            </button>
+                            {msg.id === lastAssistantId && (
+                              <button
+                                className="sp-msg-tool"
+                                onClick={handleRegenerate}
+                                disabled={isStreaming}
+                                title="按最新自定义需求重新回答"
+                              >
+                                <RefreshCw size={15} strokeWidth={2} />
+                                <span>重新回答</span>
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="sp-msg-text">{msg.content}</div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -224,9 +289,6 @@ export const ChatView: React.FC = () => {
                         <Bot size={18} strokeWidth={2} />
                       </div>
                       <span className="sp-ai-name">调研助手</span>
-                      {currentSources.length > 0 && (
-                        <span className="sp-source-tag">{currentSources.length} 篇内容来源 ›</span>
-                      )}
                     </div>
 
                     {/* 思考过程区 */}
@@ -241,7 +303,10 @@ export const ChatView: React.FC = () => {
                     )}
 
                     <div className="sp-bubble assistant">
-                      {renderMessageContent(currentAssistantMessage, currentSources)}
+                      {currentSources.length > 0 && (
+                        <SourceList sources={currentSources} />
+                      )}
+                      <MessageContent content={currentAssistantMessage} sources={currentSources} />
                       <span className="sp-cursor" />
                     </div>
                   </div>
@@ -298,6 +363,15 @@ export const ChatView: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* 自定义需求面板(仅在选中会话时显示) */}
+      {currentConversation && (
+        <CustomPromptPanel
+          key={currentConversation.id}
+          value={currentConversation.customPrompt ?? ''}
+          onSave={handleSaveCustomPrompt}
+        />
+      )}
     </div>
   );
 };

@@ -20,6 +20,10 @@ interface ChatState {
   setConversations: (conversations: Conversation[]) => void;
   setCurrentConversation: (id: string | null) => void;
   setMessages: (messages: ChatMessage[]) => void;
+  /** 本地更新某会话字段(如 customPrompt/title),与后端保存并行 */
+  patchConversation: (id: string, patch: Partial<Conversation>) => void;
+  /** 移除当前会话最后一条 assistant 消息(用于重新回答) */
+  removeLastAssistantMessage: () => void;
 
   // 流式控制
   startStreaming: () => void;
@@ -42,6 +46,22 @@ export const useChatStore = create<ChatState>((set) => ({
   setConversations: (conversations) => set({ conversations }),
   setCurrentConversation: (id) => set({ currentConversationId: id }),
   setMessages: (messages) => set({ messages }),
+
+  patchConversation: (id, patch) => set((state) => ({
+    conversations: state.conversations.map((c) =>
+      c.id === id ? { ...c, ...patch } : c,
+    ),
+  })),
+
+  removeLastAssistantMessage: () => set((state) => {
+    const lastAssistantIndex = [...state.messages]
+      .map((m) => m.role)
+      .lastIndexOf('assistant');
+    if (lastAssistantIndex === -1) return {};
+    return {
+      messages: state.messages.filter((_, i) => i !== lastAssistantIndex),
+    };
+  }),
 
   startStreaming: () => set({
     isStreaming: true,

@@ -26,6 +26,20 @@ export async function deleteConversation(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete conversation: ${res.statusText}`);
 }
 
+/** 更新会话(标题 / 自定义需求) */
+export async function updateConversation(
+  id: string,
+  patch: { title?: string; customPrompt?: string },
+): Promise<Conversation> {
+  const res = await fetch(`${API_BASE}/conversations/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`Failed to update conversation: ${res.statusText}`);
+  return res.json();
+}
+
 export async function getMessages(conversationId: string): Promise<ChatMessage[]> {
   const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages`);
   if (!res.ok) throw new Error(`Failed to fetch messages: ${res.statusText}`);

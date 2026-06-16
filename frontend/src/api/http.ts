@@ -40,6 +40,8 @@ export const http = {
   get: <T>(path: string, silent?: boolean) => request<T>(path, { silent }),
   post: <T>(path: string, body?: unknown, silent?: boolean) =>
     request<T>(path, { method: 'POST', body, silent }),
+  put: <T>(path: string, body?: unknown, silent?: boolean) =>
+    request<T>(path, { method: 'PUT', body, silent }),
   patch: <T>(path: string, body?: unknown, silent?: boolean) =>
     request<T>(path, { method: 'PATCH', body, silent }),
   delete: <T>(path: string, silent?: boolean) =>

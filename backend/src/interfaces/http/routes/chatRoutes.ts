@@ -4,6 +4,9 @@ import type { ChatRepository } from '../../../domain/research/repositories/ChatR
 import { Conversation } from '../../../domain/research/entities/Conversation.js';
 import { ChatService, type ChatRequest } from '../../../application/research/ChatService.js';
 import type { SSEEvent } from '@ai-task-flow/shared';
+import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
+
+const logger = new FileLogger('chat');
 
 export async function registerChatRoutes(
   fastify: FastifyInstance,
@@ -30,6 +33,28 @@ export async function registerChatRoutes(
     return reply.status(204).send();
   });
 
+  // PUT /api/conversations/:id - 更新会话(标题 / 自定义需求)
+  fastify.put<{ Params: { id: string }; Body: { title?: string; customPrompt?: string } }>(
+    '/api/conversations/:id',
+    async (request, reply) => {
+      const conversation = await chatRepository.findConversationById(request.params.id);
+      if (!conversation) {
+        return reply.status(404).send({ error: '会话不存在' });
+      }
+
+      const { title, customPrompt } = request.body;
+      if (typeof title === 'string' && title.trim()) {
+        conversation.updateTitle(title.trim());
+      }
+      if (typeof customPrompt === 'string') {
+        conversation.updateCustomPrompt(customPrompt);
+      }
+
+      await chatRepository.saveConversation(conversation);
+      return conversation.toJSON();
+    },
+  );
+
   // GET /api/conversations/:id/messages - 某会话消息
   fastify.get<{ Params: { id: string } }>('/api/conversations/:id/messages', async (request, reply) => {
     const messages = await chatRepository.findMessagesByConversationId(request.params.id);
@@ -50,6 +75,10 @@ export async function registerChatRoutes(
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     } catch (error: any) {
+      logger.error('handleChat 异常,返回 error 事件', {
+        message: error?.message,
+        stack: error?.stack?.split('\n').slice(0, 3).join(' | '),
+      });
       const errorEvent: SSEEvent = {
         type: 'error',
         message: error.message || 'Internal server error',

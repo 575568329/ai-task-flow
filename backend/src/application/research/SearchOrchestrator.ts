@@ -1,7 +1,11 @@
 // backend/src/application/research/SearchOrchestrator.ts
 import type { Source, ClassificationResult } from '@ai-task-flow/shared';
-import { DuckDuckGoClient } from '../../infrastructure/search/DuckDuckGoClient.js';
 import { ArxivClient } from '../../infrastructure/search/ArxivClient.js';
+
+/** 网页检索源的最小契约,便于替换实现(GLM / 其他) */
+export interface WebSearchProvider {
+  search(query: string, maxResults?: number): Promise<Source[]>;
+}
 
 /**
  * 搜索编排器（抄 Perplexica researcher/index.ts）
@@ -9,7 +13,7 @@ import { ArxivClient } from '../../infrastructure/search/ArxivClient.js';
  */
 export class SearchOrchestrator {
   constructor(
-    private readonly ddgClient: DuckDuckGoClient,
+    private readonly webClient: WebSearchProvider,
     private readonly arxivClient: ArxivClient,
   ) {}
 
@@ -27,9 +31,9 @@ export class SearchOrchestrator {
       );
     }
 
-    // 网页源（DDG 兜底，后续加 Tavily）
+    // 网页源（GLM 官方 MCP 搜索）
     promises.push(
-      ...queries.map((q: string) => this.ddgClient.search(q, 3)),
+      ...queries.map((q: string) => this.webClient.search(q, 3)),
     );
 
     const results = await Promise.all(promises);

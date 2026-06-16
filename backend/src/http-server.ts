@@ -13,11 +13,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // 调研聊天 Agent
 import { JsonChatRepository } from './infrastructure/persistence/JsonChatRepository.js';
-import { OpenAiCompatibleProvider } from './infrastructure/llm/OpenAiCompatibleProvider.js';
-import { DuckDuckGoClient } from './infrastructure/search/DuckDuckGoClient.js';
+import { GlmWebSearchClient } from './infrastructure/search/GlmWebSearchClient.js';
 import { ArxivClient } from './infrastructure/search/ArxivClient.js';
 import { SearchOrchestrator } from './application/research/SearchOrchestrator.js';
 import { ChatService } from './application/research/ChatService.js';
+import { JsonLlmConfigRepository } from './infrastructure/persistence/JsonLlmConfigRepository.js';
+import { LlmConfigService } from './application/llm-config/LlmConfigService.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 3000 */
@@ -61,17 +62,17 @@ export async function startApp(options: StartAppOptions = {}) {
   const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore);
   const worktreeManager = new WorktreeManager();
 
-  // 调研聊天 Agent 初始化（MVP 用环境变量配置）
+  // 调研聊天 Agent 初始化
   const chatRepository = new JsonChatRepository();
-  const llmProvider = new OpenAiCompatibleProvider(
-    process.env.LLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
-    process.env.LLM_API_KEY || '',
-    process.env.LLM_MODEL || 'glm-4-plus',
-  );
-  const ddgClient = new DuckDuckGoClient();
+  const llmConfigRepository = new JsonLlmConfigRepository();
+  const llmConfigService = new LlmConfigService(llmConfigRepository);
+  await llmConfigService.init();
+  // 网页检索改用智谱 GLM 官方 MCP 搜索(复用 LLM 的 bigmodel apiKey,实时取最新值;
+  // 替换已失效且国内不可达的 DuckDuckGo)。arXiv 作为论文源保留。
+  const webSearchClient = new GlmWebSearchClient(() => llmConfigService.getActiveApiKey());
   const arxivClient = new ArxivClient();
-  const searchOrchestrator = new SearchOrchestrator(ddgClient, arxivClient);
-  const chatService = new ChatService(chatRepository, llmProvider, searchOrchestrator);
+  const searchOrchestrator = new SearchOrchestrator(webSearchClient, arxivClient);
+  const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
 
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
@@ -121,7 +122,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService);
+  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService);
 }
 
 // 当作为脚本直接执行时(npm run http / dev),立即启动

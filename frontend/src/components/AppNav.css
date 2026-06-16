@@ -94,3 +94,110 @@
   gap: var(--sp-spacing-3);
   flex-shrink: 0;
 }
+
+/* ============ 设置按钮 ============ */
+.sp-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--sp-radius-md);
+  background: transparent;
+  color: var(--sp-text-secondary);
+  cursor: pointer;
+  transition: all var(--sp-transition-fast);
+}
+
+.sp-settings-btn:hover {
+  background: var(--sp-fill-hover);
+  color: var(--sp-text-primary);
+}
+
+/* ============ 设置表单 ============ */
+.sp-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.sp-field-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.sp-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.sp-input:focus {
+  border-color: var(--primary-6);
+}
+
+.sp-input::placeholder {
+  color: var(--text-3);
+}
+
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sp-btn--primary {
+  background: var(--primary-6);
+  color: #fff;
+}
+
+.sp-btn--primary:hover {
+  background: var(--primary-7);
+}
+
+.sp-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sp-btn--secondary {
+  background: var(--fill-secondary);
+  color: var(--text-1);
+}
+
+.sp-btn--secondary:hover {
+  background: var(--fill-hover);
+}

@@ -8,6 +8,7 @@ export async function* streamChat(params: {
   conversationId: string;
   message: string;
   useWebSearch: boolean;
+  regenerate?: boolean;
 }): AsyncIterable<SSEEvent> {
   const response = await fetch('/api/chat', { // 使用相对路径
     method: 'POST',

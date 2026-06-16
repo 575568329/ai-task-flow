@@ -13,5 +13,6 @@ export interface ChatRepository {
   saveMessage(message: ChatMessage): Promise<void>;
   findMessageById(id: string): Promise<ChatMessage | null>;
   findMessagesByConversationId(conversationId: string): Promise<ChatMessage[]>;
+  deleteMessage(id: string): Promise<void>;
   deleteMessagesByConversationId(conversationId: string): Promise<void>;
 }

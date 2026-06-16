@@ -7,6 +7,8 @@ export class Conversation {
     public title: string,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    /** 该对话的自定义需求,拼入 systemPrompt,每轮都生效 */
+    public customPrompt: string = '',
   ) {}
 
   static create(title: string): Conversation {
@@ -20,10 +22,17 @@ export class Conversation {
     this.updatedAt = new Date();
   }
 
+  /** 更新自定义需求(空串表示清空) */
+  updateCustomPrompt(prompt: string): void {
+    this.customPrompt = prompt;
+    this.updatedAt = new Date();
+  }
+
   toJSON(): ConversationDTO {
     return {
       id: this.id,
       title: this.title,
+      customPrompt: this.customPrompt || undefined,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -35,6 +44,7 @@ export class Conversation {
       dto.title,
       new Date(dto.createdAt),
       new Date(dto.updatedAt),
+      dto.customPrompt ?? '',
     );
   }
 }

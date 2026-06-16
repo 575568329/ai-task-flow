@@ -28,6 +28,8 @@ export interface ChatMessage {
 export interface Conversation {
   id: string;
   title: string;
+  /** 该对话的自定义需求(系统提示追加),每个对话独立,后续每轮都会带上 */
+  customPrompt?: string;
   createdAt: string;
   updatedAt: string;
 }

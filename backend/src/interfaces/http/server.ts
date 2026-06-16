@@ -17,6 +17,8 @@ import { registerChatRoutes } from './routes/chatRoutes.js';
 import systemRoutes from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
+import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
+import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 
 export interface HttpServerConfig {
   port: number;
@@ -41,6 +43,7 @@ export async function createHttpServer(
   worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
+  llmConfigService: LlmConfigService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -92,6 +95,7 @@ export async function createHttpServer(
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
   await registerChatRoutes(fastify, chatRepository, chatService);
+  await registerLlmConfigRoutes(fastify, llmConfigService);
   await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)
@@ -122,8 +126,9 @@ export async function startHttpServer(
   worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
+  llmConfigService: LlmConfigService,
 ) {
-  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService);
+  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService);
 
   try {
     await server.listen({ port: config.port, host: config.host });

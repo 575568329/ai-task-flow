@@ -106,6 +106,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
 }
 
 .sp-message-area {
@@ -357,4 +358,35 @@
   50% {
     opacity: 0;
   }
+}
+
+/* ============ assistant 消息工具栏(复制 / 重新回答) ============ */
+.sp-msg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-spacing-2);
+  margin-top: var(--sp-spacing-3);
+}
+
+.sp-msg-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 var(--sp-spacing-2);
+  font-size: 12px;
+  color: var(--sp-text-tertiary, #9ca3af);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--sp-radius-md, 8px);
+  cursor: pointer;
+  transition: all var(--sp-transition-fast, 0.15s);
+}
+.sp-msg-tool:hover:not(:disabled) {
+  color: var(--sp-text-primary, #111827);
+  background: var(--sp-fill-hover, rgba(0, 0, 0, 0.05));
+}
+.sp-msg-tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
