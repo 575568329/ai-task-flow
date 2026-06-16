@@ -30,6 +30,7 @@ interface UIState {
   /** 以「创建模式」打开任务抽屉(空表单 + Markdown 预览) */
   creatingTask: boolean;
   projectFilter: string | null;
+  sourceFilter: 'web' | 'manual' | null;
   searchQuery: string;
   /** 是否本机访问(基于 /health 的 localAccess)。false = 局域网其他设备,需屏蔽敏感页面 */
   localAccess: boolean;
@@ -40,6 +41,7 @@ interface UIState {
   setSelectedTask: (id: string | null) => void;
   setCreatingTask: (creating: boolean) => void;
   setProjectFilter: (project: string | null) => void;
+  setSourceFilter: (source: 'web' | 'manual' | null) => void;
   setSearchQuery: (query: string) => void;
   setLocalAccess: (v: boolean) => void;
   setStorageWarn: (v: boolean) => void;
@@ -50,6 +52,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedTaskId: null,
   creatingTask: false,
   projectFilter: null,
+  sourceFilter: null,
   searchQuery: '',
   // 默认 true:fetch /health 前不误屏蔽本机用户的敏感页面
   localAccess: true,
@@ -65,6 +68,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSelectedTask: (id) => set({ selectedTaskId: id, creatingTask: id ? false : get().creatingTask }),
   setCreatingTask: (creating) => set({ creatingTask: creating, selectedTaskId: creating ? null : get().selectedTaskId }),
   setProjectFilter: (project) => set({ projectFilter: project }),
+  setSourceFilter: (source) => set({ sourceFilter: source }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setLocalAccess: (v) => set({ localAccess: v }),
   setStorageWarn: (v) => set({ storageWarn: v }),

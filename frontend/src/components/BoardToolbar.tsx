@@ -20,6 +20,8 @@ export function BoardToolbar({ projects, sseConnected }: BoardToolbarProps) {
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const projectFilter = useUIStore((s) => s.projectFilter);
   const setProjectFilter = useUIStore((s) => s.setProjectFilter);
+  const sourceFilter = useUIStore((s) => s.sourceFilter);
+  const setSourceFilter = useUIStore((s) => s.setSourceFilter);
   const setCreatingTask = useUIStore((s) => s.setCreatingTask);
 
   return (
@@ -59,6 +61,18 @@ export function BoardToolbar({ projects, sseConnected }: BoardToolbarProps) {
           options={[
             { label: '全部项目', value: '' },
             ...projects.map((p) => ({ label: p, value: p })),
+          ]}
+        />
+      </div>
+
+      <div className="w-32">
+        <Select
+          value={sourceFilter ?? ''}
+          onChange={(e) => setSourceFilter((e.target.value || null) as 'web' | 'manual' | null)}
+          options={[
+            { label: '全部来源', value: '' },
+            { label: '🌐 网页剪藏', value: 'web' },
+            { label: '📁 手动新建', value: 'manual' },
           ]}
         />
       </div>

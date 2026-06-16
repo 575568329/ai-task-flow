@@ -90,6 +90,11 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
   // 只有 todo 状态的任务才显示派发按钮
   const canDispatch = task.status === 'todo';
 
+  // 解析 sourceUrl 的域名用于 web 来源角标;非法/缺失 URL 回退"网页"
+  function safeHostname(url?: string): string {
+    try { return url ? new URL(url).hostname : '网页'; } catch { return '网页'; }
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -110,6 +115,15 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       </div>
 
       <h4 className="mb-1.5 text-sm font-semibold leading-snug">{task.title}</h4>
+
+      {/* 来源角标:仅 web 来源显示网页域名(manual 来源由下方 projectName Tag 标识,避免重复) */}
+      {task.source === 'web' && (
+        <div className="mb-1.5 flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
+          <span className="inline-flex items-center gap-1" title={task.sourceUrl}>
+            🌐 {safeHostname(task.sourceUrl)}
+          </span>
+        </div>
+      )}
 
       {task.description && (
         <p className="mb-2 line-clamp-2 text-xs" style={{ color: 'var(--text-2)' }}>

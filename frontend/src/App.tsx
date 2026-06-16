@@ -32,6 +32,7 @@ function App() {
 
   const searchQuery = useUIStore((s) => s.searchQuery);
   const projectFilter = useUIStore((s) => s.projectFilter);
+  const sourceFilter = useUIStore((s) => s.sourceFilter);
   const setSelectedTask = useUIStore((s) => s.setSelectedTask);
 
   const [sseConnected, setSseConnected] = useState(false);
@@ -78,10 +79,11 @@ function App() {
     const q = searchQuery.trim().toLowerCase();
     return tasks.filter((t) => {
       if (projectFilter && t.projectName !== projectFilter) return false;
+      if (sourceFilter && t.source !== sourceFilter) return false;
       if (q && !t.title.toLowerCase().includes(q) && !t.id.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [tasks, searchQuery, projectFilter]);
+  }, [tasks, searchQuery, projectFilter, sourceFilter]);
 
   // 按状态分组
   const byStatus = useMemo(() => {
