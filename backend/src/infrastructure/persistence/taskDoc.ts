@@ -23,6 +23,13 @@ export function buildTaskMarkdown(task: Task): string {
     `**状态**: ${task.status}`,
   ];
 
+  // 来源信息:仅 web 任务输出,让 Claude 知道问题来自哪个网页(网页剪藏的原始上下文);
+  // 与项目/仓库路径共存——web 任务也可关联项目,两者都给 AI。
+  if (task.source === 'web') {
+    lines.push(`**来源**: 网页剪藏`);
+    if (task.sourceUrl) lines.push(`**网页地址**: ${task.sourceUrl}`);
+  }
+
   if (task.projectName) lines.push(`**项目**: ${task.projectName}`);
   if (task.repoPath) lines.push(`**仓库路径**: \`${task.repoPath}\``);
 

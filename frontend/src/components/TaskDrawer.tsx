@@ -261,10 +261,10 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
     if (task.source === 'web') {
       lines.push(`**来源**: 网页剪藏`);
       if (task.sourceUrl) lines.push(`**网页地址**: ${task.sourceUrl}`);
-    } else {
-      if (projectName) lines.push(`**项目**: ${projectName}`);
-      if (repoPath) lines.push(`**仓库路径**: \`${repoPath}\``);
     }
+    // 项目路径与网页地址共存:web 任务也常需标注归属项目(manual 同理),不再按来源互斥
+    if (projectName) lines.push(`**项目**: ${projectName}`);
+    if (repoPath) lines.push(`**仓库路径**: \`${repoPath}\``);
 
     lines.push('', '## 描述', '', description || '（无描述）', '');
 
@@ -348,8 +348,8 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
             </Section>
           </div>
 
-          {/* 地址区:按来源条件渲染——web 显网页地址(只读可点击),manual 显项目路径(可编辑) */}
-          {task.source === 'web' ? (
+          {/* 地址区:网页地址(仅 web,只读可点击)+ 项目路径(所有来源可填,标注问题归属项目) */}
+          {task.source === 'web' && (
             <Section label="网页地址">
               <div className="text-sm break-all" style={{ color: 'var(--text-2)' }}>
                 {task.sourceUrl ? (
@@ -367,45 +367,44 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
                 )}
               </div>
             </Section>
-          ) : (
-            <Section label="项目路径(可选)">
-              <div className="flex gap-2">
-                <Input
-                  value={repoPath}
-                  onChange={(e) => setRepoPath(e.target.value)}
-                  onBlur={() => checkProjectPath()}
-                  placeholder="点「浏览」选择,或直接粘贴路径"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const { path } = await systemApi.selectDirectory();
-                      if (path) {
-                        setRepoPath(path);
-                        await checkProjectPath();
-                      }
-                    } catch (error) {
-                      toast.error('打开文件夹选择器失败');
-                    }
-                  }}
-                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-3 py-2 text-sm transition-fast hover:opacity-80"
-                  style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
-                  title="打开系统文件选择器"
-                >
-                  <FolderOpen size={14} />
-                  浏览…
-                </button>
-                {pathValid === true && <span className="self-center text-green-600">✓</span>}
-                {pathValid === false && <span className="self-center text-red-600">✗</span>}
-              </div>
-              {projectName && (
-                <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-                  项目名: {projectName}
-                </div>
-              )}
-            </Section>
           )}
+          <Section label="项目路径(可选)">
+            <div className="flex gap-2">
+              <Input
+                value={repoPath}
+                onChange={(e) => setRepoPath(e.target.value)}
+                onBlur={() => checkProjectPath()}
+                placeholder="点「浏览」选择,或直接粘贴路径"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { path } = await systemApi.selectDirectory();
+                    if (path) {
+                      setRepoPath(path);
+                      await checkProjectPath();
+                    }
+                  } catch (error) {
+                    toast.error('打开文件夹选择器失败');
+                  }
+                }}
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-3 py-2 text-sm transition-fast hover:opacity-80"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
+                title="打开系统文件选择器"
+              >
+                <FolderOpen size={14} />
+                浏览…
+              </button>
+              {pathValid === true && <span className="self-center text-green-600">✓</span>}
+              {pathValid === false && <span className="self-center text-red-600">✗</span>}
+            </div>
+            {projectName && (
+              <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
+                项目名: {projectName}
+              </div>
+            )}
+          </Section>
 
           {/* 隐藏的文件夹选择器 */}
           <input
