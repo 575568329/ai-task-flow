@@ -17,6 +17,7 @@ import { Toaster, toast } from './components/ui/Toaster';
 import { useTaskStore } from './stores/taskStore';
 import { useUIStore } from './stores/uiStore';
 import { sseClient } from './api/sse';
+import { fetchHealth, systemApi } from './api/task';
 import { BOARD_COLUMNS } from './lib/taskMeta';
 import { ChatView } from './components/chat/ChatView';
 import { TaskDocsView } from './components/TaskDocsView';
@@ -40,7 +41,7 @@ function App() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  // 初始化:拉数据 + 连 SSE
+  // 初始化:拉数据 + 连 SSE + 探测访问上下文/存储占用
   useEffect(() => {
     fetchAll();
     sseClient.connect();
@@ -48,6 +49,15 @@ function App() {
       setSseConnected(true);
       if (event.type !== 'connected') applySSEEvent(event);
     });
+
+    // 本机访问标志(控制敏感页面可见性)+ 存储占用告警(侧边栏红点)。
+    // 用 getState 写入,避免把 setter 纳入依赖数组。
+    fetchHealth().then(({ localAccess }) => useUIStore.getState().setLocalAccess(localAccess));
+    systemApi
+      .getStorage()
+      .then((s) => useUIStore.getState().setStorageWarn(s.warning))
+      .catch(() => {/* silent:启动时后端可能未就绪 */});
+
     return () => {
       off();
       sseClient.close();

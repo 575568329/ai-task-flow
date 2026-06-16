@@ -1,6 +1,7 @@
 // backend/src/interfaces/http/routes/llmConfigRoutes.ts
 import type { FastifyInstance } from 'fastify';
 import type { LlmConfigService } from '../../../application/llm-config/LlmConfigService.js';
+import type { TestConnectionRequest } from '@ai-task-flow/shared';
 
 interface SaveLlmConfigBody {
   baseURL: string;
@@ -40,5 +41,10 @@ export async function registerLlmConfigRoutes(
 
     const result = await llmConfigService.saveConfig({ baseURL, apiKey, model });
     return result;
+  });
+
+  // POST /api/llm-config/test - 测试连接(不保存,仅验证 端点+key+model 是否可用)
+  fastify.post<{ Body: TestConnectionRequest }>('/api/llm-config/test', async (request) => {
+    return llmConfigService.testConnection(request.body ?? ({} as TestConnectionRequest));
   });
 }

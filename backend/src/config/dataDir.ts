@@ -48,6 +48,12 @@ export function eventsFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'events.jsonl');
 }
 
+/** chats.json 路径(调研聊天数据)。与 tasks.json 同级,统一走 resolveDataDir,
+ *  避免 JsonChatRepository 自行拼 process.env.HOME 导致改数据目录时路径跑偏。 */
+export function chatFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'chats.json');
+}
+
 /** 上传图片目录 */
 export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');

@@ -81,11 +81,21 @@ export async function createHttpServer(
   // - service: 标识"这是 ai-task-flow"
   // - web: 标识"这个实例是否托管了前端 SPA",false 表示纯 API(dev 模式),CLI 不应 reuse
   const hasWeb = !!(config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html')));
-  fastify.get('/health', async () => {
+  fastify.get('/health', async (request) => {
+    // 判断请求是否来自本机回环:前端据此控制敏感页面(设置/存储管理)的可见性。
+    // 本机浏览器访问 => true(看得到设置);同网段其他设备访问 => false(屏蔽设置入口)。
+    // key 明文本身在任何情况下都不会下发(GET /api/llm-config 已脱敏),此处仅用于页面可见性。
+    const ip = request.ip;
+    const localAccess =
+      ip === '127.0.0.1' ||
+      ip === '::1' ||
+      ip === '::ffff:127.0.0.1' ||
+      ip === 'localhost';
     return {
       status: 'ok',
       service: 'ai-task-flow',
       web: hasWeb,
+      localAccess,
       timestamp: new Date().toISOString(),
     };
   });

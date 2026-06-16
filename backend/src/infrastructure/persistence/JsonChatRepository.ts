@@ -2,6 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { injectable } from 'tsyringe';
+import { chatFilePath } from '../../config/dataDir.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import { Conversation } from '../../domain/research/entities/Conversation.js';
 import { ChatMessage } from '../../domain/research/entities/ChatMessage.js';
@@ -21,14 +22,9 @@ export class JsonChatRepository implements ChatRepository {
   private readonly filePath: string;
 
   constructor(customPath?: string) {
-    if (customPath) {
-      this.filePath = customPath;
-    } else {
-      // 与 tasks.json 同级
-      const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-      const dataDir = path.join(homeDir, '.ai-task-flow');
-      this.filePath = path.join(dataDir, 'chats.json');
-    }
+    // 走统一的 resolveDataDir(),与 tasks.json / events.jsonl 同目录,
+    // 保证 --data-dir / AI_TASK_FLOW_DATA_DIR 改动时 chats.json 跟随、存储监控不漏扫。
+    this.filePath = customPath ?? chatFilePath();
   }
 
   // Conversation

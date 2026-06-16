@@ -1,6 +1,6 @@
 {
   "name": "@ai-task-flow/cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "CLI for AI Task Flow - 个人 AI 任务编排看板 + Claude Code MCP Server",
   "type": "module",
   "bin": {
@@ -41,7 +41,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@ai-task-flow/backend": "^0.1.3",
+    "@ai-task-flow/backend": "^0.2.0",
     "open": "^10.1.0"
   }
 }

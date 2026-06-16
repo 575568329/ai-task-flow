@@ -2,8 +2,10 @@
 import type { LlmConfigRepository } from '../../domain/llm-config/LlmConfigRepository.js';
 import type { LlmConfigData, MaskedLlmConfig } from '../../domain/llm-config/LlmConfigEntity.js';
 import { maskApiKey } from '../../domain/llm-config/LlmConfigEntity.js';
+import type { TestConnectionRequest, TestConnectionResult } from '@ai-task-flow/shared';
 import type { LlmProvider } from '../../infrastructure/llm/LlmProvider.js';
 import { OpenAiCompatibleProvider } from '../../infrastructure/llm/OpenAiCompatibleProvider.js';
+import { AnthropicProvider } from '../../infrastructure/llm/AnthropicProvider.js';
 
 /** 默认 LLM 配置（智谱 AI） */
 const DEFAULT_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
@@ -17,7 +19,7 @@ const DEFAULT_MODEL = 'glm-4-plus';
  * - 保存新配置后动态替换 Provider（无需重启）
  */
 export class LlmConfigService {
-  private currentProvider: OpenAiCompatibleProvider;
+  private currentProvider: LlmProvider;
   /** 当前生效的 apiKey(明文,仅内存),用于 isConfigured 判断,不对外暴露 */
   private activeApiKey: string;
 
@@ -27,7 +29,7 @@ export class LlmConfigService {
     // 构造时先用环境变量创建默认 Provider
     // startApp 会调用 init() 从文件加载并覆盖
     this.activeApiKey = process.env.LLM_API_KEY || '';
-    this.currentProvider = new OpenAiCompatibleProvider(
+    this.currentProvider = this.createProvider(
       process.env.LLM_BASE_URL || DEFAULT_BASE_URL,
       this.activeApiKey,
       process.env.LLM_MODEL || DEFAULT_MODEL,
@@ -107,12 +109,67 @@ export class LlmConfigService {
     };
   }
 
+  /**
+   * 根据 baseURL 自动选择 provider 协议:
+   * - 含 /anthropic → Anthropic 协议(智谱 GLM Coding Plan / glm-5.2、Claude 官方等)
+   * - 否则 → OpenAI 兼容协议(paas/v4、DeepSeek、Moonshot 等)
+   * 用户在设置里填对应端点即可,无需手动切换协议。
+   */
+  private createProvider(baseURL: string, apiKey: string, model: string): LlmProvider {
+    const isAnthropic = /\/anthropic(\/|$)/i.test(baseURL);
+    return isAnthropic
+      ? new AnthropicProvider(baseURL, apiKey, model)
+      : new OpenAiCompatibleProvider(baseURL, apiKey, model);
+  }
+
+  /**
+   * 测试连接(不修改当前生效配置):用传入参数临时创建 provider 发最小请求。
+   * 收到首个非空 delta 即判定 端点+key+model 三者可用,省 token。
+   * apiKey 为空时复用当前 activeApiKey(测已保存配置)。
+   */
+  async testConnection(params: TestConnectionRequest): Promise<TestConnectionResult> {
+    const baseURL = params.baseURL.trim();
+    const model = params.model.trim();
+    if (!baseURL || !model) {
+      return { success: false, message: '请填写 API 地址和模型名称' };
+    }
+    const apiKey = params.apiKey.trim() || this.activeApiKey;
+    if (!apiKey) {
+      return { success: false, message: '未填写 API Key' };
+    }
+
+    const protocol: 'openai' | 'anthropic' = /\/anthropic(\/|$)/i.test(baseURL) ? 'anthropic' : 'openai';
+    const provider = this.createProvider(baseURL, apiKey, model);
+    const start = Date.now();
+    try {
+      for await (const chunk of provider.streamText([{ role: 'user', content: 'hi' }])) {
+        if (chunk.done) break;
+        if (chunk.delta) {
+          return {
+            success: true,
+            message: `连接成功(${protocol} 协议,模型 ${model} 可用)`,
+            latencyMs: Date.now() - start,
+            protocol,
+          };
+        }
+      }
+      // 流正常结束但无内容:通常是模型名错误或余额不足
+      return {
+        success: false,
+        message: `模型 ${model} 未返回内容,请检查模型名或账户余额`,
+        protocol,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: `连接失败: ${(err as Error).message?.slice(0, 200) ?? String(err)}`,
+        protocol,
+      };
+    }
+  }
+
   private rebuildProvider(config: { baseURL: string; apiKey: string; model: string }): void {
     this.activeApiKey = config.apiKey;
-    this.currentProvider = new OpenAiCompatibleProvider(
-      config.baseURL,
-      config.apiKey,
-      config.model,
-    );
+    this.currentProvider = this.createProvider(config.baseURL, config.apiKey, config.model);
   }
 }

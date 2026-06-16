@@ -31,12 +31,18 @@ interface UIState {
   creatingTask: boolean;
   projectFilter: string | null;
   searchQuery: string;
+  /** 是否本机访问(基于 /health 的 localAccess)。false = 局域网其他设备,需屏蔽敏感页面 */
+  localAccess: boolean;
+  /** 存储占用是否超阈值(单项或总计),用于侧边栏设置按钮红点提示 */
+  storageWarn: boolean;
 
   toggleTheme: () => void;
   setSelectedTask: (id: string | null) => void;
   setCreatingTask: (creating: boolean) => void;
   setProjectFilter: (project: string | null) => void;
   setSearchQuery: (query: string) => void;
+  setLocalAccess: (v: boolean) => void;
+  setStorageWarn: (v: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -45,6 +51,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   creatingTask: false,
   projectFilter: null,
   searchQuery: '',
+  // 默认 true:fetch /health 前不误屏蔽本机用户的敏感页面
+  localAccess: true,
+  storageWarn: false,
 
   toggleTheme: () => {
     const next: Theme = get().theme === 'dark' ? 'light' : 'dark';
@@ -57,6 +66,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   setCreatingTask: (creating) => set({ creatingTask: creating, selectedTaskId: creating ? null : get().selectedTaskId }),
   setProjectFilter: (project) => set({ projectFilter: project }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setLocalAccess: (v) => set({ localAccess: v }),
+  setStorageWarn: (v) => set({ storageWarn: v }),
 }));
 
 /** 应用启动时调用一次,把初始主题挂到 <html> */

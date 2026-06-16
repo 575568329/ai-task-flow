@@ -7,6 +7,9 @@ import type {
   RejectTaskRequest,
   TaskDiffResponse,
   DispatchTaskResponse,
+  StorageInfo,
+  StorageClearResponse,
+  StorageCategoryKey,
 } from '@ai-task-flow/shared';
 import { http } from './http';
 
@@ -35,4 +38,27 @@ export const taskApi = {
 export const systemApi = {
   /** 打开系统文件夹选择器 */
   selectDirectory: () => http.post<{ path: string | null }>('/system/select-directory', {}),
+
+  /** 获取数据目录各项占用 + 总占用 + 告警标志(silent:启动时拉取,后端未就绪不弹错) */
+  getStorage: () => http.get<StorageInfo>('/system/storage', true),
+
+  /** 按类别清理(仅 clearable 项生效),返回每类释放字节 + 清理后最新占用 */
+  clearStorage: (categories: StorageCategoryKey[]) =>
+    http.post<StorageClearResponse>('/system/storage/clear', { categories }),
 };
+
+/**
+ * 健康检查 + 访问上下文。
+ * /health 不在 /api 前缀下,故用原生 fetch 而非 http 封装。
+ * 失败时按"本机访问"兜底(不误屏蔽设置入口)。
+ */
+export async function fetchHealth(): Promise<{ localAccess: boolean }> {
+  try {
+    const res = await fetch('/health');
+    if (!res.ok) return { localAccess: true };
+    const data = await res.json();
+    return { localAccess: data?.localAccess ?? true };
+  } catch {
+    return { localAccess: true };
+  }
+}
