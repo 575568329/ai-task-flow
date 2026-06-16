@@ -85,6 +85,16 @@ function processChildren(children: React.ReactNode, sources: Source[]): React.Re
 }
 
 /**
+ * 规整图片地址:历史数据里图片 url 写死了 host:port(如 http://localhost:3000/api/uploads/xxx),
+ * 后端端口变动后这些地址失效。统一截取 /api/ 起的相对路径,走 vite proxy 到当前后端。
+ */
+function toRelativeApiUrl(src: string | undefined): string | undefined {
+  if (!src) return src;
+  const i = src.indexOf('/api/');
+  return i >= 0 ? src.slice(i) : src;
+}
+
+/**
  * 消息正文渲染:Markdown 富文本 + 可点引用角标。
  * 可复用组件,UI 与业务解耦,后续可抽入组件库。
  */
@@ -112,6 +122,15 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, sources
             <a href={href} target="_blank" rel="noopener noreferrer">
               {children}
             </a>
+          ),
+          // 图片:规整失效的绝对地址为相对路径,走 vite proxy
+          img: ({ src, alt }) => (
+            <img
+              className="mc-img"
+              src={toRelativeApiUrl(typeof src === 'string' ? src : undefined)}
+              alt={alt ?? ''}
+              loading="lazy"
+            />
           ),
         }}
       >

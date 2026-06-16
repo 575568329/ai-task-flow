@@ -6,7 +6,7 @@
 /* ============ 整体布局 ============ */
 .sp-chat-layout {
   display: flex;
-  height: calc(100vh - 56px); /* 减去顶部 AppNav（仅调研页有） */
+  height: 100%; /* 占满外层内容区（左侧全局导航之外的全部高度） */
   background: var(--sp-bg);
   color: var(--sp-text-primary);
   font-size: var(--sp-font-size-base);

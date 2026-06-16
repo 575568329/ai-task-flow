@@ -6,6 +6,7 @@ import { Clock, GitBranch, Copy, Trash2, Send } from 'lucide-react';
 import { buildClaudeCodePrompt, type TaskDTO } from '@ai-task-flow/shared';
 import { Tag } from './ui/Tag';
 import { toast } from './ui/Toaster';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTaskStore } from '@/stores/taskStore';
 import { PRIORITY_COLORS, STATUS_COLORS, relativeTime } from '@/lib/taskMeta';
 
@@ -18,6 +19,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
   const remove = useTaskStore((s) => s.remove);
   const dispatch = useTaskStore((s) => s.dispatch);
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -67,9 +69,13 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     }
   }
 
-  async function handleDelete(e: React.MouseEvent) {
+  function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`确认删除任务 ${task.id}?`)) return;
+    setConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    setConfirmOpen(false);
     setBusy(true);
     try {
       await remove(task.id);
@@ -167,6 +173,20 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="删除任务"
+        danger
+        confirmText="删除"
+        message={
+          <>
+            确定删除任务 <b>{task.id}</b> 吗？此操作无法恢复。
+          </>
+        }
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

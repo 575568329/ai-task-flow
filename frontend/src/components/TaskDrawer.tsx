@@ -10,6 +10,7 @@ import { DiffViewer } from './DiffViewer';
 import { StepEditor } from './StepEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { toast } from './ui/Toaster';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { taskApi, systemApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -137,6 +138,7 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
   const [showPreview, setShowPreview] = useState(true);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
   const [descUploading, setDescUploading] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
   const isNewTask = creating;
@@ -580,12 +582,26 @@ function TaskDrawerBody({ task, creating, onSave, onCreate, onDelete, onApprove,
               <Button
                 variant="danger"
                 disabled={busy}
-                onClick={() => {
-                  if (confirm(`确认删除任务 ${task.id}?`)) wrap(onDelete);
-                }}
+                onClick={() => setConfirmDeleteOpen(true)}
               >
                 删除
               </Button>
+              <ConfirmDialog
+                open={confirmDeleteOpen}
+                title="删除任务"
+                danger
+                confirmText="删除"
+                message={
+                  <>
+                    确定删除任务 <b>{task.id}</b> 吗？此操作无法恢复。
+                  </>
+                }
+                onConfirm={async () => {
+                  setConfirmDeleteOpen(false);
+                  await wrap(onDelete);
+                }}
+                onCancel={() => setConfirmDeleteOpen(false)}
+              />
             </>
           )}
         </div>

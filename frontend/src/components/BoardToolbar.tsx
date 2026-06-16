@@ -1,19 +1,21 @@
-// frontend/src/components/TopBar.tsx
-import { Moon, Sun, Plus, Search, Circle, MessageSquare } from 'lucide-react';
+// frontend/src/components/BoardToolbar.tsx
+import { Plus, Search, Circle } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Select } from './ui/Select';
 import { useUIStore } from '@/stores/uiStore';
 
-interface TopBarProps {
+interface BoardToolbarProps {
   projects: string[];
   sseConnected: boolean;
-  onNavigateToChat?: () => void;
 }
 
-export function TopBar({ projects, sseConnected, onNavigateToChat }: TopBarProps) {
-  const theme = useUIStore((s) => s.theme);
-  const toggleTheme = useUIStore((s) => s.toggleTheme);
+/**
+ * 看板内容区顶部工具条
+ * 由原 TopBar 裁剪而来：保留搜索/筛选/新建任务 + SSE 状态灯
+ * （品牌、资料调研入口、主题切换 已下沉到左侧 SidebarNav）
+ */
+export function BoardToolbar({ projects, sseConnected }: BoardToolbarProps) {
   const searchQuery = useUIStore((s) => s.searchQuery);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const projectFilter = useUIStore((s) => s.projectFilter);
@@ -22,24 +24,21 @@ export function TopBar({ projects, sseConnected, onNavigateToChat }: TopBarProps
 
   return (
     <header
-      className="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b px-6 py-3"
+      className="flex flex-wrap items-center gap-3 border-b px-5 py-3"
       style={{ background: 'var(--bg-lower)', borderColor: 'var(--border-primary)' }}
     >
-      <div className="flex items-center gap-2">
-        <h1 className="text-lg font-semibold">AI Task Flow</h1>
-        <span
-          title={sseConnected ? '实时推送已连接' : '实时推送断开'}
-          className="flex items-center"
-        >
-          <Circle
-            size={10}
-            fill={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
-            color={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
-          />
-        </span>
-      </div>
+      <span
+        title={sseConnected ? '实时推送已连接' : '实时推送断开'}
+        className="flex items-center"
+      >
+        <Circle
+          size={10}
+          fill={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
+          color={sseConnected ? 'var(--success-6)' : 'var(--error-6)'}
+        />
+      </span>
 
-      <div className="relative ml-2 w-56">
+      <div className="relative w-56">
         <Search
           size={15}
           className="absolute left-2.5 top-1/2 -translate-y-1/2"
@@ -64,23 +63,10 @@ export function TopBar({ projects, sseConnected, onNavigateToChat }: TopBarProps
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2">
         <Button variant="primary" onClick={() => setCreatingTask(true)}>
           <Plus size={16} />
           新建任务
-        </Button>
-
-        <div style={{ width: '1px', height: '20px', background: 'var(--border-primary)' }} />
-
-        {onNavigateToChat && (
-          <Button variant="secondary" onClick={onNavigateToChat}>
-            <MessageSquare size={16} />
-            资料调研
-          </Button>
-        )}
-
-        <Button variant="ghost" onClick={toggleTheme} aria-label="切换主题">
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
       </div>
     </header>

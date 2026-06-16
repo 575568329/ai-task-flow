@@ -10,6 +10,7 @@ import {
   updateConversation,
 } from '../../api/chat';
 import { streamChat } from '../../api/chatStream';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { ChatMessage } from '@ai-task-flow/shared';
 import { toast } from '../ui/Toaster';
 import { MessageContent } from './MessageContent';
@@ -91,6 +92,9 @@ export const ChatView: React.FC = () => {
       setMessages([]);
     }
   };
+
+  // 删除会话二次确认
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   /** 保存当前会话的自定义需求 */
   const handleSaveCustomPrompt = async (prompt: string) => {
@@ -216,7 +220,7 @@ export const ChatView: React.FC = () => {
                 className="sp-conversation-delete"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteConversation(conv.id);
+                  setPendingDeleteId(conv.id);
                 }}
               >
                 <Trash2 size={14} strokeWidth={2} />
@@ -372,6 +376,20 @@ export const ChatView: React.FC = () => {
           onSave={handleSaveCustomPrompt}
         />
       )}
+
+      {/* 删除会话二次确认 */}
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除对话"
+        danger
+        confirmText="删除"
+        message="确定删除这个对话吗？该对话的所有消息将被清除，且无法恢复。"
+        onConfirm={() => {
+          if (pendingDeleteId) handleDeleteConversation(pendingDeleteId);
+          setPendingDeleteId(null);
+        }}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 };

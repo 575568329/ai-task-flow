@@ -9,7 +9,7 @@ import {
   DragOverlay,
 } from '@dnd-kit/core';
 import type { TaskDTO, TaskStatus } from '@ai-task-flow/shared';
-import { TopBar } from './components/TopBar';
+import { BoardToolbar } from './components/BoardToolbar';
 import { KanbanColumn } from './components/KanbanColumn';
 import { TaskCard } from './components/TaskCard';
 import { TaskDrawer } from './components/TaskDrawer';
@@ -19,9 +19,8 @@ import { useUIStore } from './stores/uiStore';
 import { sseClient } from './api/sse';
 import { BOARD_COLUMNS } from './lib/taskMeta';
 import { ChatView } from './components/chat/ChatView';
-import { AppNav } from './components/AppNav';
-
-type View = 'kanban' | 'chat';
+import { TaskDocsView } from './components/TaskDocsView';
+import { SidebarNav, type View } from './components/SidebarNav';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('kanban');
@@ -94,7 +93,6 @@ function App() {
     if (!over) return;
 
     const taskId = active.id as string;
-    // over.id 可能是列(status)或另一张卡片(taskId)
     const overId = over.id as string;
     const targetStatus = BOARD_COLUMNS.includes(overId as TaskStatus)
       ? (overId as TaskStatus)
@@ -109,17 +107,15 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: 'var(--bg-bottom)', color: 'var(--text-1)' }}>
-      {currentView === 'chat' && <AppNav currentView={currentView} onViewChange={setCurrentView} />}
+    <div className="flex h-screen" style={{ background: 'var(--bg-bottom)', color: 'var(--text-1)' }}>
+      {/* 左侧全局导航（常驻） */}
+      <SidebarNav currentView={currentView} onViewChange={setCurrentView} />
 
-      {currentView === 'kanban' ? (
-        <>
-          <TopBar
-            projects={allProjects}
-            sseConnected={sseConnected}
-            onNavigateToChat={() => setCurrentView('chat')}
-          />
-
+      {/* 内容区:三个视图都常驻挂载,用 hidden 切换显隐(keep-alive),状态不丢 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 任务看板 */}
+        <div className={currentView === 'kanban' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <BoardToolbar projects={allProjects} sseConnected={sseConnected} />
           <main className="flex-1 overflow-x-auto p-5">
             <DndContext
               sensors={sensors}
@@ -141,12 +137,19 @@ function App() {
               </DragOverlay>
             </DndContext>
           </main>
-
           <TaskDrawer />
-        </>
-      ) : (
-        <ChatView />
-      )}
+        </div>
+
+        {/* 资料调研 */}
+        <div className={currentView === 'chat' ? 'flex-1 min-h-0' : 'hidden'}>
+          <ChatView />
+        </div>
+
+        {/* 任务文档 */}
+        <div className={currentView === 'docs' ? 'flex-1 min-h-0' : 'hidden'}>
+          <TaskDocsView />
+        </div>
+      </div>
 
       <Toaster />
     </div>

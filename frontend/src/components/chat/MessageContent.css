@@ -118,6 +118,16 @@
   margin: var(--sp-spacing-4) 0;
 }
 
+/* 图片:限宽防溢出,圆角 */
+.mc-markdown .mc-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--sp-radius-md, 8px);
+  border: 1px solid var(--sp-border-secondary, #e5e7eb);
+  display: block;
+  margin: var(--sp-spacing-2) 0;
+}
+
 /* 引用角标(圆形上标) */
 .mc-citation {
   display: inline-flex;

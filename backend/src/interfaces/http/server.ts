@@ -14,6 +14,7 @@ import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
 import { registerProjectRoutes } from './routes/projectRoutes.js';
 import { registerChatRoutes } from './routes/chatRoutes.js';
+import { registerFileRoutes } from './routes/fileRoutes.js';
 import systemRoutes from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
@@ -96,6 +97,7 @@ export async function createHttpServer(
   await registerProjectRoutes(fastify);
   await registerChatRoutes(fastify, chatRepository, chatService);
   await registerLlmConfigRoutes(fastify, llmConfigService);
+  await registerFileRoutes(fastify);
   await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)

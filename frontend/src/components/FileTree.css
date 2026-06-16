@@ -1,0 +1,77 @@
+/* FileTree 文件树样式 */
+.sp-file-tree {
+  font-size: var(--sp-font-size-sm);
+  color: var(--sp-text-primary);
+}
+
+.sp-ft-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--sp-text-primary);
+  cursor: pointer;
+  border-radius: var(--sp-radius-sm);
+  text-align: left;
+  transition: background var(--sp-transition-fast);
+}
+
+.sp-ft-node:hover {
+  background: var(--sp-fill-hover);
+}
+
+.sp-ft-node.active {
+  background: var(--sp-color-primary-light-9);
+  color: var(--sp-color-primary);
+}
+
+.sp-ft-chevron-ph {
+  display: inline-block;
+  width: 14px;
+}
+
+.sp-ft-ico-dir {
+  color: var(--sp-color-warning);
+  flex-shrink: 0;
+}
+
+.sp-ft-ico-file {
+  color: var(--sp-text-tertiary);
+  flex-shrink: 0;
+}
+
+.sp-ft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-ft-loading,
+.sp-ft-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  color: var(--sp-text-tertiary);
+  font-size: var(--sp-font-size-xs);
+}
+
+.sp-ft-error {
+  padding: 8px 12px;
+  color: var(--sp-color-error);
+  font-size: var(--sp-font-size-xs);
+}
+
+.sp-spin {
+  animation: sp-ft-spin 1s linear infinite;
+}
+
+@keyframes sp-ft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

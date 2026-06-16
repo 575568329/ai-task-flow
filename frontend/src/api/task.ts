@@ -27,6 +27,9 @@ export const taskApi = {
     http.post<TaskDTO>(`/tasks/${id}/approve`, data),
   reject: (id: string, data: RejectTaskRequest) =>
     http.post<TaskDTO>(`/tasks/${id}/reject`, data),
+  /** 获取任务转换好的 Markdown 文本(后端 buildTaskMarkdown 生成) */
+  getMarkdown: (id: string) =>
+    http.get<{ markdown: string }>(`/tasks/${id}/markdown`),
 };
 
 export const systemApi = {

@@ -1,0 +1,269 @@
+/**
+ * SidebarNav 左侧全局导航样式
+ * 符合 Spark-design：240px 宽，竖向，常驻
+ */
+
+.sp-sidebar-nav {
+  width: var(--sp-sidebar-width);
+  flex-shrink: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sp-bg);
+  border-right: 1px solid var(--sp-border-secondary);
+  transition: width var(--sp-transition-base);
+}
+
+/* 收起态:仅图标 */
+.sp-sidebar-nav.collapsed {
+  width: 64px;
+}
+
+/* ============ 品牌区 ============ */
+.sp-sn-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-spacing-2);
+  padding: var(--sp-spacing-6) var(--sp-spacing-5) var(--sp-spacing-4);
+  flex-shrink: 0;
+}
+
+.sp-sidebar-nav.collapsed .sp-sn-brand {
+  padding: var(--sp-spacing-4) var(--sp-spacing-2);
+  flex-direction: column;
+  gap: var(--sp-spacing-3);
+}
+
+.sp-sn-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  border: none;
+  border-radius: var(--sp-radius-md);
+  background: transparent;
+  color: var(--sp-text-tertiary);
+  cursor: pointer;
+  transition: all var(--sp-transition-fast);
+}
+
+.sp-sidebar-nav.collapsed .sp-sn-collapse {
+  margin-left: 0;
+}
+
+.sp-sn-collapse:hover {
+  background: var(--sp-fill-hover);
+  color: var(--sp-text-primary);
+}
+
+.sp-sn-logo {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--sp-color-primary), var(--sp-color-primary-hover));
+  color: var(--sp-text-on-primary);
+  border-radius: var(--sp-radius-md);
+  font-size: var(--sp-font-size-base);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sp-sn-brand-name {
+  font-size: var(--sp-font-size-lg);
+  font-weight: 600;
+  color: var(--sp-text-primary);
+}
+
+/* ============ 导航项 ============ */
+.sp-sn-items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-spacing-1);
+  padding: 0 var(--sp-spacing-3);
+  overflow-y: auto;
+}
+
+.sp-sn-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-spacing-3);
+  height: var(--sp-menu-item-height);
+  padding: 0 var(--sp-spacing-3);
+  border: none;
+  border-radius: var(--sp-radius-md);
+  background: transparent;
+  font-size: var(--sp-font-size-base);
+  font-weight: 500;
+  color: var(--sp-text-secondary);
+  cursor: pointer;
+  transition: all var(--sp-transition-fast);
+  text-align: left;
+}
+
+.sp-sn-item:hover {
+  background: var(--sp-fill-hover);
+  color: var(--sp-text-primary);
+}
+
+.sp-sn-item.active {
+  background: var(--sp-color-primary-light-9);
+  color: var(--sp-color-primary);
+}
+
+.sp-sn-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sp-sn-item-label {
+  flex: 1;
+}
+
+/* ============ 底部功能区 ============ */
+.sp-sn-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-spacing-1);
+  padding: var(--sp-spacing-3);
+  border-top: 1px solid var(--sp-border-secondary);
+  flex-shrink: 0;
+}
+
+.sp-sn-foot-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-spacing-3);
+  height: var(--sp-menu-item-height);
+  padding: 0 var(--sp-spacing-3);
+  border: none;
+  border-radius: var(--sp-radius-md);
+  background: transparent;
+  font-size: var(--sp-font-size-base);
+  color: var(--sp-text-secondary);
+  cursor: pointer;
+  transition: all var(--sp-transition-fast);
+}
+
+.sp-sn-foot-btn:hover {
+  background: var(--sp-fill-hover);
+  color: var(--sp-text-primary);
+}
+
+/* ============ 收起态覆盖 ============ */
+.sp-sidebar-nav.collapsed .sp-sn-items {
+  padding: 0 var(--sp-spacing-2);
+  align-items: center;
+}
+
+.sp-sidebar-nav.collapsed .sp-sn-item {
+  justify-content: center;
+  padding: 0;
+  width: 40px;
+}
+
+.sp-sidebar-nav.collapsed .sp-sn-footer {
+  padding: var(--sp-spacing-2);
+  align-items: center;
+}
+
+.sp-sidebar-nav.collapsed .sp-sn-foot-btn {
+  justify-content: center;
+  padding: 0;
+  width: 40px;
+}
+
+/* ============ 设置表单(LLM 配置 Modal) ============ */
+.sp-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-spacing-4);
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-field-label {
+  font-size: var(--sp-font-size-sm);
+  font-weight: 500;
+  color: var(--sp-text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sp-field-hint {
+  font-size: var(--sp-font-size-xs);
+  font-weight: 400;
+  color: var(--sp-text-secondary);
+}
+
+.sp-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius-md);
+  background: var(--sp-bg);
+  color: var(--sp-text-primary);
+  font-size: var(--sp-font-size-base);
+  outline: none;
+  transition: border-color var(--sp-transition-fast);
+  box-sizing: border-box;
+}
+
+.sp-input:focus {
+  border-color: var(--sp-color-primary);
+}
+
+.sp-input::placeholder {
+  color: var(--sp-text-placeholder);
+}
+
+/* Modal footer 通用按钮 */
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--sp-radius-md);
+  font-size: var(--sp-font-size-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--sp-transition-fast);
+}
+
+.sp-btn--primary {
+  background: var(--sp-color-primary);
+  color: var(--sp-text-on-primary);
+}
+
+.sp-btn--primary:hover {
+  background: var(--sp-color-primary-hover);
+}
+
+.sp-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sp-btn--secondary {
+  background: var(--sp-fill);
+  color: var(--sp-text-primary);
+}
+
+.sp-btn--secondary:hover {
+  background: var(--sp-fill-hover);
+}
