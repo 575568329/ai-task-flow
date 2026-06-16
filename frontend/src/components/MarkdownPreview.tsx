@@ -1,5 +1,7 @@
 // frontend/src/components/MarkdownPreview.tsx
 import ReactMarkdown from 'react-markdown';
+import { PhotoProvider, PhotoView } from 'react-photo-view';
+import 'react-photo-view/dist/react-photo-view.css';
 
 interface MarkdownPreviewProps {
   markdown: string;
@@ -15,6 +17,7 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
         color: 'var(--text-1)',
       }}
     >
+      <PhotoProvider maskOpacity={0.85} photoClosable bannerVisible={false}>
       <ReactMarkdown
         components={{
           h1: ({ children }) => (
@@ -64,17 +67,21 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
             </ol>
           ),
           img: ({ src, alt }) => (
-            <img
-              src={src}
-              alt={alt}
-              className="my-2 max-h-64 rounded border"
-              style={{ borderColor: 'var(--border-primary)' }}
-            />
+            <PhotoView src={src}>
+              <img
+                src={src}
+                alt={alt}
+                className="my-2 max-h-64 rounded border cursor-zoom-in transition-transform hover:scale-[1.02]"
+                style={{ borderColor: 'var(--border-primary)' }}
+                title="点击预览大图（滚轮缩放 / 拖拽平移 / ESC 关闭）"
+              />
+            </PhotoView>
           ),
         }}
       >
         {markdown}
       </ReactMarkdown>
+      </PhotoProvider>
     </div>
   );
 }

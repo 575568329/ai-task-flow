@@ -38,7 +38,11 @@ export default defineConfig({
     port: 5678, // 使用不容易被占用的端口
     proxy: {
       '/api': {
-        target: `http://localhost:${getBackendPort()}`,
+        // 必须用 127.0.0.1 而非 localhost:
+        // Windows 上 localhost 优先解析为 IPv6 ::1,若 ::1:port 被其他服务占用,
+        // 代理会错误转发到无关服务(曾踩坑:被某 Astro 服务占用导致 /api 全 404)。
+        // 后端绑定 0.0.0.0(覆盖 IPv4),固定走 127.0.0.1 最稳。
+        target: `http://127.0.0.1:${getBackendPort()}`,
         changeOrigin: true,
       },
     },

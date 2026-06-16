@@ -1,6 +1,8 @@
 // frontend/src/components/StepEditor.tsx
 import { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { PhotoProvider, PhotoView } from 'react-photo-view';
+import 'react-photo-view/dist/react-photo-view.css';
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Input';
 import { Switch } from './ui/Switch';
@@ -184,8 +186,13 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <DragDropContext onDragEnd={handleStepDragEnd}>
+    <PhotoProvider
+      maskOpacity={0.85}
+      photoClosable
+      bannerVisible={false}
+    >
+      <div className="flex flex-col gap-3">
+        <DragDropContext onDragEnd={handleStepDragEnd}>
         <Droppable droppableId="steps">
           {(provided) => (
             <div {...provided.droppableProps} ref={provided.innerRef} className="flex flex-col gap-2">
@@ -349,7 +356,8 @@ export function StepEditor({ steps, onChange }: StepEditorProps) {
       <Button variant="secondary" onClick={addStep}>
         + 添加步骤
       </Button>
-    </div>
+      </div>
+    </PhotoProvider>
   );
 }
 
@@ -449,14 +457,15 @@ function StepBlocks({ stepIndex, blocks, onBlockDragEnd, onUpdateText, onDeleteB
                         >
                           <GripVertical size={14} style={{ color: 'white' }} />
                         </div>
-                        <img
-                          src={block.url}
-                          alt={`步骤${stepIndex + 1}图片`}
-                          className="h-32 w-auto rounded border cursor-pointer transition-transform hover:scale-105"
-                          style={{ borderColor: 'var(--border-primary)' }}
-                          onClick={() => window.open(block.url, '_blank')}
-                          title="点击预览大图"
-                        />
+                        <PhotoView src={block.url}>
+                          <img
+                            src={block.url}
+                            alt={`步骤${stepIndex + 1}图片`}
+                            className="h-32 w-auto rounded border cursor-zoom-in transition-transform hover:scale-105"
+                            style={{ borderColor: 'var(--border-primary)' }}
+                            title="点击预览大图（滚轮缩放 / 拖拽平移 / ESC 关闭）"
+                          />
+                        </PhotoView>
                         <button
                           onClick={() => onDeleteBlock(blockIndex)}
                           className="absolute top-1 right-1 z-10 rounded-full bg-red-500 p-1 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 shadow-md"
