@@ -20,6 +20,8 @@ import { ChatService } from './application/research/ChatService.js';
 import { JsonLlmConfigRepository } from './infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from './application/llm-config/LlmConfigService.js';
 import { WebClipService } from './application/webclip/WebClipService.js';
+import { KnowledgeService } from './application/knowledge/KnowledgeService.js';
+import { knowledgeDirPath } from './config/dataDir.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 3000 */
@@ -76,6 +78,8 @@ export async function startApp(options: StartAppOptions = {}) {
   const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
   // 网页剪藏服务(存图 + LLM 拆解 + 回退),复用 LLM 配置
   const webClipService = new WebClipService(llmConfigService);
+  // 知识库服务
+  const knowledgeService = new KnowledgeService(knowledgeDirPath());
 
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
@@ -101,22 +105,6 @@ export async function startApp(options: StartAppOptions = {}) {
     console.log(`\n⚠ 端口 ${preferredPort} 被占用，已切换到 ${actualPort}\n`);
   }
 
-  // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
-  // 路径基于本模块位置解析到仓库根的 .logs/, 不依赖 process.cwd()——
-  // 否则 `cd backend && npm run dev` 会把文件写到 backend/.logs, 而 vite 读的是根 .logs, 两边对不上。
-  if (!options.frontendDist) {
-    try {
-      // backend/src/http-server.ts 或 backend/dist/http-server.js → 仓库根都是上溯两级
-      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-      const logsDir = path.join(repoRoot, '.logs');
-      fs.mkdirSync(logsDir, { recursive: true });
-      fs.writeFileSync(path.join(logsDir, 'backend-port.txt'), actualPort.toString(), 'utf-8');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`! 写入端口文件失败(不影响后端, 仅 vite 代理可能落到默认端口): ${message}`);
-    }
-  }
-
   const config = {
     port: actualPort,
     host,
@@ -125,7 +113,32 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  return startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService);
+  const server = await startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService);
+
+  // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
+  // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,
+  // 以 server 实际监听端口为准,否则 vite 代理会落到旧端口连不上。
+  // 路径基于本模块位置解析到仓库根的 .logs/, 不依赖 process.cwd()——
+  // 否则 `cd backend && npm run dev` 会把文件写到 backend/.logs, 而 vite 读的是根 .logs, 两边对不上。
+  if (!options.frontendDist) {
+    const addr = server.server.address();
+    const listenedPort = typeof addr === 'object' && addr !== null ? addr.port : actualPort;
+    if (listenedPort !== actualPort) {
+      console.log(`⚠ 实际监听端口 ${listenedPort}(启动竞态顺延,vite 代理将跟随)\n`);
+    }
+    try {
+      // backend/src/http-server.ts 或 backend/dist/http-server.js → 仓库根都是上溯两级
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+      const logsDir = path.join(repoRoot, '.logs');
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(path.join(logsDir, 'backend-port.txt'), listenedPort.toString(), 'utf-8');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`! 写入端口文件失败(不影响后端, 仅 vite 代理可能落到默认端口): ${message}`);
+    }
+  }
+
+  return server;
 }
 
 // 当作为脚本直接执行时(npm run http / dev),立即启动

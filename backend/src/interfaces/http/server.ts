@@ -6,6 +6,7 @@ import staticPlugin from '@fastify/static';
 import path from 'path';
 import fs from 'fs';
 import { uploadsDirPath } from '../../config/dataDir.js';
+import { findAvailablePort } from '../../utils/port-finder.js';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
 import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
@@ -15,11 +16,13 @@ import { registerUploadRoutes } from './routes/uploadRoutes.js';
 import { registerProjectRoutes } from './routes/projectRoutes.js';
 import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
+import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
 import systemRoutes from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
+import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 
@@ -52,6 +55,7 @@ export async function createHttpServer(
   chatService: ChatService,
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
+  knowledgeService: KnowledgeService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -90,7 +94,8 @@ export async function createHttpServer(
   // 从而不被 PNA 拦(和 GET 同层,GET 能过是铁证)。Chrome 官方文档:PNA 只 gate 触发预检的请求。
   fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_request, body, done) => {
     try {
-      done(null, JSON.parse(body));
+      const text = typeof body === 'string' ? body : body.toString('utf-8');
+      done(null, JSON.parse(text));
     } catch (err) {
       done(err instanceof Error ? err : new Error('text/plain body 不是合法 JSON'));
     }
@@ -144,6 +149,7 @@ export async function createHttpServer(
   await registerLlmConfigRoutes(fastify, llmConfigService);
   await registerWebClipRoutes(fastify, webClipService);
   await registerFileRoutes(fastify);
+  await registerKnowledgeRoutes(fastify, knowledgeService);
   await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)
@@ -167,6 +173,40 @@ export async function createHttpServer(
   return fastify;
 }
 
+/** 打印 ready 横幅(成功监听后) */
+function printReady(config: HttpServerConfig) {
+  const url = `http://localhost:${config.port}`;
+  if (config.frontendDist) {
+    console.log('========================================');
+    console.log(`✓ AI Task Flow ready: ${url}`);
+    console.log(`  - Web UI:  ${url}`);
+    console.log(`  - API:     ${url}/api`);
+    console.log('========================================');
+  } else {
+    console.log('========================================');
+    console.log(`✓ Backend ready: ${url}`);
+    console.log(`  (Frontend served separately via Vite at http://localhost:5678)`);
+    console.log('========================================');
+  }
+}
+
+/** 把 listen 阶段的非 EADDRINUSE 错误翻译成友好提示(EADDRINUSE 由重试逻辑接管) */
+function reportListenError(code: string | undefined, config: HttpServerConfig, err: unknown) {
+  if (code === 'EACCES') {
+    console.error('');
+    console.error(`✗ 没有权限监听端口 ${config.port}`);
+    console.error('  小于 1024 的端口需要管理员权限,建议换 3000 / 8080 等');
+    console.error('');
+  } else {
+    console.error('');
+    console.error(`✗ 启动失败: ${(err as Error)?.message ?? String(err)}`);
+    console.error('');
+  }
+}
+
+/** listen 被抢占时的最大重试次数(每次顺延一个端口) */
+const LISTEN_RETRY_ATTEMPTS = 5;
+
 export async function startHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
@@ -176,47 +216,49 @@ export async function startHttpServer(
   chatService: ChatService,
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
+  knowledgeService: KnowledgeService,
 ) {
-  const server = await createHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService);
+  // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
+  let currentConfig = config;
 
-  try {
-    await server.listen({ port: config.port, host: config.host });
-    const url = `http://localhost:${config.port}`;
-    if (config.frontendDist) {
-      console.log('========================================');
-      console.log(`✓ AI Task Flow ready: ${url}`);
-      console.log(`  - Web UI:  ${url}`);
-      console.log(`  - API:     ${url}/api`);
-      console.log('========================================');
-    } else {
-      console.log('========================================');
-      console.log(`✓ Backend ready: ${url}`);
-      console.log(`  (Frontend served separately via Vite at http://localhost:5678)`);
-      console.log('========================================');
+  for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService);
+    try {
+      await server.listen({ port: currentConfig.port, host: currentConfig.host });
+      printReady(currentConfig);
+      return server;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      // 非端口占用(权限不足等):不重试,直接友好报错退出
+      if (code !== 'EADDRINUSE') {
+        reportListenError(code, currentConfig, err);
+        process.exit(1);
+      }
+      // EADDRINUSE:TOCTOU 竞态(startApp 探测端口空闲 → fastify 初始化期间被其他进程抢占)。
+      // 关闭当前 server,顺延到下一个空闲端口重建重试,避免直接退出。
+      await server.close().catch(() => {});
+      let nextPort: number;
+      try {
+        nextPort = await findAvailablePort(currentConfig.port + 1, currentConfig.host, 20);
+      } catch {
+        console.error('');
+        console.error(`✗ 端口 ${currentConfig.port} 被占,且后续 20 个端口均无空闲`);
+        console.error('  建议清理残留进程(taskkill /IM node.exe /F)后重试');
+        console.error('');
+        process.exit(1);
+      }
+      if (attempt === 0) {
+        console.log(`⚠ 端口 ${config.port} 在 listen 时被占用(启动竞态),自动顺延重试`);
+      }
+      console.log(`  重试 ${attempt + 1}/${LISTEN_RETRY_ATTEMPTS}: ${currentConfig.port} → ${nextPort}`);
+      currentConfig = { ...currentConfig, port: nextPort };
     }
-  } catch (err) {
-    // 把常见错误翻译成友好提示;不再 dump 整个 fastify JSON 日志
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'EADDRINUSE') {
-      console.error('');
-      console.error(`✗ 端口 ${config.port} 已被占用`);
-      console.error('');
-      console.error('  解决办法(任选一个):');
-      console.error(`    1. 用其他端口:   ai-task-flow --port 8080`);
-      console.error(`    2. 释放该端口后重试`);
-      console.error('');
-    } else if (code === 'EACCES') {
-      console.error('');
-      console.error(`✗ 没有权限监听端口 ${config.port}`);
-      console.error('  小于 1024 的端口需要管理员权限,建议换 3000 / 8080 等');
-      console.error('');
-    } else {
-      console.error('');
-      console.error(`✗ 启动失败: ${(err as Error)?.message ?? String(err)}`);
-      console.error('');
-    }
-    process.exit(1);
   }
 
-  return server;
+  console.error('');
+  console.error(`✗ 连续 ${LISTEN_RETRY_ATTEMPTS} 次监听都被抢占(端口 ${config.port} 附近持续竞争)`);
+  console.error('  这通常意味着机器上有大量残留 node 进程轮流抢端口');
+  console.error('  建议:taskkill /IM node.exe /F 清理后重试');
+  console.error('');
+  process.exit(1);
 }
