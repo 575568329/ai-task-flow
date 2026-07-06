@@ -1,70 +1,57 @@
 // frontend/src/components/DiffViewer.tsx
-import { useEffect, useState } from 'react';
-import { parseDiff, Diff, Hunk } from 'react-diff-view';
-import 'react-diff-view/style/index.css';
-import { taskApi } from '@/api/task';
+// 轻量 diff 渲染:按行首符号着色(@@/+/-/文件头)+ 行号,monospace,零外部 CSS 依赖。
+// 不用 react-diff-view(其全局 CSS 与 Tailwind 主题易冲突),自渲染足够审查场景。
+import { cn } from '@/lib/utils';
 
 interface DiffViewerProps {
-  taskId: string;
+  text: string;
+  className?: string;
 }
 
-export function DiffViewer({ taskId }: DiffViewerProps) {
-  const [diffText, setDiffText] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+type LineKind = 'hunk' | 'add' | 'del' | 'context' | 'meta';
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    // base 不传,后端默认 main;失败时提示(worktree 基线分支可能不同)
-    taskApi
-      .getDiff(taskId)
-      .then((res) => {
-        if (!cancelled) setDiffText(res.diff);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : '获取 diff 失败');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [taskId]);
+function classify(line: string): LineKind {
+  if (line.startsWith('@@')) return 'hunk';
+  if (line.startsWith('+++') || line.startsWith('---')) return 'meta';
+  if (line.startsWith('+')) return 'add';
+  if (line.startsWith('-')) return 'del';
+  return 'context';
+}
 
-  if (loading) {
-    return <p className="text-sm" style={{ color: 'var(--text-2)' }}>加载 diff…</p>;
-  }
-  if (error) {
+const KIND_CLASS: Record<LineKind, string> = {
+  hunk: 'bg-primary/10 text-primary',
+  add: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  del: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  meta: 'text-muted-foreground font-semibold',
+  context: '',
+};
+
+export function DiffViewer({ text, className }: DiffViewerProps) {
+  const lines = text.split('\n');
+  if (lines.length === 0 || (lines.length === 1 && !lines[0])) {
     return (
-      <p className="text-sm" style={{ color: 'var(--error-6)' }}>
-        {error}
-      </p>
+      <div className="text-muted-foreground p-3 text-xs">(无改动)</div>
     );
   }
-  if (!diffText || !diffText.trim()) {
-    return <p className="text-sm" style={{ color: 'var(--text-2)' }}>无变更</p>;
-  }
-
-  const files = parseDiff(diffText);
 
   return (
-    <div className="overflow-x-auto rounded-lg border text-xs" style={{ borderColor: 'var(--border-primary)' }}>
-      {files.map((file, i) => (
-        <div key={i}>
-          <div
-            className="px-3 py-1.5 font-mono font-semibold"
-            style={{ background: 'var(--fill-hover)' }}
-          >
-            {file.oldPath === file.newPath ? file.newPath : `${file.oldPath} → ${file.newPath}`}
+    <pre
+      className={cn(
+        'overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5',
+        className,
+      )}
+    >
+      {lines.map((line, idx) => {
+        const kind = classify(line);
+        return (
+          <div key={idx} className={cn('flex', KIND_CLASS[kind])}>
+            <span className="text-muted-foreground/50 w-10 shrink-0 select-none pr-2 text-right tabular-nums">
+              {idx + 1}
+            </span>
+            <span className="whitespace-pre">{line || ' '}</span>
           </div>
-          <Diff viewType="unified" diffType={file.type} hunks={file.hunks}>
-            {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
-          </Diff>
-        </div>
-      ))}
-    </div>
+        );
+      })}
+    </pre>
   );
 }

@@ -1,395 +1,337 @@
 // frontend/src/components/chat/ChatView.tsx
-import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Send, Square, Globe, Bot, Copy, RefreshCw, Check } from 'lucide-react';
-import { useChatStore } from '../../stores/chatStore';
+// 资料调研主视图:会话列表 + 消息流 + 输入区 + 流式驱动(streamChat → chatStore)。
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Plus, Send, Trash2, Settings2, Loader2, Globe } from 'lucide-react';
+import type { ChatMessage, ChatRole, Source } from '@ai-task-flow/shared';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { toast } from '@/components/ui/Toaster';
+import { cn } from '@/lib/utils';
+import { useChatStore } from '@/stores/chatStore';
 import {
   getConversations,
   createConversation,
   deleteConversation,
   getMessages,
-  updateConversation,
-} from '../../api/chat';
-import { streamChat } from '../../api/chatStream';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
-import type { ChatMessage } from '@ai-task-flow/shared';
-import { toast } from '../ui/Toaster';
+} from '@/api/chat';
+import { streamChat } from '@/api/chatStream';
 import { MessageContent } from './MessageContent';
 import { SourceList } from './SourceList';
 import { CustomPromptPanel } from './CustomPromptPanel';
-import './ChatView.css';
 
-/**
- * 调研聊天主视图
- * - 富文本(Markdown)渲染 + 可点引用角标
- * - assistant 消息工具栏:复制 / 重新回答
- * - 侧边自定义需求面板(每对话独立,每轮生效)
- */
-export const ChatView: React.FC = () => {
-  const {
-    conversations,
-    currentConversationId,
-    messages,
-    isStreaming,
-    currentAssistantMessage,
-    currentSources,
-    progressSteps,
-    setConversations,
-    setCurrentConversation,
-    setMessages,
-    patchConversation,
-    removeLastAssistantMessage,
-    startStreaming,
-    appendDelta,
-    setSources,
-    addProgressStep,
-    finishStreaming,
-    resetStream,
-  } = useChatStore();
+interface MessageBubbleProps {
+  role: ChatRole;
+  content: string;
+  sources?: Source[];
+  streaming?: boolean;
+  progressSteps?: string[];
+}
 
-  const [userInput, setUserInput] = useState('');
-  const [useWebSearch, setUseWebSearch] = useState(() => {
-    return localStorage.getItem('chat-web-search') !== 'false';
-  });
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+function MessageBubble({
+  role,
+  content,
+  sources,
+  streaming,
+  progressSteps,
+}: MessageBubbleProps) {
+  const isUser = role === 'user';
+  return (
+    <div className={cn('mb-4 flex', isUser ? 'justify-end' : 'justify-start')}>
+      <div
+        className={cn(
+          'max-w-[80%] rounded-lg px-3 py-2',
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+        )}
+      >
+        {isUser ? (
+          <div className="whitespace-pre-wrap text-sm">{content}</div>
+        ) : content ? (
+          <MessageContent content={content} />
+        ) : (
+          <div className="text-muted-foreground text-xs">思考中…</div>
+        )}
+
+        {streaming && progressSteps && progressSteps.length > 0 && (
+          <div className="mt-2 flex flex-col gap-0.5 text-[10px] opacity-70">
+            {progressSteps.map((step, index) => (
+              <div key={index}>• {step}</div>
+            ))}
+          </div>
+        )}
+
+        {!isUser && sources && sources.length > 0 && !streaming && (
+          <SourceList sources={sources} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ChatView() {
+  const conversations = useChatStore((s) => s.conversations);
+  const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const messages = useChatStore((s) => s.messages);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const currentAssistantMessage = useChatStore((s) => s.currentAssistantMessage);
+  const currentSources = useChatStore((s) => s.currentSources);
+  const progressSteps = useChatStore((s) => s.progressSteps);
+
+  const setConversations = useChatStore((s) => s.setConversations);
+  const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
+  const setMessages = useChatStore((s) => s.setMessages);
+  const startStreaming = useChatStore((s) => s.startStreaming);
+  const appendDelta = useChatStore((s) => s.appendDelta);
+  const setSources = useChatStore((s) => s.setSources);
+  const addProgressStep = useChatStore((s) => s.addProgressStep);
+  const finishStreaming = useChatStore((s) => s.finishStreaming);
+  const resetStream = useChatStore((s) => s.resetStream);
+
+  const [input, setInput] = useState('');
+  const [useWebSearch, setUseWebSearch] = useState(true);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptConvId, setPromptConvId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const currentConversation = conversations.find((c) => c.id === currentConversationId);
-
-  // 初始化：加载会话列表
+  // 加载会话列表
   useEffect(() => {
-    getConversations().then(setConversations).catch(console.error);
+    getConversations()
+      .then(setConversations)
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : '加载会话失败')
+      );
   }, [setConversations]);
 
-  // 切换会话时加载消息
+  // 切换会话 → 加载消息
   useEffect(() => {
-    if (currentConversationId) {
-      getMessages(currentConversationId).then(setMessages).catch(console.error);
+    if (!currentConversationId) {
+      setMessages([]);
+      return;
     }
+    getMessages(currentConversationId)
+      .then(setMessages)
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : '加载消息失败')
+      );
   }, [currentConversationId, setMessages]);
 
-  // 自动滚动到底部
+  // 新消息/流式增量 → 滚到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentAssistantMessage, progressSteps]);
 
-  // 联网开关记忆
-  useEffect(() => {
-    localStorage.setItem('chat-web-search', String(useWebSearch));
-  }, [useWebSearch]);
-
-  const handleNewChat = async () => {
-    const conv = await createConversation('新对话');
-    setConversations([conv, ...conversations]);
-    setCurrentConversation(conv.id);
+  const onNewConversation = () => {
+    setCurrentConversation(null);
     setMessages([]);
+    setInput('');
   };
 
-  const handleDeleteConversation = async (id: string) => {
-    await deleteConversation(id);
-    setConversations(conversations.filter((c) => c.id !== id));
-    if (currentConversationId === id) {
-      setCurrentConversation(null);
-      setMessages([]);
-    }
-  };
-
-  // 删除会话二次确认
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-
-  /** 保存当前会话的自定义需求 */
-  const handleSaveCustomPrompt = async (prompt: string) => {
-    if (!currentConversationId) return;
+  const onDeleteConversation = async (id: string) => {
+    if (!window.confirm('删除该对话?消息将一并删除。')) return;
     try {
-      await updateConversation(currentConversationId, { customPrompt: prompt });
-      patchConversation(currentConversationId, { customPrompt: prompt });
-      toast.success('自定义需求已保存');
+      await deleteConversation(id);
+      const remaining = conversations.filter((c) => c.id !== id);
+      setConversations(remaining);
+      if (currentConversationId === id) {
+        setCurrentConversation(remaining[0]?.id ?? null);
+      }
     } catch (error) {
-      toast.error('保存失败,请重试');
-      throw error;
+      toast.error(error instanceof Error ? error.message : '删除失败');
     }
   };
 
-  /** 跑一轮流式对话(发送 or 重新回答) */
-  const runStream = async (params: {
-    message: string;
-    regenerate?: boolean;
-    /** 本轮失败时的回调(用于 regenerate 失败后恢复消息) */
-    onFailure?: () => void;
-  }) => {
-    if (!currentConversationId) return;
-    startStreaming();
+  const send = async () => {
+    const text = input.trim();
+    if (!text || isStreaming) return;
+    setInput('');
+
+    let conversationId = currentConversationId;
     try {
+      // 无当前会话则先创建(标题取前 24 字)
+      if (!conversationId) {
+        const conversation = await createConversation(text.slice(0, 24) || '新对话');
+        conversationId = conversation.id;
+        setConversations([conversation, ...conversations]);
+        setCurrentConversation(conversation.id);
+      }
+
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        conversationId,
+        role: 'user',
+        content: text,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages([...messages, userMessage]);
+      startStreaming();
+
       for await (const event of streamChat({
-        conversationId: currentConversationId,
-        message: params.message,
+        conversationId,
+        message: text,
         useWebSearch,
-        regenerate: params.regenerate,
       })) {
-        if (event.type === 'progress') {
-          addProgressStep(event.output);
-        } else if (event.type === 'source') {
-          setSources(event.sources);
-        } else if (event.type === 'text-delta') {
-          appendDelta(event.delta);
-        } else if (event.type === 'done') {
-          finishStreaming(event.messageId);
-        } else if (event.type === 'error') {
-          console.error('SSE error:', event.message);
-          toast.error(event.message || '对话出错,请稍后重试');
-          resetStream();
-          params.onFailure?.();
+        switch (event.type) {
+          case 'progress':
+            addProgressStep(event.output);
+            break;
+          case 'source':
+            setSources(event.sources);
+            break;
+          case 'text-delta':
+            appendDelta(event.delta);
+            break;
+          case 'done':
+            finishStreaming(event.messageId);
+            break;
+          case 'error':
+            throw new Error(event.message);
         }
       }
     } catch (error) {
-      console.error('Stream failed:', error);
-      const msg = error instanceof Error ? error.message : '网络异常,请检查后端服务';
-      toast.error(msg);
       resetStream();
-      params.onFailure?.();
+      toast.error(error instanceof Error ? error.message : '发送失败');
     }
   };
 
-  const handleSend = async () => {
-    if (!userInput.trim() || isStreaming || !currentConversationId) return;
-
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      conversationId: currentConversationId,
-      role: 'user',
-      content: userInput,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages([...messages, userMessage]);
-    const sentInput = userInput;
-    setUserInput('');
-    await runStream({ message: sentInput });
-  };
-
-  /** 重新回答:乐观移除最后一条 assistant,带最新自定义需求重新生成;
-   *  失败时从后端重新拉取恢复(后端在新答成功前不会删旧答)。 */
-  const handleRegenerate = async () => {
-    if (isStreaming || !currentConversationId) return;
-    const convId = currentConversationId;
-    removeLastAssistantMessage();
-    // message 字段在 regenerate 模式下后端会忽略(复用已存最后一条 user)
-    await runStream({
-      message: '',
-      regenerate: true,
-      onFailure: () => {
-        // 后端未删旧答,重新拉取即可恢复界面与数据一致
-        getMessages(convId).then(setMessages).catch(console.error);
-      },
-    });
-  };
-
-  /** 复制 assistant 正文 */
-  const handleCopy = async (content: string, messageId: string) => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopiedId(messageId);
-      setTimeout(() => setCopiedId(null), 1500);
-    } catch {
-      toast.error('复制失败');
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void send();
     }
   };
-
-  // 当前对话最后一条 assistant 消息 id(只有它能"重新回答")
-  const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   return (
-    <div className="sp-chat-layout">
-      {/* 侧栏 240px */}
-      <aside className="sp-sidebar">
-        <div className="sp-sidebar-header">
-          <button className="sp-new-chat-btn" onClick={handleNewChat}>
-            <Plus size={18} strokeWidth={2} />
-            <span>新对话</span>
-          </button>
+    <div className="flex h-full">
+      {/* 左:会话列表 */}
+      <aside className="bg-muted/30 flex w-60 shrink-0 flex-col border-r">
+        <div className="flex items-center justify-between border-b px-3 py-2">
+          <span className="text-sm font-semibold">会话</span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={onNewConversation}
+            aria-label="新建会话"
+          >
+            <Plus className="size-4" />
+          </Button>
         </div>
-
-        <div className="sp-conversation-list">
-          {conversations.map((conv) => (
+        <div className="flex-1 overflow-y-auto p-1.5">
+          {conversations.length === 0 && (
+            <div className="text-muted-foreground p-2 text-xs">点击 + 新建对话</div>
+          )}
+          {conversations.map((conversation) => (
             <div
-              key={conv.id}
-              className={`sp-conversation-item ${currentConversationId === conv.id ? 'active' : ''}`}
-              onClick={() => setCurrentConversation(conv.id)}
+              key={conversation.id}
+              className={cn(
+                'group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5',
+                conversation.id === currentConversationId
+                  ? 'bg-accent'
+                  : 'hover:bg-accent/50'
+              )}
+              onClick={() => setCurrentConversation(conversation.id)}
             >
-              <span className="sp-conversation-title">{conv.title}</span>
-              <button
-                className="sp-conversation-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPendingDeleteId(conv.id);
+              {conversation.customPrompt && (
+                <span className="bg-primary size-1.5 shrink-0 rounded-full" />
+              )}
+              <span className="flex-1 truncate text-sm">
+                {conversation.title || '新对话'}
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6 opacity-0 group-hover:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPromptConvId(conversation.id);
+                  setPromptOpen(true);
                 }}
+                aria-label="自定义需求"
               >
-                <Trash2 size={14} strokeWidth={2} />
-              </button>
+                <Settings2 className="size-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive size-6 opacity-0 group-hover:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onDeleteConversation(conversation.id);
+                }}
+                aria-label="删除会话"
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
             </div>
           ))}
         </div>
       </aside>
 
-      {/* 对话区 */}
-      <main className="sp-chat-main">
-        {currentConversationId ? (
-          <>
-            <div className="sp-message-area">
-              <div className="sp-message-container">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`sp-message ${msg.role}`}>
-                    {msg.role === 'assistant' && (
-                      <div className="sp-ai-header">
-                        <div className="sp-ai-avatar">
-                          <Bot size={18} strokeWidth={2} />
-                        </div>
-                        <span className="sp-ai-name">调研助手</span>
-                      </div>
-                    )}
-                    <div className={`sp-bubble ${msg.role}`}>
-                      {msg.role === 'assistant' ? (
-                        <>
-                          <MessageContent content={msg.content} sources={msg.sources} />
-                          <SourceList sources={msg.sources ?? []} />
-                          {/* 工具栏:复制 / 重新回答 */}
-                          <div className="sp-msg-toolbar">
-                            <button
-                              className="sp-msg-tool"
-                              onClick={() => handleCopy(msg.content, msg.id)}
-                              title="复制"
-                            >
-                              {copiedId === msg.id ? (
-                                <Check size={15} strokeWidth={2} />
-                              ) : (
-                                <Copy size={15} strokeWidth={2} />
-                              )}
-                              <span>{copiedId === msg.id ? '已复制' : '复制'}</span>
-                            </button>
-                            {msg.id === lastAssistantId && (
-                              <button
-                                className="sp-msg-tool"
-                                onClick={handleRegenerate}
-                                disabled={isStreaming}
-                                title="按最新自定义需求重新回答"
-                              >
-                                <RefreshCw size={15} strokeWidth={2} />
-                                <span>重新回答</span>
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="sp-msg-text">{msg.content}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {/* 流式中的 AI 消息 */}
-                {isStreaming && (
-                  <div className="sp-message assistant">
-                    <div className="sp-ai-header">
-                      <div className="sp-ai-avatar">
-                        <Bot size={18} strokeWidth={2} />
-                      </div>
-                      <span className="sp-ai-name">调研助手</span>
-                    </div>
-
-                    {/* 思考过程区 */}
-                    {progressSteps.length > 0 && (
-                      <div className="sp-thinking">
-                        {progressSteps.map((step, i) => (
-                          <div key={i} className="sp-thinking-step">
-                            {step}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="sp-bubble assistant">
-                      {currentSources.length > 0 && (
-                        <SourceList sources={currentSources} />
-                      )}
-                      <MessageContent content={currentAssistantMessage} sources={currentSources} />
-                      <span className="sp-cursor" />
-                    </div>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
+      {/* 右:消息流 + 输入 */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {messages.length === 0 && !isStreaming && (
+            <div className="text-muted-foreground mt-10 text-center text-sm">
+              输入问题开始调研…
             </div>
+          )}
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              role={message.role}
+              content={message.content}
+              sources={message.sources}
+            />
+          ))}
+          {isStreaming && (
+            <MessageBubble
+              role="assistant"
+              content={currentAssistantMessage}
+              sources={currentSources}
+              streaming
+              progressSteps={progressSteps}
+            />
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-            {/* 底部输入框 */}
-            <div className="sp-input-area">
-              <div className="sp-input-box">
-                <textarea
-                  className="sp-textarea"
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder="向我提问，开启联网检索获取带引用的资料…"
-                  disabled={isStreaming}
-                />
-                <div className="sp-input-toolbar">
-                  <button
-                    className={`sp-tool-btn ${useWebSearch ? 'active' : ''}`}
-                    onClick={() => setUseWebSearch(!useWebSearch)}
-                  >
-                    <Globe size={18} strokeWidth={2} />
-                    <span>联网</span>
-                  </button>
-
-                  <button
-                    className="sp-send-btn"
-                    onClick={handleSend}
-                    disabled={isStreaming || !userInput.trim()}
-                  >
-                    {isStreaming ? <Square size={16} strokeWidth={2} /> : <Send size={16} strokeWidth={2} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="sp-empty-state">
-            <Bot size={48} strokeWidth={1.5} />
-            <p>选择或新建一个对话开始资料调研</p>
-            <button className="sp-new-chat-btn" onClick={handleNewChat}>
-              <Plus size={18} strokeWidth={2} />
-              <span>新对话</span>
-            </button>
+        <div className="border-t p-3">
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="输入问题,Enter 发送,Shift+Enter 换行"
+              className="max-h-40 min-h-10 resize-none"
+            />
+            <Button
+              size="icon"
+              onClick={() => void send()}
+              disabled={isStreaming || !input.trim()}
+              aria-label="发送"
+            >
+              {isStreaming ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+            </Button>
           </div>
-        )}
-      </main>
+          <label className="mt-1.5 flex items-center gap-2 text-xs">
+            <Switch checked={useWebSearch} onCheckedChange={setUseWebSearch} />
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Globe className="size-3" />
+              联网搜索
+            </span>
+          </label>
+        </div>
+      </div>
 
-      {/* 自定义需求面板(仅在选中会话时显示) */}
-      {currentConversation && (
-        <CustomPromptPanel
-          key={currentConversation.id}
-          value={currentConversation.customPrompt ?? ''}
-          onSave={handleSaveCustomPrompt}
-        />
-      )}
-
-      {/* 删除会话二次确认 */}
-      <ConfirmDialog
-        open={pendingDeleteId !== null}
-        title="删除对话"
-        danger
-        confirmText="删除"
-        message="确定删除这个对话吗？该对话的所有消息将被清除，且无法恢复。"
-        onConfirm={() => {
-          if (pendingDeleteId) handleDeleteConversation(pendingDeleteId);
-          setPendingDeleteId(null);
-        }}
-        onCancel={() => setPendingDeleteId(null)}
+      <CustomPromptPanel
+        open={promptOpen}
+        onOpenChange={setPromptOpen}
+        conversationId={promptConvId}
       />
     </div>
   );
-};
+}

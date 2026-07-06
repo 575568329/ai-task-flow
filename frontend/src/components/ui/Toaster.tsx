@@ -1,71 +1,84 @@
 // frontend/src/components/ui/Toaster.tsx
-import { useEffect } from 'react';
+// 轻量自建 Toast(基于 zustand)。导出 toast 对象 + <Toaster /> 组件。
+// 业务层契约:api/http.ts、stores/llmConfigStore.ts 直接 import { toast } 并调
+// toast.success/error/info —— 此 API 务必保持稳定,不可改名。
 import { create } from 'zustand';
-import { CheckCircle, XCircle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
-interface Toast {
+
+interface ToastItem {
   id: number;
   type: ToastType;
   message: string;
 }
 
 interface ToastState {
-  toasts: Toast[];
+  toasts: ToastItem[];
   push: (type: ToastType, message: string) => void;
-  remove: (id: number) => void;
+  dismiss: (id: number) => void;
 }
 
-let seq = 0;
+const TOAST_DURATION_MS = 3000;
+
 const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   push: (type, message) => {
-    const id = ++seq;
-    set((s) => ({ toasts: [...s.toasts, { id, type, message }] }));
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3000);
+    // 运行时(浏览器)用 Date.now 生成 id,避免使用 index 作 key
+    const id = Date.now() + Math.random();
+    set((state) => ({ toasts: [...state.toasts, { id, type, message }] }));
+    setTimeout(() => {
+      set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+    }, TOAST_DURATION_MS);
   },
-  remove: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 }));
 
-/** 命令式 API:toast.success('xxx') */
+// 业务层使用的命令式 API
 export const toast = {
-  success: (m: string) => useToastStore.getState().push('success', m),
-  error: (m: string) => useToastStore.getState().push('error', m),
-  info: (m: string) => useToastStore.getState().push('info', m),
+  success: (message: string) => useToastStore.getState().push('success', message),
+  error: (message: string) => useToastStore.getState().push('error', message),
+  info: (message: string) => useToastStore.getState().push('info', message),
 };
 
-const colorMap: Record<ToastType, string> = {
-  success: 'var(--success-6)',
-  error: 'var(--error-6)',
-  info: 'var(--primary-6)',
+const ICON_MAP: Record<ToastType, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: XCircle,
+  info: Info,
+};
+
+const ICON_CLASS: Record<ToastType, string> = {
+  success: 'text-emerald-500',
+  error: 'text-destructive',
+  info: 'text-primary',
 };
 
 export function Toaster() {
   const toasts = useToastStore((s) => s.toasts);
-  const remove = useToastStore((s) => s.remove);
+  const dismiss = useToastStore((s) => s.dismiss);
 
   return (
-    <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2">
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} onClose={() => remove(t.id)} />
-      ))}
-    </div>
-  );
-}
-
-function ToastItem({ toast: t, onClose }: { toast: Toast; onClose: () => void }) {
-  useEffect(() => {
-    // 动画已通过 CSS 类实现
-  }, []);
-  const Icon = t.type === 'success' ? CheckCircle : t.type === 'error' ? XCircle : Info;
-  return (
-    <div
-      className="toast-enter flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg cursor-pointer"
-      style={{ background: 'var(--bg-lower)', color: 'var(--text-1)', borderLeft: `3px solid ${colorMap[t.type]}` }}
-      onClick={onClose}
-    >
-      <Icon size={16} style={{ color: colorMap[t.type] }} />
-      {t.message}
+    <div className="pointer-events-none fixed right-4 bottom-4 z-[100] flex flex-col gap-2">
+      {toasts.map((t) => {
+        const Icon = ICON_MAP[t.type];
+        return (
+          <div
+            key={t.id}
+            className="pointer-events-auto flex items-center gap-2 rounded-md border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg transition-all"
+          >
+            <Icon className={`size-4 shrink-0 ${ICON_CLASS[t.type]}`} />
+            <span>{t.message}</span>
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="ml-2 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="关闭"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

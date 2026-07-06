@@ -1,168 +1,68 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-  DragOverlay,
-} from '@dnd-kit/core';
-import type { TaskDTO, TaskStatus } from '@ai-task-flow/shared';
-import { BoardToolbar } from './components/BoardToolbar';
-import { KanbanColumn } from './components/KanbanColumn';
-import { TaskCard } from './components/TaskCard';
-import { TaskDrawer } from './components/TaskDrawer';
-import { Toaster, toast } from './components/ui/Toaster';
-import { useTaskStore } from './stores/taskStore';
-import { useUIStore } from './stores/uiStore';
-import { sseClient } from './api/sse';
-import { fetchHealth, systemApi } from './api/task';
-import { BOARD_COLUMNS } from './lib/taskMeta';
-import { ChatView } from './components/chat/ChatView';
-import { TaskDocsView } from './components/TaskDocsView';
-import { SidebarNav, type View } from './components/SidebarNav';
+// frontend/src/App.tsx
+// 应用骨架:启动副作用(SSE 实时事件 / 初始拉取 / 健康检查)+ 视图切换(keep-alive)+ 主题。
+// 业务层(api/stores)零改动,这里只负责编排。
+import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
+import { SidebarNav, type ViewKey } from '@/components/SidebarNav';
+import { BoardView } from '@/components/views/BoardView';
+import { ChatView } from '@/components/views/ChatView';
+import { DocsView } from '@/components/views/DocsView';
+import { KnowledgeView } from '@/components/views/KnowledgeView';
+import { StorageManager } from '@/components/StorageManager';
+import { Toaster } from '@/components/ui/Toaster';
+import { useTaskStore } from '@/stores/taskStore';
+import { useUIStore } from '@/stores/uiStore';
+import { sseClient } from '@/api/sse';
+import { fetchHealth, systemApi } from '@/api/task';
+
+const VIEWS: Record<ViewKey, ComponentType> = {
+  board: BoardView,
+  chat: ChatView,
+  docs: DocsView,
+  knowledge: KnowledgeView,
+};
 
 function App() {
-  const [currentView, setCurrentView] = useState<View>('kanban');
-  const tasks = useTaskStore((s) => s.tasks);
-  const fetchAll = useTaskStore((s) => s.fetchAll);
-  const optimisticMove = useTaskStore((s) => s.optimisticMove);
-  const applySSEEvent = useTaskStore((s) => s.applySSEEvent);
+  const [activeView, setActiveView] = useState<ViewKey>('board');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const searchQuery = useUIStore((s) => s.searchQuery);
-  const projectFilter = useUIStore((s) => s.projectFilter);
-  const sourceFilter = useUIStore((s) => s.sourceFilter);
-  const setSelectedTask = useUIStore((s) => s.setSelectedTask);
-
-  const [sseConnected, setSseConnected] = useState(false);
-  const [activeTask, setActiveTask] = useState<TaskDTO | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  // 初始化:拉数据 + 连 SSE + 探测访问上下文/存储占用
+  // 启动副作用:SSE 实时事件 → taskStore、初始拉取任务、健康检查定 localAccess、存储占用定 storageWarn 红点。
   useEffect(() => {
-    fetchAll();
-    sseClient.connect();
-    const off = sseClient.on((event) => {
-      setSseConnected(true);
-      if (event.type !== 'connected') applySSEEvent(event);
-    });
+    const { applySSEEvent, fetchAll } = useTaskStore.getState();
+    const { setLocalAccess, setStorageWarn } = useUIStore.getState();
 
-    // 本机访问标志(控制敏感页面可见性)+ 存储占用告警(侧边栏红点)。
-    // 用 getState 写入,避免把 setter 纳入依赖数组。
-    fetchHealth().then(({ localAccess }) => useUIStore.getState().setLocalAccess(localAccess));
-    systemApi
-      .getStorage()
-      .then((s) => useUIStore.getState().setStorageWarn(s.warning))
-      .catch(() => {/* silent:启动时后端可能未就绪 */});
+    void fetchAll();
+    sseClient.connect();
+    const unsubscribe = sseClient.on(applySSEEvent);
+    void fetchHealth().then((h) => setLocalAccess(h.localAccess));
+    // 启动拉一次占用,定侧边栏红点(silent:后端未就绪不弹错)
+    void systemApi.getStorage().then((s) => setStorageWarn(s.warning));
 
     return () => {
-      off();
+      unsubscribe();
       sseClient.close();
     };
-  }, [fetchAll, applySSEEvent]);
-
-  // 所有项目(用于过滤下拉)
-  const allProjects = useMemo(() => {
-    const set = new Set<string>();
-    tasks.forEach((t) => {
-      if (t.projectName) set.add(t.projectName);
-    });
-    return [...set].sort();
-  }, [tasks]);
-
-  // 过滤后的任务
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return tasks.filter((t) => {
-      if (projectFilter && t.projectName !== projectFilter) return false;
-      if (sourceFilter && t.source !== sourceFilter) return false;
-      if (q && !t.title.toLowerCase().includes(q) && !t.id.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [tasks, searchQuery, projectFilter, sourceFilter]);
-
-  // 按状态分组
-  const byStatus = useMemo(() => {
-    const map = {} as Record<TaskStatus, TaskDTO[]>;
-    BOARD_COLUMNS.forEach((s) => (map[s] = []));
-    filtered.forEach((t) => {
-      if (map[t.status]) map[t.status].push(t);
-    });
-    return map;
-  }, [filtered]);
-
-  function handleDragStart(e: DragStartEvent) {
-    setActiveTask(tasks.find((t) => t.id === e.active.id) ?? null);
-  }
-
-  async function handleDragEnd(e: DragEndEvent) {
-    setActiveTask(null);
-    const { active, over } = e;
-    if (!over) return;
-
-    const taskId = active.id as string;
-    const overId = over.id as string;
-    const targetStatus = BOARD_COLUMNS.includes(overId as TaskStatus)
-      ? (overId as TaskStatus)
-      : tasks.find((t) => t.id === overId)?.status;
-
-    if (!targetStatus) return;
-    try {
-      await optimisticMove(taskId, targetStatus);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '移动失败');
-    }
-  }
+  }, []);
 
   return (
-    <div className="flex h-screen" style={{ background: 'var(--bg-bottom)', color: 'var(--text-1)' }}>
-      {/* 左侧全局导航（常驻） */}
-      <SidebarNav currentView={currentView} onViewChange={setCurrentView} />
-
-      {/* 内容区:三个视图都常驻挂载,用 hidden 切换显隐(keep-alive),状态不丢 */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* 任务看板 */}
-        <div className={currentView === 'kanban' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <BoardToolbar projects={allProjects} sseConnected={sseConnected} />
-          <main className="flex-1 overflow-x-auto p-5">
-            <DndContext
-              sensors={sensors}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              <div className="flex gap-4" style={{ minWidth: 'fit-content' }}>
-                {BOARD_COLUMNS.map((status) => (
-                  <KanbanColumn
-                    key={status}
-                    status={status}
-                    tasks={byStatus[status]}
-                    onTaskClick={(t) => setSelectedTask(t.id)}
-                  />
-                ))}
-              </div>
-              <DragOverlay>
-                {activeTask ? <TaskCard task={activeTask} onClick={() => {}} /> : null}
-              </DragOverlay>
-            </DndContext>
-          </main>
-          <TaskDrawer />
-        </div>
-
-        {/* 资料调研 */}
-        <div className={currentView === 'chat' ? 'flex-1 min-h-0' : 'hidden'}>
-          <ChatView />
-        </div>
-
-        {/* 任务文档 */}
-        <div className={currentView === 'docs' ? 'flex-1 min-h-0' : 'hidden'}>
-          <TaskDocsView />
-        </div>
-      </div>
-
+    <div className="bg-background text-foreground flex h-screen overflow-hidden">
+      <SidebarNav
+        activeView={activeView}
+        onViewChange={setActiveView}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      <main className="flex-1 overflow-hidden">
+        {/* keep-alive:全部挂载,用 hidden 切换,保留各视图内部状态(聊天滚动/分栏位置等) */}
+        {(Object.keys(VIEWS) as ViewKey[]).map((key) => {
+          const View = VIEWS[key];
+          return (
+            <div key={key} className="h-full" hidden={key !== activeView}>
+              <View />
+            </div>
+          );
+        })}
+      </main>
+      <StorageManager open={settingsOpen} onOpenChange={setSettingsOpen} />
       <Toaster />
     </div>
   );

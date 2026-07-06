@@ -1,46 +1,29 @@
-// frontend/src/components/ui/Switch.tsx
-import { cn } from '@/lib/cn';
+import * as React from "react"
+import * as SwitchPrimitive from "@radix-ui/react-switch"
 
-interface SwitchProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  /** 尺寸,默认 sm */
-  size?: 'sm' | 'md';
-  title?: string;
-  className?: string;
-  /** 阻止事件冒泡(用于卡片/可拖拽容器内) */
-  stopPropagation?: boolean;
-}
+import { cn } from "@/lib/utils"
 
-/** 滑块开关:用于表示"已完成"这类二元状态,比复选框语义更明确 */
-export function Switch({ checked, onChange, size = 'sm', title, className, stopPropagation }: SwitchProps) {
-  const dims = size === 'sm'
-    ? { w: 28, h: 16, knob: 12 }
-    : { w: 36, h: 20, knob: 16 };
-  const offset = checked ? dims.w - dims.knob - 2 : 2;
-
+function Switch({
+  className,
+  ...props
+}: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      title={title}
-      onClick={(e) => {
-        if (stopPropagation) e.stopPropagation();
-        onChange(!checked);
-      }}
-      className={cn('relative inline-flex shrink-0 items-center rounded-full transition-colors', className)}
-      style={{
-        width: dims.w,
-        height: dims.h,
-        backgroundColor: checked ? 'var(--success-6)' : 'var(--surface-3, #d0d0d0)',
-        cursor: 'pointer',
-      }}
+    <SwitchPrimitive.Root
+      data-slot="switch"
+      className={cn(
+        "peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/50 dark:data-[state=unchecked]:bg-input/80 inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
     >
-      <span
-        className="absolute rounded-full bg-white shadow-sm transition-all"
-        style={{ width: dims.knob, height: dims.knob, left: offset }}
+      <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
+        className={cn(
+          "bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block size-4 rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0"
+        )}
       />
-    </button>
-  );
+    </SwitchPrimitive.Root>
+  )
 }
+
+export { Switch }

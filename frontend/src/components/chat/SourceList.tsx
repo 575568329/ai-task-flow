@@ -1,50 +1,44 @@
 // frontend/src/components/chat/SourceList.tsx
-import React from 'react';
-import { ExternalLink } from 'lucide-react';
-import type { Source } from '@ai-task-flow/shared';
-import './SourceList.css';
+// assistant 消息的引用来源列表(消息正文 [n] 标记对应此处编号)。
+import type { Source, SourceType } from '@ai-task-flow/shared';
 
 interface SourceListProps {
   sources: Source[];
 }
 
-/** 安全提取域名:url 畸形(相对路径/空串)时降级显示,绝不抛错拖垮整页 */
-function safeHostname(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url || '链接';
-  }
-}
+const SOURCE_TYPE_LABEL: Record<SourceType, string> = {
+  arxiv: '论文',
+  web: '网页',
+};
 
-/** 引用来源列表:展示 assistant 回答引用了哪些资料,可点击跳转 */
-export const SourceList: React.FC<SourceListProps> = ({ sources }) => {
-  if (!sources || sources.length === 0) return null;
+export function SourceList({ sources }: SourceListProps) {
+  if (sources.length === 0) return null;
 
   return (
-    <div className="sl-wrapper">
-      <div className="sl-title">引用来源 · {sources.length}</div>
-      <div className="sl-list">
-        {sources.map((s) => (
-          <a
-            key={s.index}
-            className="sl-item"
-            href={s.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={s.snippet}
-          >
-            <span className="sl-index">{s.index}</span>
-            <span className="sl-item-body">
-              <span className="sl-item-title">{s.title}</span>
-              <span className="sl-item-url">
-                {s.sourceType === 'arxiv' ? 'arXiv' : safeHostname(s.url)}
-                <ExternalLink size={11} strokeWidth={2} />
+    <div className="mt-3 flex flex-col gap-1 border-t pt-2">
+      <div className="text-muted-foreground text-xs font-medium">来源</div>
+      {sources.map((source) => (
+        <a
+          key={source.index}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:bg-muted flex gap-2 rounded p-1 transition-colors"
+        >
+          <span className="bg-primary/10 text-primary size-4 shrink-0 rounded text-center text-[10px] leading-4">
+            {source.index}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1">
+              <span className="truncate text-xs font-medium">{source.title}</span>
+              <span className="text-muted-foreground shrink-0 text-[10px]">
+                {SOURCE_TYPE_LABEL[source.sourceType]}
               </span>
-            </span>
-          </a>
-        ))}
-      </div>
+            </div>
+            <div className="text-muted-foreground truncate text-[10px]">{source.url}</div>
+          </div>
+        </a>
+      ))}
     </div>
   );
-};
+}

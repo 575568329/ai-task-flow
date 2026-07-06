@@ -1,51 +1,58 @@
-// frontend/src/components/ui/Button.tsx
-import type { ButtonHTMLAttributes } from 'react';
-import { cn } from '@/lib/cn';
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
-type Size = 'sm' | 'md';
+import { cn } from "@/lib/utils"
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  size?: Size;
-}
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+        destructive:
+          "bg-destructive shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-white",
+        outline:
+          "bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+        ghost:
+          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
+        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
+        icon: "size-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
 
-const base =
-  'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1';
-
-const sizes: Record<Size, string> = {
-  sm: 'px-2.5 py-1.5 text-sm',
-  md: 'px-3.5 py-2 text-sm',
-};
-
-const variants: Record<Variant, string> = {
-  primary: 'text-white hover:opacity-90',
-  secondary: 'border hover:opacity-80',
-  ghost: 'hover:opacity-70',
-  danger: 'text-white hover:opacity-90',
-};
-
-export function Button({
-  variant = 'secondary',
-  size = 'md',
+function Button({
   className,
-  style,
+  variant,
+  size,
+  asChild = false,
   ...props
-}: ButtonProps) {
-  const variantStyle: React.CSSProperties =
-    variant === 'primary'
-      ? { background: 'var(--brand-primary)' }
-      : variant === 'danger'
-        ? { background: 'var(--danger-primary)' }
-        : variant === 'secondary'
-          ? { borderColor: 'var(--border-primary)', color: 'var(--text-1)', background: 'var(--bg-lower)' }
-          : { color: 'var(--text-1)' };
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot : "button"
 
   return (
-    <button
-      className={cn(base, sizes[size], variants[variant], className)}
-      style={{ ...variantStyle, ...style }}
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
-  );
+  )
 }
+
+export { Button, buttonVariants }
