@@ -1,0 +1,24 @@
+# 行尾规范化:默认 LF,Windows 专用脚本保留 CRLF
+# 解决 Windows IDE 把源码存成 CRLF、HEAD 是 LF 导致整文件行尾 diff 污染的问题
+* text=auto eol=lf
+
+# Windows 脚本(必须 CRLF 才能正确执行)
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件(不做行尾转换)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.tgz binary
