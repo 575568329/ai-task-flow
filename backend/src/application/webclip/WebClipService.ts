@@ -121,6 +121,7 @@ export class WebClipService {
     let blocks = 0;
     for (const draft of drafts) {
       for (const step of draft.steps) {
+        if (!step.blocks) continue; // 跳过没有 blocks 的 step
         for (const block of step.blocks) {
           if (block.type === 'image' && block.url) {
             blocks++;

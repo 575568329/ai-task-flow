@@ -46,6 +46,8 @@ describe('HTTP Server', () => {
     const searchOrchestrator = new SearchOrchestrator(webSearchClient, arxivClient);
     const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
     const webClipService = new WebClipService(llmConfigService);
+    const { KnowledgeService } = await import('../../../application/knowledge/KnowledgeService.js');
+    const knowledgeService = new KnowledgeService(path.join(process.cwd(), 'knowledge-base'));
 
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
@@ -56,6 +58,7 @@ describe('HTTP Server', () => {
       chatService,
       llmConfigService,
       webClipService,
+      knowledgeService,
     );
   });
 

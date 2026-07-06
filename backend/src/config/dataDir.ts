@@ -8,6 +8,7 @@
 //   3. 默认 ~/.ai-task-flow
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 /** 默认数据目录名(位于用户主目录下) */
 const DEFAULT_DIR_NAME = '.ai-task-flow';
@@ -72,4 +73,13 @@ export function taskDocPath(taskId: string, dataDir?: string): string {
 /** 日志目录(后端运行日志,如聊天链路全量日志) */
 export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');
+}
+
+/** 知识库目录(项目内,进 git,相对项目根) */
+export function knowledgeDirPath(): string {
+  // ESM 中获取当前文件路径: import.meta.url → file:///... → 绝对路径
+  const currentFile = fileURLToPath(import.meta.url);
+  // backend/src/config/dataDir.ts → 上 3 层到项目根
+  const projectRoot = path.resolve(path.dirname(currentFile), '../../..');
+  return path.join(projectRoot, 'knowledge-base');
 }

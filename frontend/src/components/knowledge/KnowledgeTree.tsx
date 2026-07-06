@@ -1,0 +1,141 @@
+// frontend/src/components/knowledge/KnowledgeTree.tsx
+// 知识库左侧:搜索 + 标签筛选 + 目录树(无筛选时)/ 扁平结果(有筛选时)。
+import { useState, type ReactNode } from 'react';
+import { Search, Folder, FolderOpen, FileText } from 'lucide-react';
+import type { KnowledgeNode } from '@ai-task-flow/shared';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { useKnowledgeStore } from '@/stores/knowledgeStore';
+
+export function KnowledgeTree() {
+  const manifest = useKnowledgeStore((s) => s.manifest);
+  const currentPath = useKnowledgeStore((s) => s.currentPath);
+  const setCurrentPath = useKnowledgeStore((s) => s.setCurrentPath);
+  const searchQuery = useKnowledgeStore((s) => s.searchQuery);
+  const setSearchQuery = useKnowledgeStore((s) => s.setSearchQuery);
+  const selectedTags = useKnowledgeStore((s) => s.selectedTags);
+  const setSelectedTags = useKnowledgeStore((s) => s.setSelectedTags);
+  const getFilteredDocs = useKnowledgeStore((s) => s.getFilteredDocs);
+
+  // collapsed 集合:默认展开,点击折叠
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  if (!manifest) return null;
+
+  const hasFilter = searchQuery.trim().length > 0 || selectedTags.length > 0;
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(
+      selectedTags.includes(tag)
+        ? selectedTags.filter((t) => t !== tag)
+        : [...selectedTags, tag]
+    );
+  };
+
+  const toggleDir = (key: string) => {
+    const next = new Set(collapsed);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setCollapsed(next);
+  };
+
+  const renderNode = (node: KnowledgeNode, depth: number): ReactNode => {
+    if (node.type === 'dir') {
+      const key = node.name;
+      const isOpen = !collapsed.has(key);
+      return (
+        <div key={key}>
+          <button
+            type="button"
+            className="hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm"
+            style={{ paddingLeft: depth * 12 + 4 }}
+            onClick={() => toggleDir(key)}
+          >
+            {isOpen ? (
+              <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
+            ) : (
+              <Folder className="size-3.5 shrink-0 text-amber-500" />
+            )}
+            <span className="truncate font-medium">{node.title}</span>
+          </button>
+          {isOpen && node.children.map((child) => renderNode(child, depth + 1))}
+        </div>
+      );
+    }
+    const active = currentPath === node.path;
+    return (
+      <button
+        type="button"
+        key={node.path}
+        className={cn(
+          'hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+          active && 'bg-accent'
+        )}
+        style={{ paddingLeft: depth * 12 + 20 }}
+        onClick={() => setCurrentPath(node.path)}
+      >
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate">{node.title}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="bg-card flex h-full flex-col rounded-md border">
+      <div className="flex flex-col gap-2 border-b p-2">
+        <div className="relative">
+          <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜索文档…"
+            className="h-8 pl-7"
+          />
+        </div>
+        {manifest.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {manifest.tags.map((tag) => (
+              <button type="button" key={tag} onClick={() => toggleTag(tag)}>
+                <Badge
+                  variant={selectedTags.includes(tag) ? 'default' : 'outline'}
+                  className="cursor-pointer px-1.5 py-0 text-[10px]"
+                >
+                  {tag}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="p-1">
+          {hasFilter ? (
+            getFilteredDocs().length === 0 ? (
+              <div className="text-muted-foreground p-2 text-xs">无匹配文档</div>
+            ) : (
+              getFilteredDocs().map((doc) => (
+                <button
+                  type="button"
+                  key={doc.path}
+                  className={cn(
+                    'hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+                    currentPath === doc.path && 'bg-accent'
+                  )}
+                  onClick={() => setCurrentPath(doc.path)}
+                >
+                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{doc.title}</span>
+                </button>
+              ))
+            )
+          ) : (
+            manifest.tree.children.map((child) => renderNode(child, 0))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
