@@ -27,7 +27,7 @@
     "mcp": "node dist/interfaces/mcp/server.js",
     "mcp:dev": "tsx src/interfaces/mcp/server.ts",
     "http": "tsx src/http-server.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "cd .. && npm run build"
   },
   "repository": {
     "type": "git",

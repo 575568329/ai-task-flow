@@ -13,3 +13,7 @@ dist-tsnode/
 # 用户上传的图片(运行时产物,不进版本库)
 backend/uploads/
 .env.local
+
+# 前端 build 产物(vite build 输出到此;npm publish 时由 backend 的 prepublishOnly
+# 自动 `cd .. && npm run build` 现建,npm pack 经 files:["public"] 打包带走,不入版本库)
+backend/public/
