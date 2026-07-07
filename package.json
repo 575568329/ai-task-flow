@@ -26,6 +26,8 @@
     "start": "node cli/bin/ai-task-flow.js"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "concurrently": "^8.2.2"
   }
 }

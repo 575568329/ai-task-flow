@@ -28,6 +28,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+    // monorepo 强制 react/react-dom 单一解析到 frontend 的 19。
+    // 根 node_modules 有 react 18(extension 用),radix/dnd-kit 的 peer 被 npm hoist 到根 18;
+    // 不加 dedupe 会让 vite 解析出两个 React 实例,触发 "Function components cannot be given refs" 警告
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     // 打包到 backend/public,生产模式由后端单端口托管
