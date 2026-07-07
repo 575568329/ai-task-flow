@@ -2,7 +2,6 @@
 import { TaskStatus, Priority } from '@ai-task-flow/shared';
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  [TaskStatus.PLANNING]: '待规划',
   [TaskStatus.TODO]: '待办',
   [TaskStatus.DISPATCHED]: '已派发',
   [TaskStatus.REVIEW]: '审核中',
@@ -11,7 +10,6 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.PLANNING]: 'var(--grey-6)',      // 中性灰
   [TaskStatus.TODO]: 'var(--primary-6)',       // 蓝色
   [TaskStatus.DISPATCHED]: 'var(--warning-6)', // 橙色
   [TaskStatus.REVIEW]: 'var(--primary-8)',     // 深蓝

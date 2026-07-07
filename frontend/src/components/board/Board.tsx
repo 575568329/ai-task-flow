@@ -1,5 +1,5 @@
 // frontend/src/components/board/Board.tsx
-// 看板主体:DndContext + 6 列,拖拽跨列 = optimisticMove 改 status。
+// 看板主体:DndContext + 5 列,拖拽跨列 = optimisticMove 改 status。
 // 应用 BoardToolbar 的筛选(project/source/search)。
 import { useMemo } from 'react';
 import {

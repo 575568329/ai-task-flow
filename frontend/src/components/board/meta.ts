@@ -11,9 +11,8 @@ export interface KanbanColumnDef {
   dotClass: string;
 }
 
-// 看板列顺序(6 列,横向滚动)
+// 看板列顺序(5 列,横向滚动)
 export const KANBAN_COLUMNS: KanbanColumnDef[] = [
-  { status: TaskStatus.PLANNING, label: STATUS_LABELS[TaskStatus.PLANNING], dotClass: 'bg-slate-400' },
   { status: TaskStatus.TODO, label: STATUS_LABELS[TaskStatus.TODO], dotClass: 'bg-blue-500' },
   { status: TaskStatus.DISPATCHED, label: STATUS_LABELS[TaskStatus.DISPATCHED], dotClass: 'bg-amber-500' },
   { status: TaskStatus.REVIEW, label: STATUS_LABELS[TaskStatus.REVIEW], dotClass: 'bg-violet-500' },

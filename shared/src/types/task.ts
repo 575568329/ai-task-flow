@@ -2,7 +2,6 @@
 // 前后端共享的任务类型定义(单一来源,避免漂移)
 
 export enum TaskStatus {
-  PLANNING = 'planning',
   TODO = 'todo',
   DISPATCHED = 'dispatched',
   REVIEW = 'review',

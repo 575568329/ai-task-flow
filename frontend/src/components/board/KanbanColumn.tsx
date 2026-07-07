@@ -15,7 +15,9 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.status });
 
   return (
-    <div className="bg-muted/30 flex w-72 shrink-0 flex-col rounded-lg">
+    // 列宽:min-w 保底可读 + flex-1 填满看板宽度。
+    // 宽屏(≥5×260)时 5 列等分铺满;窄屏装不下时 min-w 撑超触发外层 overflow-x-auto 横滚。
+    <div className="bg-muted/30 flex min-w-[260px] flex-1 flex-col rounded-lg">
       <div className="flex items-center gap-2 px-3 py-2">
         <span className={cn('size-2 rounded-full', column.dotClass)} />
         <span className="text-sm font-semibold">{column.label}</span>
