@@ -1,12 +1,18 @@
 // frontend/src/components/chat/ChatView.tsx
 // 资料调研主视图:会话列表 + 消息流 + 输入区 + 流式驱动(streamChat → chatStore)。
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Plus, Send, Trash2, Settings2, Loader2, Globe } from 'lucide-react';
+import { Plus, Send, Trash2, Settings2, Loader2, Globe, Pencil } from 'lucide-react';
+import {
+  ResizableHandle as PanelResizeHandle,
+  ResizablePanel as Panel,
+  ResizablePanelGroup as PanelGroup,
+} from '@/components/ui/resizable';
 import type { ChatMessage, ChatRole, Source } from '@ai-task-flow/shared';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/Toaster';
+import { useConfirm } from '@/components/ui/confirm';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chatStore';
 import {
@@ -14,6 +20,7 @@ import {
   createConversation,
   deleteConversation,
   getMessages,
+  updateConversation,
 } from '@/api/chat';
 import { streamChat } from '@/api/chatStream';
 import { MessageContent } from './MessageContent';
@@ -86,11 +93,15 @@ export function ChatView() {
   const addProgressStep = useChatStore((s) => s.addProgressStep);
   const finishStreaming = useChatStore((s) => s.finishStreaming);
   const resetStream = useChatStore((s) => s.resetStream);
+  const { confirm } = useConfirm();
 
   const [input, setInput] = useState('');
   const [useWebSearch, setUseWebSearch] = useState(true);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptConvId, setPromptConvId] = useState<string | null>(null);
+  // 会话重命名:editingId 标记当前编辑项,draftTitle 是输入框临时值
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 加载会话列表
@@ -127,7 +138,14 @@ export function ChatView() {
   };
 
   const onDeleteConversation = async (id: string) => {
-    if (!window.confirm('删除该对话?消息将一并删除。')) return;
+    if (
+      !(await confirm({
+        title: '删除对话',
+        description: '删除该对话?消息将一并删除。',
+        variant: 'destructive',
+      }))
+    )
+      return;
     try {
       await deleteConversation(id);
       const remaining = conversations.filter((c) => c.id !== id);
@@ -137,6 +155,24 @@ export function ChatView() {
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败');
+    }
+  };
+
+  const startRename = (id: string, currentTitle: string) => {
+    setEditingId(id);
+    setDraftTitle(currentTitle);
+  };
+
+  // 失焦/Enter 都走这里:先退出编辑态再异步落库,空标题或未改动则不发请求
+  const commitRename = async (id: string, fallback: string) => {
+    const next = draftTitle.trim();
+    setEditingId(null);
+    if (!next || next === fallback) return;
+    try {
+      const updated = await updateConversation(id, { title: next });
+      setConversations(conversations.map((c) => (c.id === id ? updated : c)));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '重命名失败');
     }
   };
 
@@ -201,9 +237,11 @@ export function ChatView() {
   };
 
   return (
-    <div className="flex h-full">
-      {/* 左:会话列表 */}
-      <aside className="bg-muted/30 flex w-60 shrink-0 flex-col border-r">
+    <>
+    <PanelGroup className="flex h-full">
+      {/* 左:会话列表(可拖拽调宽) */}
+      <Panel defaultSize="18%" minSize="12%" maxSize="28%">
+      <aside className="bg-muted/30 flex h-full flex-col border-r">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">会话</span>
           <Button
@@ -220,55 +258,99 @@ export function ChatView() {
           {conversations.length === 0 && (
             <div className="text-muted-foreground p-2 text-xs">点击 + 新建对话</div>
           )}
-          {conversations.map((conversation) => (
-            <div
-              key={conversation.id}
-              className={cn(
-                'group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5',
-                conversation.id === currentConversationId
-                  ? 'bg-accent'
-                  : 'hover:bg-accent/50'
-              )}
-              onClick={() => setCurrentConversation(conversation.id)}
-            >
-              {conversation.customPrompt && (
-                <span className="bg-primary size-1.5 shrink-0 rounded-full" />
-              )}
-              <span className="flex-1 truncate text-sm">
-                {conversation.title || '新对话'}
-              </span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-6 opacity-0 group-hover:opacity-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setPromptConvId(conversation.id);
-                  setPromptOpen(true);
-                }}
-                aria-label="自定义需求"
+          {conversations.map((conversation) => {
+            const isEditing = editingId === conversation.id;
+            return (
+              <div
+                key={conversation.id}
+                className={cn(
+                  'group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5',
+                  conversation.id === currentConversationId
+                    ? 'bg-accent'
+                    : 'hover:bg-accent/50'
+                )}
+                onClick={() => !isEditing && setCurrentConversation(conversation.id)}
               >
-                <Settings2 className="size-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive size-6 opacity-0 group-hover:opacity-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void onDeleteConversation(conversation.id);
-                }}
-                aria-label="删除会话"
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          ))}
+                {conversation.customPrompt && (
+                  <span className="bg-primary size-1.5 shrink-0 rounded-full" />
+                )}
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    value={draftTitle}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void commitRename(conversation.id, conversation.title);
+                      } else if (event.key === 'Escape') {
+                        setEditingId(null);
+                      }
+                    }}
+                    onBlur={() => void commitRename(conversation.id, conversation.title)}
+                    className="border-input bg-background flex-1 rounded border px-1 py-0.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                ) : (
+                  <>
+                    <span
+                      className="flex-1 truncate text-sm"
+                      onDoubleClick={() =>
+                        startRename(conversation.id, conversation.title)
+                      }
+                      title="双击重命名"
+                    >
+                      {conversation.title || '新对话'}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 opacity-0 group-hover:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startRename(conversation.id, conversation.title);
+                      }}
+                      aria-label="重命名"
+                      title="重命名"
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 opacity-0 group-hover:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPromptConvId(conversation.id);
+                        setPromptOpen(true);
+                      }}
+                      aria-label="自定义需求"
+                    >
+                      <Settings2 className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive size-6 opacity-0 group-hover:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onDeleteConversation(conversation.id);
+                      }}
+                      aria-label="删除会话"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </aside>
-
+      </Panel>
+      <PanelResizeHandle className="bg-border hover:bg-primary/30 w-1 shrink-0 cursor-col-resize transition-colors" />
+      <Panel defaultSize="82%">
       {/* 右:消息流 + 输入 */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {messages.length === 0 && !isStreaming && (
             <div className="text-muted-foreground mt-10 text-center text-sm">
@@ -326,12 +408,14 @@ export function ChatView() {
           </label>
         </div>
       </div>
+      </Panel>
+    </PanelGroup>
 
-      <CustomPromptPanel
-        open={promptOpen}
-        onOpenChange={setPromptOpen}
-        conversationId={promptConvId}
-      />
-    </div>
+    <CustomPromptPanel
+      open={promptOpen}
+      onOpenChange={setPromptOpen}
+      conversationId={promptConvId}
+    />
+    </>
   );
 }
