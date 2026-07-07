@@ -63,15 +63,19 @@ export async function registerTaskRoutes(
   fastify.post<{ Body: CreateTaskRequest }>('/api/tasks', async (request, reply) => {
     const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps, source, sourceUrl } = request.body;
 
+    // prefix 容错:TaskId 要求 [A-Z][A-Z0-9]* 格式(如 WS/BUG/E2E)。
+    // 留空或非法时回落到默认 TASK,实现"前缀非必填"。
+    const normalizedPrefix = /^[A-Z][A-Z0-9]*$/.test(prefix ?? '') ? prefix : 'TASK';
+
     // 生成 ID（简化版：查询最大序号 + 1）
     const allTasks = await taskRepository.findAll();
     const maxSeq = allTasks
-      .filter(t => t.id.prefix === prefix)
+      .filter(t => t.id.prefix === normalizedPrefix)
       .map(t => t.id.sequence)
       .reduce((max, seq) => Math.max(max, seq), 0);
 
     const task = new Task(
-      TaskId.create(prefix, maxSeq + 1),
+      TaskId.create(normalizedPrefix, maxSeq + 1),
       title,
       description,
       TaskStatus.TODO,
