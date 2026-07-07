@@ -25,12 +25,49 @@ echo ""
 (cd shared && npm run build:watch >> "../$LOGS_DIR/shared.log" 2>&1) &
 SHARED_PID=$!
 
+# 等 shared 首次编译稳定(连续 2 秒 shared/dist 无变化),避免 backend tsx watch 因 shared
+# 产物陆续生成而反复重启,启动瞬间 3000 端口空窗 → vite 代理 ECONNREFUSED。
+echo "Waiting for shared first build to stabilize..."
+shared_dist="shared/dist"
+prev_snapshot=""
+stable_ticks=0
+waited=0
+max_wait=60
+while [ "$waited" -lt "$max_wait" ]; do
+  sleep 1
+  waited=$((waited + 1))
+  if [ -d "$shared_dist" ]; then
+    snapshot=$(find "$shared_dist" -type f -printf '%p|%T@|%s\n' 2>/dev/null | sort)
+    if [ -n "$snapshot" ] && [ "$snapshot" = "$prev_snapshot" ]; then
+      stable_ticks=$((stable_ticks + 1))
+      if [ "$stable_ticks" -ge 2 ]; then break; fi
+    else
+      stable_ticks=0
+    fi
+    prev_snapshot="$snapshot"
+  fi
+done
+if [ "$stable_ticks" -ge 2 ]; then
+  echo "Shared build stable (waited ${waited}s)."
+else
+  echo "Shared build still changing after ${max_wait}s, continue anyway."
+fi
+
 # 启动 backend (后台,日志到文件+终端)
 (cd backend && npm run dev 2>&1 | tee "../$LOGS_DIR/backend.log") &
 BACKEND_PID=$!
 
-# 等待 backend 启动
-sleep 2
+# 等 backend 监听就绪再起 frontend:端口文件由 backend 在 listen 成功后写出。
+port_file="$LOGS_DIR/backend-port.txt"
+rm -f "$port_file"
+waited_b=0
+max_wait_b=30
+while [ "$waited_b" -lt "$max_wait_b" ]; do
+  if [ -f "$port_file" ]; then break; fi
+  sleep 1
+  waited_b=$((waited_b + 1))
+done
+echo "Backend listening (waited ${waited_b}s)."
 
 # 启动 frontend (后台,日志到文件+终端)
 (cd frontend && npm run dev 2>&1 | tee "../$LOGS_DIR/frontend.log") &
@@ -42,7 +79,7 @@ echo "✅ All services started"
 echo "========================================="
 echo "  Shared:   PID $SHARED_PID"
 echo "  Backend:  PID $BACKEND_PID  → http://localhost:3000"
-echo "  Frontend: PID $FRONTEND_PID → http://localhost:5173"
+echo "  Frontend: PID $FRONTEND_PID → http://localhost:5678"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo "========================================="
