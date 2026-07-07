@@ -77,7 +77,7 @@ export function BoardToolbar() {
         value={sourceFilter ?? ALL_OPTION}
         onValueChange={(value) => setSourceFilter(value === ALL_OPTION ? null : value as 'web' | 'manual')}
       >
-        <SelectTrigger size="sm" className="w-28">
+        <SelectTrigger size="sm" className="w-36">
           <SelectValue placeholder="来源" />
         </SelectTrigger>
         <SelectContent>
@@ -87,7 +87,7 @@ export function BoardToolbar() {
         </SelectContent>
       </Select>
 
-      <div className="relative ml-auto w-64">
+      <div className="relative w-64">
         <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <Input
           value={searchQuery}
@@ -97,7 +97,7 @@ export function BoardToolbar() {
         />
       </div>
 
-      <Button size="sm" onClick={() => setCreatingTask(true)}>
+      <Button size="sm" className="ml-auto" onClick={() => setCreatingTask(true)}>
         <Plus className="size-4" />
         新建任务
       </Button>
