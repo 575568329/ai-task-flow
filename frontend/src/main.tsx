@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ConfirmProvider } from './components/ui/confirm';
 import { initTheme } from './stores/uiStore.ts';
 import './index.css';
 import './styles/animations.css';
@@ -14,6 +15,8 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    <ConfirmProvider>
+      <App />
+    </ConfirmProvider>
   </StrictMode>
 );

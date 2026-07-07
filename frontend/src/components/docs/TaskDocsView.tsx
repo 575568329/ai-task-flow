@@ -27,6 +27,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import { taskApi, systemApi } from '@/api/task';
 import { readFile } from '@/api/files';
 import { toast } from '@/components/ui/Toaster';
+import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { FileTree } from './FileTree';
 
@@ -64,6 +65,7 @@ function saveCollapsed(list: string[]): void {
 export function TaskDocsView() {
   const tasks = useTaskStore((s) => s.tasks);
   const fetchAll = useTaskStore((s) => s.fetchAll);
+  const { confirm } = useConfirm();
 
   const [mode, setMode] = useState<Mode>('tasks');
 
@@ -133,11 +135,13 @@ export function TaskDocsView() {
     }
   };
 
-  const handleRemoveRoot = (root: string) => {
+  const handleRemoveRoot = async (root: string) => {
     if (
-      !window.confirm(
-        `确定移除该项目吗?\n${root}\n\n仅从列表移除,不会删除磁盘上的任何文件。`,
-      )
+      !(await confirm({
+        title: '移除项目',
+        description: `确定移除该项目吗?\n${root}\n\n仅从列表移除,不会删除磁盘上的任何文件。`,
+        confirmText: '移除',
+      }))
     )
       return;
     const next = roots.filter((r) => r !== root);
@@ -194,7 +198,7 @@ export function TaskDocsView() {
     <div className="h-full">
       <ResizablePanelGroup orientation="horizontal" className="h-full">
         {/* 左栏:Tab + 列表 */}
-        <ResizablePanel defaultSize={28} minSize={18}>
+        <ResizablePanel defaultSize="28%" minSize="18%">
           <div className="flex h-full flex-col border-r">
             {/* Tab 切换 */}
             <div className="flex border-b">
@@ -347,7 +351,7 @@ export function TaskDocsView() {
         <ResizableHandle withHandle />
 
         {/* 右栏:Markdown 预览(两 Tab 共享) */}
-        <ResizablePanel defaultSize={72} minSize={30}>
+        <ResizablePanel defaultSize="72%" minSize="30%">
           <div className="h-full overflow-y-auto">
             {previewEmpty ? (
               <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 text-sm">

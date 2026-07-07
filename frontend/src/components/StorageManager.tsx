@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { systemApi } from '@/api/task';
 import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/components/ui/Toaster';
+import { useConfirm } from '@/components/ui/confirm';
 import type {
   StorageInfo,
   StorageItem,
@@ -42,6 +43,7 @@ function formatBytes(bytes: number): string {
 
 export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
   const setStorageWarn = useUIStore((s) => s.setStorageWarn);
+  const { confirm } = useConfirm();
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<StorageCategoryKey>>(new Set());
@@ -86,7 +88,15 @@ export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
     );
     if (dangerItems && dangerItems.length > 0) {
       const names = dangerItems.map((i) => i.label).join('、');
-      if (!window.confirm(`清理 ${names} 有副作用:\n${dangerItems.map((i) => i.description).join('\n')}\n\n确认继续?`)) {
+      const descriptions = dangerItems.map((i) => i.description).join('\n');
+      if (
+        !(await confirm({
+          title: `清理 ${names} 有副作用`,
+          description: `${descriptions}\n\n确认继续?`,
+          confirmText: '继续清理',
+          variant: 'destructive',
+        }))
+      ) {
         return;
       }
     }

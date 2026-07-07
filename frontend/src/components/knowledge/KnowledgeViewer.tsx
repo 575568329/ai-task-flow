@@ -9,12 +9,14 @@ import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { fetchDoc, getRawUrl, deleteDoc, fetchManifest } from '@/api/knowledge';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/Toaster';
+import { useConfirm } from '@/components/ui/confirm';
 
 export function KnowledgeViewer() {
   const getCurrentDoc = useKnowledgeStore((s) => s.getCurrentDoc);
   const currentPath = useKnowledgeStore((s) => s.currentPath);
   const setCurrentPath = useKnowledgeStore((s) => s.setCurrentPath);
   const setManifest = useKnowledgeStore((s) => s.setManifest);
+  const { confirm } = useConfirm();
 
   const doc = getCurrentDoc();
   const [content, setContent] = useState('');
@@ -48,7 +50,14 @@ export function KnowledgeViewer() {
   }
 
   const onDelete = async () => {
-    if (!window.confirm(`确认删除「${doc.title}」?`)) return;
+    if (
+      !(await confirm({
+        title: '删除文档',
+        description: `确认删除「${doc.title}」?`,
+        variant: 'destructive',
+      }))
+    )
+      return;
     try {
       await deleteDoc(doc.path);
       setManifest(await fetchManifest());
