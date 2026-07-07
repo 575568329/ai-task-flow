@@ -12,6 +12,7 @@ import {
   GripVertical,
   ImagePlus,
   Loader2,
+  Copy,
   X,
 } from 'lucide-react';
 import type { TaskStep, StepBlock } from '@ai-task-flow/shared';
@@ -131,9 +132,28 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
     );
   };
 
+  /** 复制单步内容(文本原样 + 图片转 markdown)到剪贴板,便于贴给 agent 执行 */
+  const copyStep = async (stepIndex: number) => {
+    const blocks = getBlocks(steps[stepIndex]);
+    const lines: string[] = [`步骤 ${stepIndex + 1}:`];
+    blocks.forEach((block) => {
+      if (block.type === 'text' && block.content.trim()) {
+        lines.push(block.content);
+      } else if (block.type === 'image') {
+        lines.push(`![图片](${block.url})`);
+      }
+    });
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      toast.success('步骤内容已复制');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '复制失败');
+    }
+  };
+
   if (steps.length === 0) {
     return (
-      <Button variant="outline" size="sm" onClick={addStep} disabled={disabled}>
+      <Button variant="outline" size="sm" className="w-full" onClick={addStep} disabled={disabled}>
         <Plus className="size-4" />
         添加步骤
       </Button>
@@ -188,6 +208,17 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
                 aria-label="删除步骤"
               >
                 <Trash2 className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground size-7"
+                onClick={() => copyStep(index)}
+                disabled={disabled}
+                aria-label="复制步骤内容(含图片地址)"
+                title="复制步骤内容(含图片地址)"
+              >
+                <Copy className="size-3.5" />
               </Button>
             </div>
 
@@ -269,7 +300,7 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
           </div>
         );
       })}
-      <Button variant="outline" size="sm" onClick={addStep} disabled={disabled}>
+      <Button variant="outline" size="sm" className="w-full" onClick={addStep} disabled={disabled}>
         <Plus className="size-4" />
         添加步骤
       </Button>

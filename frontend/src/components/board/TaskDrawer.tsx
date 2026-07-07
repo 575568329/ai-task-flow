@@ -11,6 +11,7 @@ import {
   X,
   Trash2,
   FileDiff,
+  Copy,
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import {
   Priority,
   TaskStatus,
   stepsToMarkdown,
+  buildClaudeCodePrompt,
   type TaskDTO,
   type TaskStep,
 } from '@ai-task-flow/shared';
@@ -48,6 +50,7 @@ import {
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/Toaster';
+import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { taskApi, systemApi } from '@/api/task';
@@ -91,8 +94,8 @@ function taskToDraft(task: TaskDTO): Draft {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
+    <div className="flex flex-col gap-1">
+      <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
       {children}
     </div>
   );
@@ -184,10 +187,6 @@ export function TaskDrawer() {
       toast.error('请填写标题');
       return;
     }
-    if (isCreate && !draft.prefix.trim()) {
-      toast.error('请填写任务前缀(prefix)');
-      return;
-    }
     setSaving(true);
     const relatedFiles = parseRelatedFiles();
     try {
@@ -234,9 +233,31 @@ export function TaskDrawer() {
     }
   };
 
+  const { confirm, prompt: promptInput } = useConfirm();
+
+  // 复制派发指令(任务 markdown 的 Claude Code 拉取指令),不触发状态变更
+  const onCopyPrompt = async () => {
+    if (!task) return;
+    try {
+      const prompt = buildClaudeCodePrompt(task);
+      await navigator.clipboard.writeText(prompt);
+      toast.success('派发指令已复制到剪贴板');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '复制失败');
+    }
+  };
+
   const onDelete = async () => {
     if (!task) return;
-    if (!window.confirm(`确认删除「${task.title}」?此操作不可撤销。`)) return;
+    if (
+      !(await confirm({
+        title: '删除任务',
+        description: `确认删除「${task.title}」?此操作不可撤销。`,
+        confirmText: '删除',
+        variant: 'destructive',
+      }))
+    )
+      return;
     try {
       await removeTask(task.id);
       toast.success('已删除');
@@ -269,7 +290,11 @@ export function TaskDrawer() {
 
   const onReject = async () => {
     if (!task) return;
-    const reason = window.prompt('请输入驳回原因');
+    const reason = await promptInput({
+      title: '驳回任务',
+      description: '请输入驳回原因',
+      placeholder: '驳回原因…',
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       toast.error('驳回必须填写原因');
@@ -283,40 +308,33 @@ export function TaskDrawer() {
     }
   };
 
-  const canDispatch =
-    !isCreate && task && (task.status === TaskStatus.PLANNING || task.status === TaskStatus.TODO);
+  // 只有 TODO 态可派发(PLANNING 是从未使用的死状态,已从枚举删除)
+  const canDispatch = !isCreate && task?.status === TaskStatus.TODO;
   const canReview = !isCreate && task?.status === TaskStatus.REVIEW;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && close()}>
       <SheetContent
         side="right"
-        className="relative flex w-[900px] max-w-[92vw] flex-row gap-0 overflow-hidden p-0"
+        className="flex w-[80vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"
       >
-        {/* 左:编辑区 */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <SheetHeader className="shrink-0 border-b px-4 py-3">
-            <SheetTitle>{isCreate ? '新建任务' : (task?.title ?? '任务详情')}</SheetTitle>
-            <SheetDescription>
-              {isCreate ? '填写任务信息后创建' : task ? STATUS_LABELS[task.status] : ''}
-            </SheetDescription>
-          </SheetHeader>
+        {/* 顶部:标题/状态(跨三栏) */}
+        <SheetHeader className="shrink-0 border-b px-4 py-3">
+          <SheetTitle>{isCreate ? '新建任务' : (task?.title ?? '任务详情')}</SheetTitle>
+          <SheetDescription>
+            {isCreate ? '仅标题必填,其余可留空' : task ? STATUS_LABELS[task.status] : ''}
+          </SheetDescription>
+        </SheetHeader>
 
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-            {isCreate && (
-              <Field label="任务前缀 (prefix)">
-                <Input
-                  value={draft.prefix}
-                  onChange={(e) => patch({ prefix: e.target.value })}
-                  placeholder="如 fix-login(用于分支命名)"
-                />
-              </Field>
-            )}
-            <Field label="标题">
+        {/* 三栏:元信息(固定窄) | 步骤(flex-1) | 预览(flex-1) */}
+        <div className="flex flex-1 flex-row overflow-hidden">
+          {/* 栏1:元信息(字段紧凑纵向排列) */}
+          <div className="bg-muted/20 flex w-[240px] shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-3">
+            <Field label="标题 *">
               <Input
                 value={draft.title}
                 onChange={(e) => patch({ title: e.target.value })}
-                placeholder="任务标题"
+                placeholder="任务标题(必填)"
               />
             </Field>
             <Field label="描述">
@@ -324,7 +342,7 @@ export function TaskDrawer() {
                 value={draft.description}
                 onChange={(e) => patch({ description: e.target.value })}
                 placeholder="任务的详细描述"
-                className="min-h-20"
+                className="min-h-16"
               />
             </Field>
             <Field label="优先级">
@@ -347,7 +365,7 @@ export function TaskDrawer() {
                 <Input
                   value={draft.repoPath}
                   onChange={(e) => patch({ repoPath: e.target.value })}
-                  placeholder="/path/to/repo(留空则用默认仓库)"
+                  placeholder="/path/to/repo"
                 />
                 <Button variant="outline" size="icon" onClick={onPickDir} aria-label="选择目录">
                   <FolderOpen className="size-4" />
@@ -361,93 +379,114 @@ export function TaskDrawer() {
                 placeholder="留空则从仓库路径提取"
               />
             </Field>
-            <Field label="关联文件(每行一个路径)">
+            <Field label="关联文件">
               <Textarea
                 value={draft.relatedFilesText}
                 onChange={(e) => patch({ relatedFilesText: e.target.value })}
                 placeholder={'src/a.ts\nsrc/b.ts'}
-                className="min-h-16 font-mono text-xs"
+                className="min-h-12 font-mono text-xs"
               />
             </Field>
-            <Field label="步骤">
-              <StepEditor steps={draft.steps} onChange={(steps) => patch({ steps })} />
-            </Field>
+            {isCreate && (
+              <Field label="前缀(可选)">
+                <Input
+                  value={draft.prefix}
+                  onChange={(e) => patch({ prefix: e.target.value })}
+                  placeholder="留空自动用 TASK"
+                />
+              </Field>
+            )}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
-            {canReview && (
-              <>
-                <Button variant="outline" size="sm" onClick={onShowDiff}>
-                  <FileDiff className="size-4" />
-                  Diff
+          {/* 栏2:步骤(与预览平分剩余宽度;收起预览时独占) */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-3 py-2">
+              {!showPreview && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={() => setShowPreview(true)}
+                  aria-label="展开预览"
+                >
+                  <ChevronLeft className="size-4" />
                 </Button>
-                <Button size="sm" onClick={onApprove}>
-                  <Check className="size-4" />
-                  通过
-                </Button>
-                <Button variant="destructive" size="sm" onClick={onReject}>
-                  <X className="size-4" />
-                  驳回
-                </Button>
-              </>
-            )}
-            {canDispatch && (
-              <Button size="sm" onClick={onDispatch}>
-                <Rocket className="size-4" />
-                派发
-              </Button>
-            )}
-            <Button size="sm" onClick={save} disabled={saving}>
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              {isCreate ? '创建' : '保存'}
-            </Button>
-            {!isCreate && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive ml-auto"
-                onClick={onDelete}
-              >
-                <Trash2 className="size-4" />
-                删除
-              </Button>
-            )}
+              )}
+              <span className="text-sm font-semibold">步骤</span>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              <StepEditor steps={draft.steps} onChange={(steps) => patch({ steps })} />
+            </div>
           </div>
+
+          {/* 栏3:预览(实时 Markdown;与步骤平分剩余宽度) */}
+          {showPreview && (
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l">
+              <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-3 py-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={() => setShowPreview(false)}
+                  aria-label="收起预览"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+                <span className="text-sm font-semibold">预览</span>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-3">
+                <MessageContent content={markdown} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* 右:预览区(实时 Markdown) */}
-        {showPreview && (
-          <div className="flex w-[340px] shrink-0 flex-col border-l">
-            <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5">
-              <span className="text-sm font-semibold">预览</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => setShowPreview(false)}
-                aria-label="收起预览"
-              >
-                <ChevronRight className="size-4" />
+        {/* 底部:操作按钮(跨三栏) */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
+          {canReview && (
+            <>
+              <Button variant="outline" size="sm" onClick={onShowDiff}>
+                <FileDiff className="size-4" />
+                Diff
               </Button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              <MessageContent content={markdown} />
-            </div>
-          </div>
-        )}
-
-        {/* 收起态:展开预览按钮 */}
-        {!showPreview && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute top-16 right-2 z-10 size-7"
-            onClick={() => setShowPreview(true)}
-            aria-label="展开预览"
-          >
-            <ChevronLeft className="size-4" />
+              <Button size="sm" onClick={onApprove}>
+                <Check className="size-4" />
+                通过
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onReject}>
+                <X className="size-4" />
+                驳回
+              </Button>
+            </>
+          )}
+          {canDispatch && (
+            <Button size="sm" onClick={onDispatch}>
+              <Rocket className="size-4" />
+              派发
+            </Button>
+          )}
+          {!isCreate && task && (
+            <Button variant="outline" size="sm" onClick={onCopyPrompt}>
+              <Copy className="size-4" />
+              复制派发指令
+            </Button>
+          )}
+          <Button size="sm" onClick={save} disabled={saving}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            {isCreate ? '创建' : '保存'}
           </Button>
-        )}
+          {!isCreate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive ml-auto"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-4" />
+              删除
+            </Button>
+          )}
+        </div>
       </SheetContent>
 
       <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
