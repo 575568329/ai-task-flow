@@ -5,7 +5,7 @@ import {
   VocabAlreadyExistsError,
   VocabNotFoundError,
 } from '../../../application/vocab/VocabService.js';
-import type { VocabCreateDTO, VocabListQuery, VocabUpdateDTO } from '@ai-task-flow/shared';
+import type { VocabCreateDTO, VocabListQuery, VocabUpdateDTO, TranslateRequest } from '@ai-task-flow/shared';
 
 /** 把 Fastify 的 string query 转成 VocabListQuery（boolean/number 字段显式转换） */
 function parseListQuery(raw: Record<string, string | undefined>): VocabListQuery {
@@ -36,6 +36,23 @@ export async function registerVocabRoutes(fastify: FastifyInstance, vocabService
         return reply.status(409).send({ error: error.message });
       }
       throw error;
+    }
+  });
+
+  // POST /api/vocab/translate - 划词翻译（调 LLM，JSON mode + 降级）
+  fastify.post<{ Body: TranslateRequest }>('/api/vocab/translate', async (request, reply) => {
+    const { text, targetLang } = request.body ?? {};
+    if (!text?.trim()) {
+      return reply.status(400).send({ error: 'text 不能为空' });
+    }
+    try {
+      const result = await vocabService.translate(text.trim(), targetLang);
+      return reply.send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '翻译失败';
+      // 未配置 LLM → 400（可恢复，提示用户去设置）；上游/解析错误 → 500
+      const recoverable = message.includes('API Key') || message.includes('设置');
+      return reply.status(recoverable ? 400 : 500).send({ error: message });
     }
   });
 

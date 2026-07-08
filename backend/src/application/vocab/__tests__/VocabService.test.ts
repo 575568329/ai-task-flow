@@ -5,6 +5,7 @@ import { VocabService, VocabAlreadyExistsError, VocabNotFoundError } from '../Vo
 import type { VocabRepository } from '../../../domain/vocab/repositories/VocabRepository.js';
 import type { Vocab } from '../../../domain/vocab/entities/Vocab.js';
 import type { LlmConfigService } from '../../llm-config/LlmConfigService.js';
+import type { LlmProvider, StreamChunk } from '../../../infrastructure/llm/LlmProvider.js';
 
 /** 内存 mock 仓储，复刻 JsonVocabRepository 的去重判定逻辑 */
 function createMockRepo(): VocabRepository {
@@ -23,6 +24,32 @@ function createMockRepo(): VocabRepository {
 
 // P0 CRUD 不使用 LLM；translate（P1）才用。这里给个空 stub 满足构造注入。
 const mockLlmConfig = {} as unknown as LlmConfigService;
+
+/** 构造带 mock provider 的 LlmConfigService（translate 测试用） */
+function mockLlmConfigWithProvider(provider: LlmProvider, configured = true): LlmConfigService {
+  return {
+    getProvider: () => provider,
+    isConfigured: () => configured,
+  } as unknown as LlmConfigService;
+}
+
+/** mock provider：generateObject 返回/抛错 + streamText 输出 deltas 可定制 */
+function mockProvider(opts: {
+  objectResult?: unknown;
+  objectThrows?: Error;
+  streamDeltas?: string[];
+}): LlmProvider {
+  return {
+    async generateObject() {
+      if (opts.objectThrows) throw opts.objectThrows;
+      return opts.objectResult;
+    },
+    async *streamText(): AsyncIterable<StreamChunk> {
+      for (const d of opts.streamDeltas ?? []) yield { delta: d, done: false };
+      yield { delta: '', done: true };
+    },
+  } as unknown as LlmProvider;
+}
 
 describe('VocabService', () => {
   let service: VocabService;
@@ -79,5 +106,55 @@ describe('VocabService', () => {
 
   it('deleteVocab 不存在抛 VocabNotFoundError', async () => {
     await expect(service.deleteVocab('nope')).rejects.toBeInstanceOf(VocabNotFoundError);
+  });
+});
+
+describe('VocabService.translate', () => {
+  it('JSON 模式成功：直接返回结构化翻译', async () => {
+    const provider = mockProvider({
+      objectResult: { sourceLang: 'en', translation: '你好', pos: 'int.', definition: 'greeting', example: 'Hello!' },
+    });
+    const service = new VocabService(createMockRepo(), mockLlmConfigWithProvider(provider));
+    const r = await service.translate('hello');
+    expect(r.translation).toBe('你好');
+    expect(r.sourceLang).toBe('en');
+    expect(r.pos).toBe('int.');
+  });
+
+  it('normalize：空字符串的可选字段省略为 undefined', async () => {
+    const provider = mockProvider({
+      objectResult: { sourceLang: 'en', translation: '你好', pos: '', definition: '', example: '' },
+    });
+    const service = new VocabService(createMockRepo(), mockLlmConfigWithProvider(provider));
+    const r = await service.translate('hello');
+    expect(r.translation).toBe('你好');
+    expect(r.pos).toBeUndefined();
+    expect(r.example).toBeUndefined();
+  });
+
+  it('降级：generateObject 抛错 → streamText + parseLooseJson（剥 ```json fence）', async () => {
+    const provider = mockProvider({
+      objectThrows: new Error('json mode unsupported'),
+      streamDeltas: ['```json\n{"sourceLang":"en","translation":"你好"}\n```'],
+    });
+    const service = new VocabService(createMockRepo(), mockLlmConfigWithProvider(provider));
+    const r = await service.translate('hello');
+    expect(r.translation).toBe('你好');
+    expect(r.sourceLang).toBe('en');
+  });
+
+  it('降级兜底：流式输出非 JSON → 原文当译文', async () => {
+    const provider = mockProvider({
+      objectThrows: new Error('boom'),
+      streamDeltas: ['这根本不是 JSON,就是一段纯文本译文'],
+    });
+    const service = new VocabService(createMockRepo(), mockLlmConfigWithProvider(provider));
+    const r = await service.translate('hello');
+    expect(r.translation).toBe('这根本不是 JSON,就是一段纯文本译文');
+  });
+
+  it('未配置 LLM：抛友好错误（含 API Key/设置）', async () => {
+    const service = new VocabService(createMockRepo(), mockLlmConfigWithProvider(mockProvider({}), false));
+    await expect(service.translate('hi')).rejects.toThrow(/API Key|设置/);
   });
 });
