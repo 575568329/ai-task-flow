@@ -8,7 +8,7 @@ import { BoardView } from '@/components/views/BoardView';
 import { ChatView } from '@/components/views/ChatView';
 import { DocsView } from '@/components/views/DocsView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
-import { StorageManager } from '@/components/StorageManager';
+import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -62,7 +62,7 @@ function App() {
           );
         })}
       </main>
-      <StorageManager open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <Toaster />
     </div>
   );

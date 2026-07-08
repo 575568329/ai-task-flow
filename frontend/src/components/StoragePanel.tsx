@@ -1,15 +1,8 @@
-// frontend/src/components/StorageManager.tsx
-// 存储管理弹窗:展示各类别占用,按类别清理(仅 clearable),刷新后回写 storageWarn。
+// frontend/src/components/StoragePanel.tsx
+// 设置弹窗的一个 Tab:存储管理。展示各类别占用,按类别清理(仅 clearable),刷新后回写 storageWarn。
+// 从原 StorageManager 抽出(去掉 Dialog 外壳,由 SettingsDialog 提供);修正 button→Button 大小写。
 import { useEffect, useState } from 'react';
 import { Loader2, Trash2, AlertTriangle } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -25,11 +18,6 @@ import type {
 } from '@ai-task-flow/shared';
 import { cn } from '@/lib/utils';
 
-interface StorageManagerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
 /** 字节 → 人类可读(KB/MB/GB) */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -41,7 +29,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / KB).toFixed(1)} KB`;
 }
 
-export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
+export function StoragePanel() {
   const setStorageWarn = useUIStore((s) => s.setStorageWarn);
   const { confirm } = useConfirm();
   const [info, setInfo] = useState<StorageInfo | null>(null);
@@ -49,9 +37,8 @@ export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
   const [selected, setSelected] = useState<Set<StorageCategoryKey>>(new Set());
   const [clearing, setClearing] = useState(false);
 
-  // 打开时拉取占用,默认勾选所有超阈值的可清理项
+  // 挂载时拉取占用,默认勾选所有超阈值的可清理项
   useEffect(() => {
-    if (!open) return;
     setLoading(true);
     systemApi
       .getStorage()
@@ -69,7 +56,7 @@ export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
         toast.error(error instanceof Error ? error.message : '获取存储信息失败');
       })
       .finally(() => setLoading(false));
-  }, [open]);
+  }, []);
 
   const toggle = (key: StorageCategoryKey) => {
     const next = new Set(selected);
@@ -106,7 +93,6 @@ export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
       const res = await systemApi.clearStorage(targets);
       setInfo(res.storage);
       setStorageWarn(res.storage.warning);
-      // 清理后清空选中(已清的项 bytes 归零,无需再选)
       setSelected(new Set());
       const released = res.results.reduce((sum, r) => sum + r.releasedBytes, 0);
       toast.success(`已释放 ${formatBytes(released)}`);
@@ -118,66 +104,51 @@ export function StorageManager({ open, onOpenChange }: StorageManagerProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>存储管理</DialogTitle>
-          <DialogDescription>
-            查看数据目录占用并清理缓存。业务数据(任务/聊天)不可整体清理。
-          </DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col gap-3 py-1">
+      {loading && (
+        <div className="text-muted-foreground flex items-center justify-center gap-2 py-8 text-sm">
+          <Loader2 className="size-4 animate-spin" /> 加载中…
+        </div>
+      )}
 
-        {loading && (
-          <div className="text-muted-foreground flex items-center justify-center gap-2 py-8 text-sm">
-            <Loader2 className="size-4 animate-spin" /> 加载中…
+      {info && !loading && (
+        <>
+          <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+            <span className="text-muted-foreground">总占用</span>
+            <span className={cn('font-semibold', info.warning && 'text-destructive')}>
+              {formatBytes(info.totalBytes)}
+              {info.warning && (
+                <AlertTriangle className="ml-1 inline size-3.5 align-text-bottom" />
+              )}
+            </span>
           </div>
-        )}
 
-        {info && !loading && (
-          <>
-            <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-              <span className="text-muted-foreground">总占用</span>
-              <span className={cn('font-semibold', info.warning && 'text-destructive')}>
-                {formatBytes(info.totalBytes)}
-                {info.warning && (
-                  <AlertTriangle className="ml-1 inline size-3.5 align-text-bottom" />
-                )}
-              </span>
+          <ScrollArea className="max-h-60 pr-3">
+            <div className="flex flex-col gap-2">
+              {info.items.map((item: StorageItem) => (
+                <StorageRow
+                  key={item.key}
+                  item={item}
+                  checked={selected.has(item.key)}
+                  onToggle={() => toggle(item.key)}
+                />
+              ))}
             </div>
+          </ScrollArea>
 
-            <ScrollArea className="max-h-72 pr-3">
-              <div className="flex flex-col gap-2">
-                {info.items.map((item: StorageItem) => (
-                  <StorageRow
-                    key={item.key}
-                    item={item}
-                    checked={selected.has(item.key)}
-                    onToggle={() => toggle(item.key)}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
-          </>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            关闭
-          </Button>
-          <Button
-            onClick={() => void handleClear()}
-            disabled={clearing || selected.size === 0}
-          >
-            {clearing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Trash2 className="size-4" />
-            )}
-            清理选中({selected.size})
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="flex justify-end">
+            <Button onClick={() => void handleClear()} disabled={clearing || selected.size === 0}>
+              {clearing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              清理选中({selected.size})
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
