@@ -55,6 +55,11 @@ export function chatFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'chats.json');
 }
 
+/** vocab.json 路径(翻译生词本数据),与 chats.json 同级 */
+export function vocabFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'vocab.json');
+}
+
 /** 上传图片目录 */
 export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');

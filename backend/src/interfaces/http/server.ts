@@ -23,8 +23,10 @@ import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
+import type { VocabService } from '../../application/vocab/VocabService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
+import { registerVocabRoutes } from './routes/vocabRoutes.js';
 
 /** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
  *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
@@ -56,6 +58,7 @@ export async function createHttpServer(
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
+  vocabService: VocabService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -150,6 +153,7 @@ export async function createHttpServer(
   await registerWebClipRoutes(fastify, webClipService);
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
+  await registerVocabRoutes(fastify, vocabService);
   await fastify.register(systemRoutes);
 
   // 生产模式:单端口托管前端 SPA(可选)
@@ -217,12 +221,13 @@ export async function startHttpServer(
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
+  vocabService: VocabService,
 ) {
   // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

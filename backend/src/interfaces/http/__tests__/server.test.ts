@@ -14,6 +14,8 @@ import { ChatService } from '../../../application/research/ChatService.js';
 import { JsonLlmConfigRepository } from '../../../infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from '../../../application/llm-config/LlmConfigService.js';
 import { WebClipService } from '../../../application/webclip/WebClipService.js';
+import { JsonVocabRepository } from '../../../infrastructure/persistence/JsonVocabRepository.js';
+import { VocabService } from '../../../application/vocab/VocabService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -23,6 +25,7 @@ describe('HTTP Server', () => {
   let server: FastifyInstance;
   let testFilePath: string;
   let testEventsPath: string;
+  let testVocabPath: string;
   let taskRepository: JsonTaskRepository;
   let eventBus: InMemoryEventBus;
 
@@ -32,6 +35,7 @@ describe('HTTP Server', () => {
     const id = nanoid();
     testFilePath = path.join(os.tmpdir(), `test-tasks-${id}.json`);
     testEventsPath = path.join(os.tmpdir(), `test-events-${id}.jsonl`);
+    testVocabPath = path.join(os.tmpdir(), `test-vocab-${id}.json`);
 
     eventBus = new InMemoryEventBus();
     const eventStore = new JsonEventStore(testEventsPath);
@@ -49,6 +53,10 @@ describe('HTTP Server', () => {
     const { KnowledgeService } = await import('../../../application/knowledge/KnowledgeService.js');
     const knowledgeService = new KnowledgeService(path.join(process.cwd(), 'knowledge-base'));
 
+    // 翻译生词本测试依赖（用临时文件隔离）
+    const vocabRepository = new JsonVocabRepository(testVocabPath);
+    const vocabService = new VocabService(vocabRepository, llmConfigService);
+
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       taskRepository,
@@ -59,6 +67,7 @@ describe('HTTP Server', () => {
       llmConfigService,
       webClipService,
       knowledgeService,
+      vocabService,
     );
   });
 
@@ -69,6 +78,9 @@ describe('HTTP Server', () => {
     } catch {}
     try {
       await fs.unlink(testEventsPath);
+    } catch {}
+    try {
+      await fs.unlink(testVocabPath);
     } catch {}
   });
 
