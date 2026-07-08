@@ -8,6 +8,7 @@ import { BoardView } from '@/components/views/BoardView';
 import { ChatView } from '@/components/views/ChatView';
 import { DocsView } from '@/components/views/DocsView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
+import { VocabView } from '@/components/views/VocabView';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/Toaster';
 import { useTaskStore } from '@/stores/taskStore';
@@ -20,6 +21,7 @@ const VIEWS: Record<ViewKey, ComponentType> = {
   chat: ChatView,
   docs: DocsView,
   knowledge: KnowledgeView,
+  vocab: VocabView,
 };
 
 function App() {

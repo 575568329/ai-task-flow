@@ -8,6 +8,7 @@ import {
   MessageSquare,
   FileText,
   BookOpen,
+  Languages,
   Sun,
   Moon,
   Settings,
@@ -20,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/lib/utils';
 
-export type ViewKey = 'board' | 'chat' | 'docs' | 'knowledge';
+export type ViewKey = 'board' | 'chat' | 'docs' | 'knowledge' | 'vocab';
 
 interface NavItem {
   key: ViewKey;
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'chat', label: '资料调研', icon: MessageSquare },
   { key: 'docs', label: '任务文档', icon: FileText },
   { key: 'knowledge', label: '知识库', icon: BookOpen },
+  { key: 'vocab', label: '生词本', icon: Languages },
 ];
 
 const COLLAPSE_KEY = 'ai-task-flow-sidebar-collapsed';
