@@ -12,21 +12,27 @@ import type { StepBlock, TaskStep } from '../types/task.js';
  * 2. 旧格式 { description, imageUrl }       → 转为 [文本块?, 图片块?]，保持"文前图后"
  * 3. 两者混合（迁移期）                      → blocks 优先，旧字段忽略
  */
-export function normalizeStep(step: TaskStep): Required<Pick<TaskStep, 'blocks'>> & { blocks: StepBlock[] } {
+export function normalizeStep(step: TaskStep): TaskStep {
+  let blocks: StepBlock[];
   // 新格式：已有 blocks，直接清洗
   if (Array.isArray(step.blocks)) {
-    return { blocks: step.blocks.filter(isNonEmptyBlock) };
+    blocks = step.blocks.filter(isNonEmptyBlock);
+  } else {
+    // 旧格式：description + imageUrl → 文本在前，图片在后
+    blocks = [];
+    if (step.description && step.description.trim()) {
+      blocks.push({ type: 'text', content: step.description });
+    }
+    if (step.imageUrl) {
+      blocks.push({ type: 'image', url: step.imageUrl });
+    }
   }
 
-  // 旧格式：description + imageUrl → 文本在前，图片在后
-  const blocks: StepBlock[] = [];
-  if (step.description && step.description.trim()) {
-    blocks.push({ type: 'text', content: step.description });
-  }
-  if (step.imageUrl) {
-    blocks.push({ type: 'image', url: step.imageUrl });
-  }
-  return { blocks };
+  // 保留用户手动勾选的完成标记。早期版本只返回 { blocks }，会把 completed 丢掉，
+  // 导致看板步骤进度(已完成/总数)永远显示 0：写入 JSON 时 completed 还在，读取时被这里抹除。
+  const normalized: TaskStep = { blocks };
+  if (step.completed !== undefined) normalized.completed = step.completed;
+  return normalized;
 }
 
 /** 批量规整 */
