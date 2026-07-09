@@ -1,5 +1,6 @@
 // frontend/src/components/views/VocabView.tsx
-// 翻译生词本:上半划词翻译(输入→译文→存生词本),下半生词本列表(搜索/筛选/朗读/CRUD)。
+// 翻译生词本:左栏划词翻译(输入→译文→存生词本),右栏生词本列表(搜索/筛选/朗读/CRUD)。
+// 宽屏(md+)左右分栏(左栏 w-96 录入,右栏列表占满);窄屏回退上下,移动端可用。
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -48,10 +49,10 @@ export function VocabView() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
-      {/* ===== 翻译区 ===== */}
-      <section className="bg-card flex shrink-0 flex-col gap-2 rounded-lg border p-3">
-        <div className="flex gap-2">
+    <div className="flex h-full flex-col gap-4 overflow-hidden p-4 md:flex-row">
+      {/* ===== 翻译区(宽屏左栏 w-96 / 窄屏顶部)===== */}
+      <section className="bg-card flex shrink-0 flex-col gap-2 rounded-lg border p-3 md:w-96">
+        <div className="flex flex-col gap-2">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
