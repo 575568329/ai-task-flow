@@ -52,6 +52,8 @@ export function KnowledgeViewer() {
     );
   }
 
+  const rawUrl = getRawUrl(doc.path);
+
   const onDelete = async () => {
     if (
       !(await confirm({
@@ -97,7 +99,7 @@ export function KnowledgeViewer() {
   /** 下载原始文件(fetch→blob→a[download],避免浏览器内联打开 pdf/html/img) */
   const onDownload = async () => {
     try {
-      const res = await fetch(getRawUrl(doc.path));
+      const res = await fetch(rawUrl);
       if (!res.ok) throw new Error('下载失败');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -159,7 +161,7 @@ export function KnowledgeViewer() {
 
       {isFrame ? (
         <iframe
-          src={getRawUrl(doc.path)}
+          src={rawUrl}
           title={doc.title}
           className="flex-1 border-0"
         />
@@ -174,10 +176,10 @@ export function KnowledgeViewer() {
               ))}
             {doc.kind === 'img' && (
               <img
-                src={getRawUrl(doc.path)}
+                src={rawUrl}
                 alt={doc.title}
                 className="max-w-full cursor-zoom-in rounded"
-                onClick={() => usePreviewStore.getState().open(getRawUrl(doc.path))}
+                onClick={() => usePreviewStore.getState().open(rawUrl)}
               />
             )}
             {doc.kind === 'docx' && (
