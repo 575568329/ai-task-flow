@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { fetchDoc, getRawUrl, deleteDoc, fetchManifest } from '@/api/knowledge';
 import { MessageContent } from '@/components/chat/MessageContent';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 
 export function KnowledgeViewer() {

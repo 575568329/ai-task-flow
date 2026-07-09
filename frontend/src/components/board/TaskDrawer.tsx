@@ -49,7 +49,7 @@ import {
 } from '@/components/ui/dialog';
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/chat/MessageContent';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';

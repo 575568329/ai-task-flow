@@ -1,4 +1,4 @@
-// frontend/src/components/ui/Toaster.tsx
+// frontend/src/components/ui/toaster.tsx
 // 轻量自建 Toast(基于 zustand)。导出 toast 对象 + <Toaster /> 组件。
 // 业务层契约:api/http.ts、stores/llmConfigStore.ts 直接 import { toast } 并调
 // toast.success/error/info —— 此 API 务必保持稳定,不可改名。

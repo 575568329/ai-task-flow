@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { useTaskStore } from '@/stores/taskStore';
 import { taskApi, systemApi } from '@/api/task';
 import { readFile } from '@/api/files';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { FileTree } from './FileTree';

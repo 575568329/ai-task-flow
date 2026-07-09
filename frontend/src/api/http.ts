@@ -1,5 +1,5 @@
 // frontend/src/api/http.ts
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 
 const BASE = '/api';
 

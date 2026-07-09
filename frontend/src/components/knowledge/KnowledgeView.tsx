@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { fetchManifest } from '@/api/knowledge';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { KnowledgeTree } from './KnowledgeTree';
 import { KnowledgeViewer } from './KnowledgeViewer';
 

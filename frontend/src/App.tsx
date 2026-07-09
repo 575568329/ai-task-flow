@@ -10,7 +10,7 @@ import { DocsView } from '@/components/views/DocsView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
 import { VocabView } from '@/components/views/VocabView';
 import { SettingsDialog } from '@/components/SettingsDialog';
-import { Toaster } from '@/components/ui/Toaster';
+import { Toaster } from '@/components/ui/toaster';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';

@@ -13,7 +13,7 @@ import {
 import { TaskStatus } from '@ai-task-flow/shared';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { KanbanColumn } from './KanbanColumn';
 import { KANBAN_COLUMNS } from './meta';
 

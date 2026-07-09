@@ -18,7 +18,7 @@ import {
 import type { TaskStep, StepBlock } from '@ai-task-flow/shared';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 
 interface StepEditorProps {

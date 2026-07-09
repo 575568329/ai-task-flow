@@ -9,7 +9,7 @@ import type {
   TranslateResponse,
 } from '@ai-task-flow/shared';
 import { vocabApi } from '@/api/vocab';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 
 const PAGE_SIZE = 50;
 

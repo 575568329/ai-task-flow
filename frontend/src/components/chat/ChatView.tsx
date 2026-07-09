@@ -11,7 +11,7 @@ import type { ChatMessage, ChatRole, Source } from '@ai-task-flow/shared';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chatStore';

@@ -1,7 +1,7 @@
 // frontend/src/stores/llmConfigStore.ts
 import { create } from 'zustand';
 import { llmConfigApi, type MaskedLlmConfig, type SaveLlmConfigParams } from '@/api/llmConfig';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 
 interface LlmConfigState {
   /** 当前配置（脱敏） */

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useChatStore } from '@/stores/chatStore';
 import { updateConversation } from '@/api/chat';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 
 interface CustomPromptPanelProps {
   open: boolean;

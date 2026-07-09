@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useLlmConfigStore } from '@/stores/llmConfigStore';
 import { llmConfigApi } from '@/api/llmConfig';
-import { toast } from '@/components/ui/Toaster';
+import { toast } from '@/components/ui/toaster';
 
 /** 已配置 key 时输入框的占位(不回填明文,避免泄露) */
 const KEY_PLACEHOLDER = '••••••••••••';
