@@ -53,6 +53,7 @@ import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { usePreviewStore } from '@/stores/previewStore';
 import { taskApi, systemApi } from '@/api/task';
 import { StepEditor } from './StepEditor';
 import { STATUS_LABELS } from '@/lib/taskMeta';
@@ -116,6 +117,8 @@ export function TaskDrawer() {
   const task = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined;
   const isCreate = creatingTask || !task;
   const open = creatingTask || selectedTaskId !== null;
+  // 图片预览(YARL)打开时,屏蔽抽屉的 outside-click / ESC(详见 SheetContent 注释)
+  const previewOpen = usePreviewStore((s) => !!s.src);
 
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
@@ -336,6 +339,16 @@ export function TaskDrawer() {
       <SheetContent
         side="right"
         className="flex w-[80vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"
+        // 图片预览(YARL)打开时,屏蔽抽屉的 outside-click / ESC 关闭:
+        // YARL 蒙版 portal 到 document.body,不在本抽屉的 content 树内 → 点击它 / 按 ESC
+        // 会被 Radix 误判为"操作抽屉外部"而连带关闭抽屉(只关了抽屉、预览没关)。
+        // 预览打开期间吞掉这两个事件,交由 YARL 自行关闭;预览关闭后抽屉恢复正常行为。
+        onInteractOutside={(e) => {
+          if (previewOpen) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (previewOpen) e.preventDefault();
+        }}
       >
         {/* 顶部:标题/状态(跨三栏) */}
         <SheetHeader className="shrink-0 border-b px-4 py-3">
