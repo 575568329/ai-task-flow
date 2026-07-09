@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
+import { usePreviewStore } from '@/stores/previewStore';
 
 interface StepEditorProps {
   steps: TaskStep[];
@@ -241,7 +242,8 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
                       <img
                         src={block.url}
                         alt="步骤截图"
-                        className="h-16 w-16 rounded border object-cover"
+                        className="h-16 w-16 cursor-zoom-in rounded border object-cover"
+                        onClick={() => usePreviewStore.getState().open(block.url)}
                       />
                       <button
                         type="button"

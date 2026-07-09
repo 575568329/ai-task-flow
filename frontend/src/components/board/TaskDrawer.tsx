@@ -2,7 +2,7 @@
 // 任务详情/编辑抽屉(Sheet):左编辑表单 + 右 Markdown 预览(实时反映草稿)。
 // 表单 + 步骤 + 按状态的操作(派发 / 审查 approve+reject+diff / 保存 / 删除)。
 // 创建模式(uiStore.creatingTask)与编辑模式(selectedTaskId)共用一个抽屉。
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Loader2,
   FolderOpen,
@@ -222,6 +222,25 @@ export function TaskDrawer() {
       setSaving(false);
     }
   };
+
+  // saveRef/savingRef:keydown 监听器用,始终指向最新值,避免监听器只绑一次时闭包捕获旧 draft
+  const saveRef = useRef(save);
+  const savingRef = useRef(saving);
+  saveRef.current = save;
+  savingRef.current = saving;
+
+  // Ctrl/Cmd+S 保存(仅抽屉打开时);preventDefault 拦截浏览器默认保存,savingRef 防重复提交
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!savingRef.current) void saveRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   const onDispatch = async () => {
     if (!task) return;

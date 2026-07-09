@@ -11,6 +11,7 @@ import { fetchDoc, getRawUrl, deleteDoc, fetchManifest } from '@/api/knowledge';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
+import { usePreviewStore } from '@/stores/previewStore';
 
 export function KnowledgeViewer() {
   const getCurrentDoc = useKnowledgeStore((s) => s.getCurrentDoc);
@@ -175,7 +176,8 @@ export function KnowledgeViewer() {
               <img
                 src={getRawUrl(doc.path)}
                 alt={doc.title}
-                className="max-w-full rounded"
+                className="max-w-full cursor-zoom-in rounded"
+                onClick={() => usePreviewStore.getState().open(getRawUrl(doc.path))}
               />
             )}
             {doc.kind === 'docx' && (

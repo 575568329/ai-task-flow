@@ -1,5 +1,6 @@
 // frontend/src/components/chat/MessageContent.tsx
 // Markdown 渲染:代码块→CodeBlock,mermaid→MermaidBlock,其余标签自覆盖样式(不依赖 typography 插件)。
+// 图片点击触发全局预览蒙版(previewStore)。
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 // 渲染文档内嵌的 HTML(如翻译文案里的 <br>);本工具内容来自本地任务/文档/AI,风险可接受
@@ -7,6 +8,7 @@ import rehypeRaw from 'rehype-raw';
 import type { Components } from 'react-markdown';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
+import { usePreviewStore } from '@/stores/previewStore';
 
 interface MessageContentProps {
   content: string;
@@ -48,6 +50,16 @@ const components: Components = {
     >
       {children}
     </a>
+  ),
+  img: ({ src, alt }) => (
+    <img
+      src={src ?? ''}
+      alt={alt ?? ''}
+      className="max-w-full cursor-zoom-in rounded"
+      onClick={() => {
+        if (src) usePreviewStore.getState().open(src);
+      }}
+    />
   ),
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
