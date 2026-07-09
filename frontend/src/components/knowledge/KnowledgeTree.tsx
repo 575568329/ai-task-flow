@@ -4,10 +4,11 @@ import { useState, type ReactNode } from 'react';
 import { Search, Folder, FolderOpen, FileText } from 'lucide-react';
 import type { KnowledgeNode } from '@ai-task-flow/shared';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
+import { formatRelativeTime } from '@/lib/formatDate';
 
 export function KnowledgeTree() {
   const manifest = useKnowledgeStore((s) => s.manifest);
@@ -25,14 +26,6 @@ export function KnowledgeTree() {
   if (!manifest) return null;
 
   const hasFilter = searchQuery.trim().length > 0 || selectedTags.length > 0;
-
-  const toggleTag = (tag: string) => {
-    setSelectedTags(
-      selectedTags.includes(tag)
-        ? selectedTags.filter((t) => t !== tag)
-        : [...selectedTags, tag]
-    );
-  };
 
   const toggleDir = (key: string) => {
     const next = new Set(collapsed);
@@ -77,7 +70,10 @@ export function KnowledgeTree() {
         onClick={() => setCurrentPath(node.path)}
       >
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate">{node.title}</span>
+        <span className="min-w-0 truncate">{node.title}</span>
+        <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
+          {formatRelativeTime(node.mtime)}
+        </span>
       </button>
     );
   };
@@ -95,18 +91,12 @@ export function KnowledgeTree() {
           />
         </div>
         {manifest.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {manifest.tags.map((tag) => (
-              <button type="button" key={tag} onClick={() => toggleTag(tag)}>
-                <Badge
-                  variant={selectedTags.includes(tag) ? 'default' : 'outline'}
-                  className="cursor-pointer px-1.5 py-0 text-[10px]"
-                >
-                  {tag}
-                </Badge>
-              </button>
-            ))}
-          </div>
+          <MultiSelect
+            options={manifest.tags}
+            value={selectedTags}
+            onChange={setSelectedTags}
+            placeholder="按标签筛选"
+          />
         )}
       </div>
 
@@ -127,7 +117,10 @@ export function KnowledgeTree() {
                   onClick={() => setCurrentPath(doc.path)}
                 >
                   <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{doc.title}</span>
+                  <span className="min-w-0 truncate">{doc.title}</span>
+                  <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
+                    {formatRelativeTime(doc.mtime)}
+                  </span>
                 </button>
               ))
             )
