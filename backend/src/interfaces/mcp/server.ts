@@ -4,12 +4,15 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { container } from '../../infrastructure/di/container.js';
 import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 import type { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
+import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { stepsToMarkdown } from '@ai-task-flow/shared';
 
 /**
@@ -27,6 +30,7 @@ class AITaskFlowServer {
   private server: Server;
   private taskRepository: TaskRepository;
   private worktreeManager: WorktreeManager;
+  private knowledgeService: KnowledgeService;
 
   constructor() {
     this.server = new Server(
@@ -37,6 +41,7 @@ class AITaskFlowServer {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       }
     );
@@ -44,6 +49,7 @@ class AITaskFlowServer {
     // 从 DI 容器获取依赖
     this.taskRepository = container.resolve<TaskRepository>('TaskRepository');
     this.worktreeManager = container.resolve<WorktreeManager>('WorktreeManager');
+    this.knowledgeService = container.resolve<KnowledgeService>('KnowledgeService');
 
     this.setupHandlers();
   }
@@ -137,6 +143,33 @@ class AITaskFlowServer {
             required: ['taskId', 'note'],
           },
         },
+        {
+          name: 'save_to_knowledge',
+          description: '将调研结论/笔记写入知识库(创建新 Markdown 文档,文件名由服务端按命名规则生成,调用方无法干预物理文件名)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              title: {
+                type: 'string',
+                description: '文档标题(用作文件名一部分,特殊字符会被清洗)',
+              },
+              content: {
+                type: 'string',
+                description: 'Markdown 正文',
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: '可选标签(写入 frontmatter)',
+              },
+              dir: {
+                type: 'string',
+                description: '可选子目录(相对 knowledge-base/),不传则写根目录',
+              },
+            },
+            required: ['title', 'content'],
+          },
+        },
       ],
     }));
 
@@ -155,9 +188,43 @@ class AITaskFlowServer {
           return this.handleGetTaskDiff(args);
         case 'add_note_to_task':
           return this.handleAddNoteToTask(args);
+        case 'save_to_knowledge':
+          return this.handleSaveToKnowledge(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
+    });
+
+    // 列出知识库资源(供客户端按 uri 读取知识库 Markdown 文档)
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const manifest = await this.knowledgeService.getManifest();
+      const resources = manifest.flatDocs
+        .filter(d => d.kind === 'md')
+        .map(d => ({
+          uri: `knowledge://${d.path}`,
+          name: d.title,
+          mimeType: 'text/markdown',
+        }));
+      return { resources };
+    });
+
+    // 读取单个知识库资源(knowledge://<相对路径>)
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const { uri } = request.params;
+      if (!uri.startsWith('knowledge://')) {
+        throw new Error(`Unsupported resource uri: ${uri}`);
+      }
+      const relPath = uri.replace('knowledge://', '');
+      const doc = await this.knowledgeService.getDoc(relPath);
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/markdown',
+            text: doc.content ?? '',
+          },
+        ],
+      };
     });
   }
 
@@ -465,6 +532,44 @@ class AITaskFlowServer {
         },
       ],
     };
+  }
+
+  private async handleSaveToKnowledge(args: any) {
+    const { title, content, tags, dir } = args;
+
+    if (!title || !title.trim()) {
+      throw new Error('title is required');
+    }
+    if (!content) {
+      throw new Error('content is required');
+    }
+
+    try {
+      const result = await this.knowledgeService.createDoc({ title, content, tags, dir });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              '✅ 已写入知识库',
+              '',
+              `**路径**: \`${result.path}\``,
+              '',
+              '文档已创建,前端知识库看板刷新即可见。',
+            ].join('\n'),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 写入知识库失败: ${error.message}`,
+          },
+        ],
+      };
+    }
   }
 
   async run(): Promise<void> {

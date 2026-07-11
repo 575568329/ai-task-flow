@@ -3,6 +3,8 @@ import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { WorktreeManager } from '../git/WorktreeManager.js';
 import { JsonTaskRepository } from '../persistence/JsonTaskRepository.js';
+import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
+import { knowledgeDirPath } from '../../config/dataDir.js';
 
 /**
  * 依赖注入容器配置
@@ -15,6 +17,11 @@ container.registerSingleton('WorktreeManager', WorktreeManager);
 // 注册 Repository
 container.register('TaskRepository', {
   useClass: JsonTaskRepository,
+});
+
+// 注册知识库服务(构造需 root 参数,用 useFactory 注入)
+container.register('KnowledgeService', {
+  useFactory: () => new KnowledgeService(knowledgeDirPath()),
 });
 
 // 导出容器实例
