@@ -50,3 +50,23 @@ export interface KnowledgeDocResponse {
     mtime: number;
   };
 }
+
+/** POST /api/knowledge/doc 请求体:创建文档(文件名由服务端生成,调用方无法干预) */
+export interface KnowledgeCreateRequest {
+  title: string;
+  content: string;
+  tags?: string[];
+  /** 可选子目录(相对 knowledge-base/),服务端校验越界 */
+  dir?: string;
+}
+
+/** PUT /api/knowledge/doc 请求体:覆盖更新已有文档 */
+export interface KnowledgeSaveRequest {
+  content: string;
+}
+
+/** POST/PUT /api/knowledge/doc 成功响应 */
+export interface KnowledgeDocWriteResponse {
+  /** 相对 knowledge-base/ 的 posix 路径 */
+  path: string;
+}
