@@ -1,6 +1,6 @@
 // frontend/src/api/knowledge.ts
 // 知识库 API 封装
-import type { KnowledgeManifest, KnowledgeDocResponse } from '@ai-task-flow/shared';
+import type { KnowledgeManifest, KnowledgeDocResponse, KnowledgeCreateRequest } from '@ai-task-flow/shared';
 
 const BASE = '/api';
 
@@ -38,4 +38,32 @@ export async function deleteDoc(path: string): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `删除失败 (${res.status})`);
   }
+}
+
+/** 创建文档(文件名由服务端按命名规则生成,调用方只传语义字段) */
+export async function createDoc(input: KnowledgeCreateRequest): Promise<{ path: string }> {
+  const res = await fetch(`${BASE}/knowledge/doc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `创建失败 (${res.status})`);
+  }
+  return res.json();
+}
+
+/** 覆盖更新已有文档(content 即完整 md 正文) */
+export async function saveDoc(path: string, content: string): Promise<{ path: string }> {
+  const res = await fetch(`${BASE}/knowledge/doc?path=${encodeURIComponent(path)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `保存失败 (${res.status})`);
+  }
+  return res.json();
 }
