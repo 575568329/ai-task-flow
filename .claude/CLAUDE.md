@@ -636,3 +636,22 @@ Good luck! 🚀
 
 - **本项目需要发布到 npm**，包名 `@ai-task-flow/cli`，作为全局可安装的 CLI 工具
 - **发布流程与注意事项**详见 [npm-publishing-guide.md](npm-publishing-guide.md)
+
+---
+
+## 十、环境与避坑约定（红线）
+
+> 以下为必须遵守的硬性约定。完整原因 / 排查步骤 / 错误对照表见：
+> - 依赖安装：[docs/20260723130000_依赖安装排坑记录.md](../docs/20260723130000_依赖安装排坑记录.md)
+> - 运行时避坑：[docs/20260723130001_项目避坑与约定.md](../docs/20260723130001_项目避坑与约定.md)
+
+- **统一 npm**，禁用 pnpm / cnpm / yarn（pnpm 不支持 `workspaces`，子包依赖装不上）。
+- **非内网环境装前删 `package-lock.json`**（含科大讯飞内网源，公网 ENOTFOUND，报误导性的 `Exit handler never called!`）。
+- 前端固定 `5678`、backend 默认 `3000`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
+- MCP 的 `TaskRepository` 必须 `useFactory` 注册（否则启动 DI 崩溃）。
+- 任务三态 `TODO` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
+- `LlmConfigService` 返回值含密钥，**禁止透传前端 / 日志**，用 `getMaskedConfig()`。
+- MCP 回写 `tasks.json` 后前端靠文件轮询刷新（非实时），等几秒再看板。
+- 运行时产物勿提交（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
+- MV3 扩展访问 localhost：PNA 只拦预检，POST 用 `text/plain` 绕过。
+- 终端 `start` 是 fire-and-forget，无法注入消息；`Failed to fetch` 先查后端日志。
