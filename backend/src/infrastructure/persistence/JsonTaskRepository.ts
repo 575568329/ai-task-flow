@@ -112,6 +112,13 @@ export class JsonTaskRepository implements TaskRepository {
   }
 
   private dtoToEntity(dto: TaskDTO): Task {
+    // 数据迁移(幂等):会话化改造前任务可能处于 dispatched/review 两态,
+    // 状态机收敛为三态后统一归一为 TODO。executionResult/worktree 原样保留
+    // (后者降为可选关联,不再随派发强绑)。反复加载只归一一次——已 TODO 的不再动。
+    const rawStatus = dto.status as string;
+    const status: TaskStatus =
+      rawStatus === 'dispatched' || rawStatus === 'review' ? TaskStatus.TODO : dto.status;
+
     let worktree: WorktreeRef | undefined;
     if (dto.worktree) {
       worktree = new WorktreeRef(
@@ -137,7 +144,7 @@ export class JsonTaskRepository implements TaskRepository {
       TaskId.fromString(dto.id),
       dto.title,
       dto.description,
-      dto.status,
+      status,
       dto.priority,
       dto.repoPath,
       dto.projectName,
@@ -150,6 +157,7 @@ export class JsonTaskRepository implements TaskRepository {
       new Date(dto.updatedAt),
       dto.source ?? 'manual',   // 旧数据无 source 字段 → 视为手动
       dto.sourceUrl,
+      dto.env,
     );
   }
 }

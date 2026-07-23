@@ -4,7 +4,6 @@ import { startHttpServer } from './interfaces/http/server.js';
 import { JsonTaskRepository } from './infrastructure/persistence/JsonTaskRepository.js';
 import { InMemoryEventBus } from './infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from './infrastructure/pubsub/EventStore.js';
-import { WorktreeManager } from './infrastructure/git/WorktreeManager.js';
 import { findAvailablePort } from './utils/port-finder.js';
 import { resolveDataDir, taskDocPath } from './config/dataDir.js';
 import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
@@ -65,7 +64,6 @@ export async function startApp(options: StartAppOptions = {}) {
   const eventBus = new InMemoryEventBus();
   const eventStore = new JsonEventStore();
   const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore);
-  const worktreeManager = new WorktreeManager();
 
   // 调研聊天 Agent 初始化
   const chatRepository = new JsonChatRepository();
@@ -118,7 +116,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,

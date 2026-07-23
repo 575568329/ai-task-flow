@@ -12,8 +12,6 @@ interface TaskState {
   create: (data: CreateTaskRequest) => Promise<TaskDTO>;
   update: (id: string, data: UpdateTaskRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  /** 派发任务（创建 worktree），返回 Claude 指令 */
-  dispatch: (id: string) => Promise<string>;
   /** 拖拽乐观更新:先改本地,失败回滚 */
   optimisticMove: (id: string, status: TaskStatus) => Promise<void>;
   /** 收到 SSE 事件后,重新拉取该任务最新态合并进列表 */
@@ -49,21 +47,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   remove: async (id) => {
     await taskApi.remove(id);
     set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
-  },
-
-  dispatch: async (id) => {
-    const response = await taskApi.dispatch(id);
-    // 复制 Claude 指令到剪贴板（失败不阻断）
-    try {
-      await navigator.clipboard.writeText(response.claudeCommand);
-    } catch (error) {
-      console.warn('Failed to copy Claude command to clipboard:', error);
-    }
-    // 更新任务列表（去掉 claudeCommand 字段，只保留任务数据）
-    const { claudeCommand, ...task } = response;
-    get().upsert(task);
-    // 返回 claudeCommand 给调用方（用于显示成功提示）
-    return response.claudeCommand;
   },
 
   optimisticMove: async (id, status) => {

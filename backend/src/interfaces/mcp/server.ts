@@ -11,7 +11,6 @@ import { container } from '../../infrastructure/di/container.js';
 import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
-import type { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { stepsToMarkdown } from '@ai-task-flow/shared';
 
@@ -22,14 +21,12 @@ import { stepsToMarkdown } from '@ai-task-flow/shared';
  * - list_pending_tasks: 列出待办任务
  * - get_task: 获取任务详情
  * - record_result: 记录执行结果
- * - get_task_diff: 获取 worktree diff
  * - add_note_to_task: 添加备注
  */
 
 class AITaskFlowServer {
   private server: Server;
   private taskRepository: TaskRepository;
-  private worktreeManager: WorktreeManager;
   private knowledgeService: KnowledgeService;
 
   constructor() {
@@ -48,7 +45,6 @@ class AITaskFlowServer {
 
     // 从 DI 容器获取依赖
     this.taskRepository = container.resolve<TaskRepository>('TaskRepository');
-    this.worktreeManager = container.resolve<WorktreeManager>('WorktreeManager');
     this.knowledgeService = container.resolve<KnowledgeService>('KnowledgeService');
 
     this.setupHandlers();
@@ -60,13 +56,13 @@ class AITaskFlowServer {
       tools: [
         {
           name: 'list_pending_tasks',
-          description: '列出所有待办或已派发的任务',
+          description: '列出待办任务',
           inputSchema: {
             type: 'object',
             properties: {
               status: {
                 type: 'string',
-                enum: ['todo', 'dispatched', 'all'],
+                enum: ['todo', 'all'],
                 description: '筛选状态，默认 todo',
               },
             },
@@ -109,20 +105,6 @@ class AITaskFlowServer {
               blockedReason: { type: 'string' },
             },
             required: ['taskId', 'status', 'changedFiles', 'notes'],
-          },
-        },
-        {
-          name: 'get_task_diff',
-          description: '获取任务 worktree 的 git diff',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              taskId: {
-                type: 'string',
-                description: '任务 ID（例如 WS-001）',
-              },
-            },
-            required: ['taskId'],
           },
         },
         {
@@ -184,8 +166,6 @@ class AITaskFlowServer {
           return this.handleGetTask(args);
         case 'record_result':
           return this.handleRecordResult(args);
-        case 'get_task_diff':
-          return this.handleGetTaskDiff(args);
         case 'add_note_to_task':
           return this.handleAddNoteToTask(args);
         case 'save_to_knowledge':
@@ -233,11 +213,7 @@ class AITaskFlowServer {
 
     let tasks;
     if (statusFilter === 'all') {
-      const todo = await this.taskRepository.findByStatus(TaskStatus.TODO);
-      const dispatched = await this.taskRepository.findByStatus(TaskStatus.DISPATCHED);
-      tasks = [...todo, ...dispatched];
-    } else if (statusFilter === 'dispatched') {
-      tasks = await this.taskRepository.findByStatus(TaskStatus.DISPATCHED);
+      tasks = await this.taskRepository.findAll();
     } else {
       tasks = await this.taskRepository.findByStatus(TaskStatus.TODO);
     }
@@ -304,15 +280,21 @@ class AITaskFlowServer {
       `**状态**: ${task.status}`,
       `**项目**: ${task.projectName || '无'}`,
       `**仓库路径**: ${task.repoPath || '无'}`,
-      '',
-      '## 描述',
-      task.description || '（无描述）',
-      '',
-      '## 任务步骤',
-      '',
-      // 用 shared 统一生成，保证给 AI 的图文顺序 = 编辑器顺序 = 前端预览
-      stepsToMarkdown(task.steps),
     ];
+
+    // 执行环境(会话化改造新增, 供 Claude Code 了解运行上下文)
+    if (task.env) {
+      lines.push(`**执行环境**: ${task.env}`);
+    }
+
+    lines.push('');
+    lines.push('## 描述');
+    lines.push(task.description || '（无描述）');
+    lines.push('');
+    lines.push('## 任务步骤');
+    lines.push('');
+    // 用 shared 统一生成，保证给 AI 的图文顺序 = 编辑器顺序 = 前端预览
+    lines.push(stepsToMarkdown(task.steps));
 
     lines.push('');
     lines.push('## 相关文件');
@@ -322,15 +304,6 @@ class AITaskFlowServer {
       });
     } else {
       lines.push('（无相关文件）');
-    }
-
-    // Worktree 信息
-    if (task.worktree) {
-      lines.push('');
-      lines.push('## Worktree 信息');
-      lines.push(`- 路径: \`${task.worktree.path}\``);
-      lines.push(`- 分支: \`${task.worktree.branch}\``);
-      lines.push(`- Base Commit: \`${task.worktree.baseCommit.substring(0, 7)}\``);
     }
 
     // 执行结果
@@ -377,19 +350,7 @@ class AITaskFlowServer {
       };
     }
 
-    // 验证任务状态
-    if (task.status !== TaskStatus.DISPATCHED) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ 任务 ${taskId} 未派发，无法记录结果（当前状态: ${task.status}）`,
-          },
-        ],
-      };
-    }
-
-    // 记录结果
+    // 记录结果(会话化改造后不再要求 DISPATCHED:打开终端不改状态,TODO 也能直接回写)
     try {
       const resultEvent = task.recordResult({
         status,
@@ -412,7 +373,7 @@ class AITaskFlowServer {
               `**变更文件**: ${changedFiles.length} 个`,
               `**备注**: ${notes}`,
               '',
-              '任务已进入审核状态，请等待审核。',
+              '任务状态已更新（done/partial → 已完成；blocked → 已阻塞）。',
             ].join('\n'),
           },
         ],
@@ -423,71 +384,6 @@ class AITaskFlowServer {
           {
             type: 'text',
             text: `❌ 记录结果失败: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-
-  private async handleGetTaskDiff(args: any) {
-    const { taskId } = args;
-
-    if (!taskId) {
-      throw new Error('taskId is required');
-    }
-
-    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
-
-    if (!task) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ 任务 ${taskId} 不存在`,
-          },
-        ],
-      };
-    }
-
-    // 验证任务是否有 worktree
-    if (!task.worktree) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ 任务 ${taskId} 未派发，没有 worktree`,
-          },
-        ],
-      };
-    }
-
-    // 获取 diff
-    try {
-      const diff = await this.worktreeManager.getDiff(task.worktree);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `# Diff for Task ${taskId}`,
-              '',
-              `**Worktree**: \`${task.worktree.path}\``,
-              `**Branch**: \`${task.worktree.branch}\``,
-              '',
-              '```diff',
-              diff || '(no changes)',
-              '```',
-            ].join('\n'),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ 获取 diff 失败: ${error.message}`,
           },
         ],
       };

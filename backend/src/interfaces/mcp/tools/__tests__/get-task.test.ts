@@ -21,11 +21,7 @@ describe('get_task MCP tool', () => {
   });
 
   afterEach(async () => {
-    try {
-      await fs.unlink(testFilePath);
-    } catch {
-      // 忽略
-    }
+    try { await fs.unlink(testFilePath); } catch { /* 忽略 */ }
   });
 
   it('should get task details', async () => {
@@ -58,25 +54,15 @@ describe('get_task MCP tool', () => {
     expect(found).toBeNull();
   });
 
-  it('should include worktree info if dispatched', async () => {
+  it('should preserve worktree as optional association (不依赖 dispatch)', async () => {
     const worktree = new WorktreeRef(
-      '/tmp/workspace',
-      'feature/fix-bug',
-      'abc123',
-      new Date()
+      '/tmp/workspace', 'feature/fix-bug', 'abc123', new Date(),
     );
 
     const task = new Task(
-      TaskId.create('WS', 2),
-      'Task with worktree',
-      'Desc',
-      TaskStatus.DISPATCHED,
-      Priority.P1,
-      undefined,
-      undefined,
-      [],
-      [],
-      worktree
+      TaskId.create('WS', 2), 'Task with worktree', 'Desc',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [], [],
+      worktree,
     );
 
     await repository.save(task);
@@ -86,4 +72,3 @@ describe('get_task MCP tool', () => {
     expect(found?.worktree?.branch).toBe('feature/fix-bug');
   });
 });
-

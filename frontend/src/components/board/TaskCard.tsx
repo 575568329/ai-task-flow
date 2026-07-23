@@ -7,7 +7,7 @@ import type { TaskDTO } from '@ai-task-flow/shared';
 import { Badge } from '@/components/ui/badge';
 import { useUIStore } from '@/stores/uiStore';
 import { relativeTime } from '@/lib/taskMeta';
-import { PRIORITY_BADGE } from './meta';
+import { PRIORITY_BADGE, ENV_BADGE } from './meta';
 
 interface TaskCardProps {
   task: TaskDTO;
@@ -50,6 +50,11 @@ export function TaskCard({ task }: TaskCardProps) {
         </Badge>
         {task.source === 'web' && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px]">web</Badge>
+        )}
+        {task.env && (
+          <Badge variant={ENV_BADGE[task.env].variant} className="px-1.5 py-0 text-[10px]">
+            {ENV_BADGE[task.env].label}
+          </Badge>
         )}
         {task.projectName && (
           <span className="text-muted-foreground truncate text-[10px]">{task.projectName}</span>

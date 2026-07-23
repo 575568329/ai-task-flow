@@ -2,7 +2,7 @@
 // 看板视图私有元数据:列顺序/配色 + 优先级 badge 映射。
 // 不复用 lib/taskMeta 的 STATUS_COLORS(那是旧 Spark 变量,新 shadcn 体系无定义);
 // 此处配色用 Tailwind 默认调色板 class,与 shadcn slate 主题协调。
-import { TaskStatus, Priority } from '@ai-task-flow/shared';
+import { TaskStatus, Priority, type TaskEnv } from '@ai-task-flow/shared';
 import { STATUS_LABELS } from '@/lib/taskMeta';
 
 export interface KanbanColumnDef {
@@ -11,16 +11,22 @@ export interface KanbanColumnDef {
   dotClass: string;
 }
 
-// 看板列顺序(5 列,横向滚动)
+// 看板列顺序(3 列,横向铺满):会话化改造后派发/审核两态已移除,
+// 生命周期收敛为 待办 / 已完成 / 已阻塞。
 export const KANBAN_COLUMNS: KanbanColumnDef[] = [
   { status: TaskStatus.TODO, label: STATUS_LABELS[TaskStatus.TODO], dotClass: 'bg-blue-500' },
-  { status: TaskStatus.DISPATCHED, label: STATUS_LABELS[TaskStatus.DISPATCHED], dotClass: 'bg-amber-500' },
-  { status: TaskStatus.REVIEW, label: STATUS_LABELS[TaskStatus.REVIEW], dotClass: 'bg-violet-500' },
   { status: TaskStatus.DONE, label: STATUS_LABELS[TaskStatus.DONE], dotClass: 'bg-emerald-500' },
   { status: TaskStatus.BLOCKED, label: STATUS_LABELS[TaskStatus.BLOCKED], dotClass: 'bg-rose-500' },
 ];
 
 type BadgeVariant = 'destructive' | 'default' | 'secondary';
+
+/** 终端环境 badge 映射(TaskCard 上显示任务级 env 偏好) */
+export const ENV_BADGE: Record<TaskEnv, { variant: BadgeVariant; label: string }> = {
+  cmd: { variant: 'secondary', label: 'cmd' },
+  wsl: { variant: 'secondary', label: 'wsl' },
+  pwsh: { variant: 'secondary', label: 'pwsh' },
+};
 
 export const PRIORITY_BADGE: Record<Priority, { variant: BadgeVariant; label: string }> = {
   [Priority.P0]: { variant: 'destructive', label: 'P0' },

@@ -4,11 +4,7 @@ import { TaskStatus } from '../value-objects/TaskStatus.js';
 import { Priority } from '../value-objects/Priority.js';
 import { WorktreeRef } from '../value-objects/WorktreeRef.js';
 import { ExecutionResult } from '../value-objects/ExecutionResult.js';
-import { TaskDispatched } from '../events/TaskDispatched.js';
-import { TaskResultRecorded } from '../events/TaskResultRecorded.js';
 import { TaskUpdated } from '../events/TaskUpdated.js';
-import { TaskApproved } from '../events/TaskApproved.js';
-import { TaskRejected } from '../events/TaskRejected.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
 import type { TaskStep, TaskSource } from '@ai-task-flow/shared';
 
@@ -31,6 +27,7 @@ export class Task {
     public updatedAt: Date = new Date(),
     public source: TaskSource = 'manual',
     public sourceUrl?: string,
+    public env?: 'cmd' | 'wsl' | 'pwsh',
   ) {}
 
   get domainEvents(): DomainEvent[] {
@@ -41,51 +38,28 @@ export class Task {
     this._domainEvents = [];
   }
 
-  dispatch(worktree: WorktreeRef): void {
-    if (this.status !== TaskStatus.TODO) {
-      throw new Error('Only TODO tasks can be dispatched');
-    }
-    this.worktree = worktree;
-    this.status = TaskStatus.DISPATCHED;
-    this.updatedAt = new Date();
-    this._domainEvents.push(new TaskDispatched(this.id.value, worktree));
-  }
-
+  /**
+   * 记录执行结果并推进状态(由 Claude Code 通过 MCP record_result 调用)。
+   *
+   * 会话化改造后:打开终端不再改状态(任务停在 TODO),也不再走派发→审核两段式,
+   * 故去掉「必须 DISPATCHED」校验,TODO 也能直接回写结果。
+   * - status==='blocked' → BLOCKED;否则(done/partial) → DONE。
+   * - 复用 TaskUpdated 事件驱动前端 SSE 刷新(不再有 TaskResultRecorded 专用事件)。
+   * - worktree 字段(若存在)保留不动:它已降为可选关联,结果回写不清理它。
+   */
   recordResult(result: ExecutionResult): void {
-    if (this.status !== TaskStatus.DISPATCHED) {
-      throw new Error('Only dispatched tasks can record result');
-    }
+    const previousStatus = this.status;
     this.executionResult = result;
-    this.status = result.status === 'blocked' ? TaskStatus.BLOCKED : TaskStatus.REVIEW;
+    this.status = result.status === 'blocked' ? TaskStatus.BLOCKED : TaskStatus.DONE;
     this.updatedAt = new Date();
-    this._domainEvents.push(new TaskResultRecorded(this.id.value, result));
-  }
-
-  approve(mergeStrategy: 'merge' | 'keep_branch'): void {
-    if (this.status !== TaskStatus.REVIEW) {
-      throw new Error('Only review tasks can be approved');
-    }
-    this.status = TaskStatus.DONE;
-    this.updatedAt = new Date();
-    this._domainEvents.push(new TaskApproved(this.id.value, mergeStrategy));
-  }
-
-  reject(reason: string): void {
-    if (this.status !== TaskStatus.REVIEW) {
-      throw new Error('Only review tasks can be rejected');
-    }
-    this.status = TaskStatus.TODO;
-    this.worktree = undefined;
-    this.executionResult = undefined;
-    this.updatedAt = new Date();
-    this._domainEvents.push(new TaskRejected(this.id.value, reason));
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
   }
 
   /**
    * 通用字段更新（供 HTTP PATCH 等场景使用）
    * 修改基础字段，并在状态变化时发布 TaskUpdated 事件以驱动前端实时刷新。
    * 注意：本方法不强制状态机校验，由调用方保证语义合理；
-   * 严格的状态流转请使用 dispatch / recordResult / approve / reject。
+   * 需要状态流转校验的场景请配合 isValidTransition 使用。
    */
   applyUpdate(updates: {
     title?: string;
@@ -98,6 +72,7 @@ export class Task {
     steps?: TaskStep[];
     source?: TaskSource;
     sourceUrl?: string;
+    env?: 'cmd' | 'wsl' | 'pwsh';
   }): void {
     const previousStatus = this.status;
 
@@ -111,6 +86,7 @@ export class Task {
     if (updates.steps !== undefined) this.steps = updates.steps;
     if (updates.source !== undefined) this.source = updates.source;
     if (updates.sourceUrl !== undefined) this.sourceUrl = updates.sourceUrl;
+    if (updates.env !== undefined) this.env = updates.env;
 
     this.updatedAt = new Date();
     this._domainEvents.push(
@@ -138,6 +114,7 @@ export class Task {
         createdAt: this.worktree.createdAt.toISOString(),
       } : undefined,
       executionResult: this.executionResult,
+      env: this.env,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

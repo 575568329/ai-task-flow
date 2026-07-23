@@ -3,8 +3,6 @@
 
 export enum TaskStatus {
   TODO = 'todo',
-  DISPATCHED = 'dispatched',
-  REVIEW = 'review',
   DONE = 'done',
   BLOCKED = 'blocked',
 }
@@ -56,6 +54,9 @@ export interface ExecutionResultDTO {
   blockedReason?: string;
 }
 
+/** 终端执行环境(cmd=Windows cmd / wsl=WSL / pwsh=PowerShell 7) */
+export type TaskEnv = 'cmd' | 'wsl' | 'pwsh';
+
 /** 任务的 JSON 表示(Task.toJSON() 的产物 / HTTP 响应体) */
 export interface TaskDTO {
   id: string;
@@ -71,6 +72,8 @@ export interface TaskDTO {
   steps: TaskStep[];              // 任务步骤列表(替代 acceptanceCriteria)
   worktree?: WorktreeRefDTO;
   executionResult?: ExecutionResultDTO;
+  /** 任务级执行环境偏好(TaskDrawer 选, OpenClaudeDialog 默认用) */
+  env?: TaskEnv;
   /** 任务 markdown 存档的绝对路径(后端落盘,供 Claude Code 派发指令直接引用) */
   taskFilePath?: string;
   createdAt: string;
@@ -90,6 +93,7 @@ export interface CreateTaskRequest {
   sourceUrl?: string;
   relatedFiles?: string[];
   steps?: TaskStep[];
+  env?: TaskEnv;
 }
 
 export interface UpdateTaskRequest {
@@ -103,23 +107,7 @@ export interface UpdateTaskRequest {
   sourceUrl?: string;
   relatedFiles?: string[];
   steps?: TaskStep[];
-}
-
-export type MergeStrategy = 'merge' | 'keep_branch';
-
-export interface ApproveTaskRequest {
-  mergeStrategy?: MergeStrategy;
-}
-
-export interface RejectTaskRequest {
-  reason: string;
-}
-
-export interface TaskDiffResponse {
-  taskId: string;
-  branch: string;
-  baseBranch: string;
-  diff: string;
+  env?: TaskEnv;
 }
 
 // ---- 新增接口契约 ----
@@ -159,9 +147,4 @@ export interface BrowseDirResponse {
 /** GET /api/tasks/:id/markdown 响应 */
 export interface TaskMarkdownResponse {
   markdown: string;  // 完整的 markdown 文本
-}
-
-/** POST /api/tasks/:id/dispatch 响应 */
-export interface DispatchTaskResponse extends TaskDTO {
-  claudeCommand: string;  // 生成的 Claude 指令（包含 /rename + 任务拉取指令）
 }

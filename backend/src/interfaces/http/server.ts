@@ -9,7 +9,6 @@ import { uploadsDirPath } from '../../config/dataDir.js';
 import { findAvailablePort } from '../../utils/port-finder.js';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
-import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
 import { registerTaskRoutes } from './routes/taskRoutes.js';
 import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
@@ -17,7 +16,7 @@ import { registerProjectRoutes } from './routes/projectRoutes.js';
 import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
-import systemRoutes from './routes/system.js';
+import { registerSystemRoutes } from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
@@ -52,7 +51,6 @@ export async function createHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
@@ -144,7 +142,7 @@ export async function createHttpServer(
   });
 
   // 注册业务路由
-  await registerTaskRoutes(fastify, taskRepository, worktreeManager);
+  await registerTaskRoutes(fastify, taskRepository);
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
@@ -154,7 +152,7 @@ export async function createHttpServer(
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
-  await fastify.register(systemRoutes);
+  await registerSystemRoutes(fastify);
 
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
@@ -215,7 +213,6 @@ export async function startHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
@@ -227,7 +224,7 @@ export async function startHttpServer(
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

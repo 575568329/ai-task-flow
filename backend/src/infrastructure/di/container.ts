@@ -12,6 +12,9 @@ import { knowledgeDirPath } from '../../config/dataDir.js';
  */
 
 // 注册基础设施服务
+// WorktreeManager:设计方案 §4.2 保留的任务级 git worktree 隔离能力。会话化改造后状态机
+// 收敛为三态、打开终端不再创建 worktree,目前无 resolver 引用;但设计上仍保留为可选关联
+// (任务可挂 worktree 元数据),故注册保留,留待后续按需启用,不在此删。
 container.registerSingleton('WorktreeManager', WorktreeManager);
 
 // 注册 Repository
