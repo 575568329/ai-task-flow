@@ -67,6 +67,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   applySSEEvent: (event) => {
+    // 外部进程(MCP stdio)直接改了 tasks.json:磁盘与本进程不同步,单事件无法定位变更范围,全量重拉最稳妥
+    if (event.type === 'TasksExternallyChanged') {
+      void get().fetchAll();
+      return;
+    }
     if (!event.aggregateId) return;
     // 事件只带状态变化,重新拉取该任务的完整最新态
     taskApi

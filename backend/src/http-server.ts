@@ -2,10 +2,11 @@
 import 'reflect-metadata';
 import { startHttpServer } from './interfaces/http/server.js';
 import { JsonTaskRepository } from './infrastructure/persistence/JsonTaskRepository.js';
+import { TaskFileWatcher } from './infrastructure/persistence/TaskFileWatcher.js';
 import { InMemoryEventBus } from './infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from './infrastructure/pubsub/EventStore.js';
 import { findAvailablePort } from './utils/port-finder.js';
-import { resolveDataDir, taskDocPath } from './config/dataDir.js';
+import { resolveDataDir, taskDocPath, tasksFilePath } from './config/dataDir.js';
 import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -63,7 +64,12 @@ export async function startApp(options: StartAppOptions = {}) {
 
   const eventBus = new InMemoryEventBus();
   const eventStore = new JsonEventStore();
-  const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore);
+  // 文件监听器:轮询 tasks.json,感知外部进程(MCP stdio)写入 → 发事件 → SSE 推前端。
+  // 与 repository 共用 filePath;repository 写后 markSelfWrite 自标,避免重复推送。
+  const tasksFile = options.dataFile ?? tasksFilePath();
+  const taskFileWatcher = new TaskFileWatcher(tasksFile, eventBus);
+  const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore, taskFileWatcher);
+  void taskFileWatcher.start();
 
   // 调研聊天 Agent 初始化
   const chatRepository = new JsonChatRepository();

@@ -12,6 +12,7 @@ import { ExecutionResult } from '../../domain/workflow/value-objects/ExecutionRe
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../pubsub/EventBus.js';
 import { EventStore } from '../pubsub/EventStore.js';
+import { TaskFileWatcher } from './TaskFileWatcher.js';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { normalizeSteps } from '@ai-task-flow/shared';
 
@@ -26,7 +27,8 @@ export class JsonTaskRepository implements TaskRepository {
   constructor(
     customPath?: string,
     private eventBus?: EventBus,
-    private eventStore?: EventStore
+    private eventStore?: EventStore,
+    private watcher?: TaskFileWatcher,
   ) {
     if (customPath) {
       this.filePath = customPath;
@@ -108,7 +110,10 @@ export class JsonTaskRepository implements TaskRepository {
   private async saveAll(tasks: Task[]): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     const dtos = tasks.map(t => t.toJSON());
-    await fs.writeFile(this.filePath, JSON.stringify(dtos, null, 2));
+    const raw = JSON.stringify(dtos, null, 2);
+    await fs.writeFile(this.filePath, raw);
+    // 通知文件监听器:这是本进程写入,刷新基线,避免随后轮询误判为外部变更而重复推送
+    this.watcher?.markSelfWrite(raw);
   }
 
   private dtoToEntity(dto: TaskDTO): Task {
