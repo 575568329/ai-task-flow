@@ -655,3 +655,4 @@ Good luck! 🚀
 - 运行时产物勿提交（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
 - MV3 扩展访问 localhost：PNA 只拦预检，POST 用 `text/plain` 绕过。
 - 终端 `start` 是 fire-and-forget，无法注入消息；`Failed to fetch` 先查后端日志。
+- **多 workspace 共享依赖（如 `vite`）版本范围须有交集**：否则 npm 装多份 → frontend build 报 `PluginOption` 类型冲突（指向两份 vite）；统一到一份。
