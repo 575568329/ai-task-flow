@@ -20,3 +20,6 @@ backend/public/
 
 # Claude Code 本地个人权限设置(每个开发者/每台机器不同,不进版本库)
 .claude/settings.local.json
+
+# pnpm 锁文件(本项目统一用 npm,忽略 pnpm 误生成的锁文件)
+pnpm-lock.yaml
