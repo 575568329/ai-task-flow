@@ -51,9 +51,9 @@ function isNonEmptyBlock(block: StepBlock): boolean {
 /**
  * 把步骤列表渲染成 Markdown 步骤段。
  *
- * 输出格式（AI 可清晰识别每个步骤的图文先后）：
+ * 输出格式（标题带 ☑/☐ 反映完成状态;前端预览 / get_task / 任务存档 md 统一）：
  *
- *   ### 步骤 1
+ *   ### ☐ 步骤 1
  *
  *   先点登录
  *
@@ -64,7 +64,10 @@ function isNonEmptyBlock(block: StepBlock): boolean {
  * @param steps      任务步骤（可为旧格式，内部会规整）
  * @param headingLevel 步骤标题的层级，默认 3（###）
  */
-export function stepsToMarkdown(steps: TaskStep[] | undefined, headingLevel: number = 3): string {
+export function stepsToMarkdown(
+  steps: TaskStep[] | undefined,
+  headingLevel: number = 3,
+): string {
   const normalized = normalizeSteps(steps);
   if (normalized.length === 0) return '（无步骤）';
 
@@ -72,7 +75,10 @@ export function stepsToMarkdown(steps: TaskStep[] | undefined, headingLevel: num
   const lines: string[] = [];
 
   normalized.forEach((step, stepIndex) => {
-    lines.push(`${hashes} 步骤 ${stepIndex + 1}`, '');
+    // 标题恒带 ☑/☐ 反映 step.completed:前端预览(给 AI 的样子的实时镜像)、get_task、
+    // 任务存档 md 三个出口统一显示步骤完成度,勾选即时可见(WYSIWYG)。
+    const mark = step.completed ? '☑ ' : '☐ ';
+    lines.push(`${hashes} ${mark}步骤 ${stepIndex + 1}`, '');
 
     const blocks = step.blocks ?? [];
     if (blocks.length === 0) {

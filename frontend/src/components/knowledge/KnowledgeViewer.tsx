@@ -13,6 +13,7 @@ import { MdEditor } from './MdEditor';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { usePreviewStore } from '@/stores/previewStore';
+import { exportElementToPdf } from '@/lib/docExport';
 
 export function KnowledgeViewer() {
   const getCurrentDoc = useKnowledgeStore((s) => s.getCurrentDoc);
@@ -108,27 +109,13 @@ export function KnowledgeViewer() {
     }
   };
 
-  /** md 导出 PDF:新窗口写入渲染后 HTML + 当前页样式,调浏览器打印(另存为 PDF) */
+  /** md 导出 PDF:渲染区 → 新窗口打印(逻辑抽到 docExport,与 TaskDocsView 共用) */
   const onExportPdf = () => {
     const el = contentRef.current;
     if (!el) return;
-    const win = window.open('', '_blank', 'width=900,height=700');
-    if (!win) {
+    if (!exportElementToPdf(el, doc?.title ?? '')) {
       toast.error('请允许弹窗以导出 PDF');
-      return;
     }
-    // 复制当前页样式表,保证 Tailwind class 在新窗口生效,渲染与页面一致
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-      .map((n) => n.outerHTML)
-      .join('\n');
-    win.document.open();
-    win.document.write(
-      `<!doctype html><html><head><meta charset="utf-8"><title>${doc?.title ?? ''}</title>${styles}<style>body{padding:32px;max-width:900px;margin:0 auto;}</style></head><body>${el.outerHTML}</body></html>`,
-    );
-    win.document.close();
-    win.focus();
-    // 留时间给样式表(link)加载完成
-    setTimeout(() => win.print(), 500);
   };
 
   /** 下载原始文件(fetch→blob→a[download],避免浏览器内联打开 pdf/html/img) */

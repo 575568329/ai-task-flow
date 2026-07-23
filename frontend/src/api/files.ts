@@ -39,3 +39,16 @@ export async function readFile(root: string, filePath: string): Promise<string> 
   const data = await res.json();
   return data.content as string;
 }
+
+/** 写回项目文件(仅 .md/.markdown,后端仅允许覆盖已存在文件) */
+export async function writeFile(root: string, filePath: string, content: string): Promise<void> {
+  const res = await fetch(`${BASE}/files/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ root, path: filePath, content }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `请求失败 (${res.status})`);
+  }
+}

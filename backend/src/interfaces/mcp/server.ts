@@ -293,8 +293,9 @@ class AITaskFlowServer {
     lines.push('');
     lines.push('## 任务步骤');
     lines.push('');
-    // 用 shared 统一生成，保证给 AI 的图文顺序 = 编辑器顺序 = 前端预览
-    lines.push(stepsToMarkdown(task.steps));
+    // 用 shared 统一生成步骤段(图文顺序 = 编辑器顺序);标题恒带 ☑/☐,
+    // AI 能看到用户在看板上勾选了哪些步骤已完成(只读,不影响回写)。
+    lines.push(stepsToMarkdown(task.steps, 3));
 
     lines.push('');
     lines.push('## 相关文件');

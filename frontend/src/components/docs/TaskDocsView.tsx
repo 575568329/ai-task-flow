@@ -1,8 +1,9 @@
 // frontend/src/components/docs/TaskDocsView.tsx
-// 文档中心:两个来源的 Markdown 只读预览(Resizable 左右分栏)
-// - 任务文档:任务列表 → taskApi.getMarkdown 拉存档(后端 buildTaskMarkdown 生成)
-// - 项目文件:挂载多个项目文件夹 → FileTree 浏览其中的文件,手动刷新捕获新增/改动
-import { useEffect, useState } from 'react';
+// 文档中心:两个来源的 Markdown 预览/编辑(Resizable 左右分栏)
+// - 任务文档:任务列表 → taskApi.getMarkdown 拉存档(后端 buildTaskMarkdown 生成)。只读,可导出。
+// - 项目文件:挂载多个项目文件夹 → FileTree 浏览其中的文件。可编辑保存(写回磁盘)、可导出。
+// 渲染引擎(MessageContent)、编辑器(MdEditor)、导出逻辑(docExport)均与知识库共用——第7条「统一组件」。
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FileText,
   FolderOpen,
@@ -14,6 +15,11 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
+  Pencil,
+  Eye,
+  Save,
+  Printer,
+  Download,
 } from 'lucide-react';
 import {
   ResizablePanelGroup,
@@ -22,13 +28,16 @@ import {
 } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useTaskStore } from '@/stores/taskStore';
 import { taskApi, systemApi } from '@/api/task';
-import { readFile } from '@/api/files';
+import { readFile, writeFile } from '@/api/files';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
+import { MdEditor } from '../knowledge/MdEditor';
+import { exportElementToPdf, downloadText } from '@/lib/docExport';
 import { FileTree } from './FileTree';
 
 type Mode = 'tasks' | 'files';
@@ -62,6 +71,17 @@ function saveCollapsed(list: string[]): void {
   localStorage.setItem(COLLAPSE_KEY, JSON.stringify(list));
 }
 
+/** 取 posix 路径末段作显示名(后端 toRel 统一用 / 分隔) */
+function basename(p: string): string {
+  if (!p) return '';
+  return p.split('/').pop()?.split('\\').pop() ?? p;
+}
+
+/** 文件名安全化:去掉非法字符,避免下载时触发系统非法文件名 */
+function safeName(name: string): string {
+  return name.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'untitled';
+}
+
 export function TaskDocsView() {
   const tasks = useTaskStore((s) => s.tasks);
   const fetchAll = useTaskStore((s) => s.fetchAll);
@@ -82,10 +102,14 @@ export function TaskDocsView() {
   const [activeRoot, setActiveRoot] = useState('');
   const [selectedFilePath, setSelectedFilePath] = useState('');
 
-  // 共享预览
-  const [markdown, setMarkdown] = useState('');
+  // 共享预览/编辑:draft 既是预览源也是编辑源(沿用 KnowledgeViewer 模式)
+  const [draft, setDraft] = useState('');
+  const [original, setOriginal] = useState(''); // 保存基线,仅项目文件用
+  const [editMode, setEditMode] = useState<'view' | 'edit'>('view');
   const [loadingMd, setLoadingMd] = useState(false);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // 挂载时确保任务列表已加载(看板可能已拉,重复无害)
   useEffect(() => {
@@ -99,15 +123,22 @@ export function TaskDocsView() {
     }
   }, [mode, selectedTaskId, tasks]);
 
-  // 选任务 → 拉 md 存档
+  // 选任务 → 拉 md 存档(只读,同步 draft/original + 回到预览态)
   useEffect(() => {
     if (mode !== 'tasks' || !selectedTaskId) return;
     setLoadingMd(true);
     setError('');
+    setEditMode('view');
     taskApi
       .getMarkdown(selectedTaskId)
-      .then((res) => setMarkdown(res.markdown))
-      .catch((e) => setError(e instanceof Error ? e.message : '加载文档失败'))
+      .then((res) => {
+        setDraft(res.markdown);
+        setOriginal(res.markdown);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : '加载文档失败');
+        setDraft('');
+      })
       .finally(() => setLoadingMd(false));
   }, [mode, selectedTaskId]);
 
@@ -116,6 +147,65 @@ export function TaskDocsView() {
     if (!q) return true;
     return t.title.toLowerCase().includes(q) || t.id.toLowerCase().includes(q);
   });
+
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+
+  // 仅项目文件可编辑(任务 md 是后端派生数据,保持只读)
+  const canEdit = mode === 'files' && !!selectedFilePath;
+  const dirty = canEdit && draft !== original;
+  const displayTitle =
+    mode === 'tasks'
+      ? (selectedTask?.title || selectedTask?.id || '任务文档')
+      : (basename(selectedFilePath) || '项目文件');
+  const downloadFilename =
+    mode === 'tasks'
+      ? `${safeName(selectedTask?.title || selectedTask?.id || 'task')}.md`
+      : (basename(selectedFilePath) || 'file.md');
+
+  const previewEmpty =
+    (mode === 'tasks' && !selectedTaskId) ||
+    (mode === 'files' && !selectedFilePath);
+
+  // 保存(项目文件写回磁盘)
+  const onSave = useCallback(async () => {
+    if (!activeRoot || !selectedFilePath) return;
+    setSaving(true);
+    try {
+      await writeFile(activeRoot, selectedFilePath, draft);
+      setOriginal(draft);
+      toast.success('已保存');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [activeRoot, selectedFilePath, draft]);
+
+  // Ctrl/Cmd+S 快捷保存(仅项目文件编辑态)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && canEdit && editMode === 'edit') {
+        e.preventDefault();
+        void onSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [canEdit, editMode, onSave]);
+
+  /** 导出 PDF:预览区 → 新窗口打印(逻辑与知识库共用) */
+  const onExportPdf = () => {
+    const el = contentRef.current;
+    if (!el) return;
+    if (!exportElementToPdf(el, displayTitle)) {
+      toast.error('请允许弹窗以导出 PDF');
+    }
+  };
+
+  /** 下载 md:内存内容 → Blob 下载(无需服务端) */
+  const onDownloadMd = () => {
+    downloadText(downloadFilename, draft);
+  };
 
   // ---- 项目文件:多 root 操作 ----
   const handleAddFolder = async () => {
@@ -156,7 +246,9 @@ export function TaskDocsView() {
     if (activeRoot === root) {
       setActiveRoot(next[0] ?? '');
       setSelectedFilePath('');
-      setMarkdown('');
+      setDraft('');
+      setOriginal('');
+      setEditMode('view');
     }
   };
 
@@ -177,22 +269,20 @@ export function TaskDocsView() {
   const handleSelectFile = async (root: string, filePath: string) => {
     setActiveRoot(root);
     setSelectedFilePath(filePath);
+    setEditMode('view');
     setLoadingMd(true);
     setError('');
     try {
       const content = await readFile(root, filePath);
-      setMarkdown(content);
+      setDraft(content);
+      setOriginal(content);
     } catch (e) {
       setError(e instanceof Error ? e.message : '读取文件失败');
-      setMarkdown('');
+      setDraft('');
     } finally {
       setLoadingMd(false);
     }
   };
-
-  const previewEmpty =
-    (mode === 'tasks' && !selectedTaskId) ||
-    (mode === 'files' && !selectedFilePath);
 
   return (
     <div className="h-full">
@@ -350,35 +440,116 @@ export function TaskDocsView() {
 
         <ResizableHandle withHandle />
 
-        {/* 右栏:Markdown 预览(两 Tab 共享) */}
+        {/* 右栏:Markdown 预览/编辑(两 Tab 共享) */}
         <ResizablePanel defaultSize="72%" minSize="30%">
-          <div className="h-full overflow-y-auto">
-            {previewEmpty ? (
-              <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 text-sm">
-                {mode === 'files' && roots.length === 0 ? (
-                  <FolderOpen className="size-12 opacity-30" />
-                ) : (
-                  <FileText className="size-12 opacity-30" />
-                )}
-                <p>
-                  {mode === 'tasks'
-                    ? '选择左侧任务查看其 Markdown 文档'
-                    : roots.length === 0
-                      ? '先添加一个项目文件夹'
-                      : '选择左侧文件查看其内容'}
-                </p>
-              </div>
-            ) : error ? (
-              <div className="text-destructive p-6 text-sm">{error}</div>
-            ) : loadingMd ? (
-              <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
-                <Loader2 className="size-5 animate-spin" /> 加载文档中…
-              </div>
-            ) : (
-              <div className="p-4">
-                <MessageContent content={markdown} />
-              </div>
-            )}
+          <div className="bg-card flex h-full flex-col border-l">
+            {/* 工具栏 */}
+            <header className="flex items-center gap-1.5 border-b px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold" title={displayTitle}>
+                {displayTitle}
+              </span>
+
+              {/* 项目文件:编辑/预览切换 + 保存(任务 md 只读,无此组) */}
+              {canEdit && editMode === 'view' && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground size-7"
+                  onClick={() => setEditMode('edit')}
+                  aria-label="编辑"
+                  title="编辑"
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+              )}
+              {canEdit && editMode === 'edit' && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-muted-foreground size-7"
+                    onClick={() => setEditMode('view')}
+                    aria-label="预览"
+                    title="预览"
+                  >
+                    <Eye className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant={dirty ? 'default' : 'ghost'}
+                    className="size-7"
+                    onClick={() => void onSave()}
+                    disabled={saving || !dirty}
+                    aria-label="保存"
+                    title="保存 (Ctrl+S)"
+                  >
+                    <Save className="size-3.5" />
+                  </Button>
+                </>
+              )}
+
+              {/* 导出 PDF / 下载 md(预览态可用;PDF 依赖预览 DOM) */}
+              {!previewEmpty && editMode === 'view' && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-muted-foreground size-7"
+                    onClick={onExportPdf}
+                    aria-label="导出 PDF"
+                    title="导出 PDF"
+                  >
+                    <Printer className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-muted-foreground size-7"
+                    onClick={onDownloadMd}
+                    aria-label="下载 md"
+                    title="下载 md"
+                  >
+                    <Download className="size-3.5" />
+                  </Button>
+                </>
+              )}
+            </header>
+
+            {/* body */}
+            <div className="flex-1 overflow-hidden">
+              {previewEmpty ? (
+                <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 text-sm">
+                  {mode === 'files' && roots.length === 0 ? (
+                    <FolderOpen className="size-12 opacity-30" />
+                  ) : (
+                    <FileText className="size-12 opacity-30" />
+                  )}
+                  <p>
+                    {mode === 'tasks'
+                      ? '选择左侧任务查看其 Markdown 文档'
+                      : roots.length === 0
+                        ? '先添加一个项目文件夹'
+                        : '选择左侧文件查看其内容'}
+                  </p>
+                </div>
+              ) : error ? (
+                <div className="text-destructive p-6 text-sm">{error}</div>
+              ) : loadingMd ? (
+                <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
+                  <Loader2 className="size-5 animate-spin" /> 加载文档中…
+                </div>
+              ) : canEdit && editMode === 'edit' ? (
+                <div className="h-full">
+                  <MdEditor value={draft} onChange={setDraft} />
+                </div>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="p-4" ref={contentRef}>
+                    <MessageContent content={draft} />
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

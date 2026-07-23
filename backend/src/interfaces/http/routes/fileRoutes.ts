@@ -1,5 +1,5 @@
 // backend/src/interfaces/http/routes/fileRoutes.ts
-// 项目文件浏览:列目录(仅目录 + md 文件) + 读 md 内容。
+// 项目文件浏览:列目录(仅目录 + md 文件) + 读 md 内容 + 写回 md(项目文件编辑保存)。
 // 安全核心:所有路径解析后必须仍在 root 内,拒绝 ../ 越权。
 import { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
@@ -89,6 +89,35 @@ export async function registerFileRoutes(fastify: FastifyInstance) {
       return { path: relPath, content };
     } catch (e: any) {
       return reply.status(400).send({ error: `读取文件失败: ${e.message}` });
+    }
+  });
+
+  // POST /api/files/write — 写回单个 md 文件内容(项目文件编辑保存)
+  fastify.post<{
+    Body: { root: string; path: string; content: string };
+  }>('/api/files/write', async (request, reply) => {
+    const { root, path: relPath, content } = request.body ?? {};
+    if (!root || !relPath) return reply.status(400).send({ error: '缺少 root 或 path' });
+    if (!isMarkdown(relPath)) return reply.status(400).send({ error: '仅支持写入 .md/.markdown 文件' });
+
+    let abs: string;
+    try {
+      abs = safeResolve(root, relPath);
+    } catch (e: any) {
+      return reply.status(403).send({ error: e.message });
+    }
+
+    try {
+      // 仅允许覆盖已存在的文件,杜绝通过 write 在 root 内任意创建新文件
+      const stat = await fs.stat(abs);
+      if (!stat.isFile()) return reply.status(400).send({ error: '目标不是文件' });
+      if (Buffer.byteLength(content, 'utf-8') > MAX_READ_BYTES) {
+        return reply.status(400).send({ error: '内容过大,上限 2MB' });
+      }
+      await fs.writeFile(abs, content, 'utf-8');
+      return { path: relPath, saved: true };
+    } catch (e: any) {
+      return reply.status(400).send({ error: `写入文件失败: ${e.message}` });
     }
   });
 }
