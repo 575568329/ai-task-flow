@@ -15,6 +15,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { formatRelativeTime } from '@/lib/formatDate';
@@ -92,7 +93,9 @@ export function KnowledgeTree() {
             )}
             <span className="truncate font-medium">{node.title}</span>
           </button>
-          {isOpen && node.children.map((child) => renderNode(child, depth + 1))}
+          <Collapse open={isOpen}>
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </Collapse>
         </div>
       );
     }

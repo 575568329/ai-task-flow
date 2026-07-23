@@ -6,10 +6,10 @@ import {
   Folder,
   FolderOpen,
   File as FileIcon,
-  ChevronRight,
   ChevronDown,
 } from 'lucide-react';
 import { listFiles, type FileEntry } from '@/api/files';
+import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
 
 interface FileTreeProps {
@@ -100,11 +100,12 @@ export function FileTree({ root, selectedFile, onSelectFile, refreshSignal }: Fi
               style={{ paddingLeft: depth * 12 + 4 }}
               onClick={() => void toggle(entry.path)}
             >
-              {isOpen ? (
-                <ChevronDown className="size-3.5 shrink-0" />
-              ) : (
-                <ChevronRight className="size-3.5 shrink-0" />
-              )}
+              <ChevronDown
+                className={cn(
+                  'size-3.5 shrink-0 transition-transform duration-200 ease-out',
+                  !isOpen && '-rotate-90',
+                )}
+              />
               {isOpen ? (
                 <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
               ) : (
@@ -112,7 +113,7 @@ export function FileTree({ root, selectedFile, onSelectFile, refreshSignal }: Fi
               )}
               <span className="truncate">{entry.name}</span>
             </button>
-            {isOpen && renderDir(entry.path, depth + 1)}
+            <Collapse open={isOpen}>{renderDir(entry.path, depth + 1)}</Collapse>
           </div>
         );
       }

@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { Database, SlidersHorizontal } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
   DialogContent,
@@ -66,9 +67,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           ))}
         </div>
 
-        {/* 当前 Tab 内容(条件渲染:切到才挂载拉取,切走卸载) */}
+        {/* 当前 Tab 内容:AnimatePresence mode="wait" 切换时旧淡出→新淡入(切走卸载,与原条件渲染一致) */}
         <div className="max-h-[60vh] overflow-y-auto px-1">
-          {tab === 'llm' ? <LlmConfigPanel /> : <StoragePanel />}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+            >
+              {tab === 'llm' ? <LlmConfigPanel /> : <StoragePanel />}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         <DialogFooter>
