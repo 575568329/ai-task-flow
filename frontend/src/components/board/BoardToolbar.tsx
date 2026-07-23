@@ -108,24 +108,26 @@ export function BoardToolbar() {
         />
       </div>
 
-      {/* 分组折叠快捷:展开全部 / 收起全部(列内按项目分组时用) */}
+      {/* 分组折叠快捷:展开全部 / 收起全部(列内按项目分组时用)。图标+文字组合,避免单独图标太突兀 */}
       <Button
         size="sm"
         variant="ghost"
-        className="text-muted-foreground h-8 px-2"
+        className="text-muted-foreground h-8 gap-1.5 px-2"
         title="展开全部分组"
         onClick={() => expandAllGroups()}
       >
         <ChevronsUpDown className="size-4" />
+        展开分组
       </Button>
       <Button
         size="sm"
         variant="ghost"
-        className="text-muted-foreground h-8 px-2"
+        className="text-muted-foreground h-8 gap-1.5 px-2"
         title="折叠全部分组"
         onClick={() => collapseAllGroups(allGroupKeys)}
       >
         <ChevronsDownUp className="size-4" />
+        收起分组
       </Button>
 
       <Button size="sm" className="ml-auto" onClick={() => setCreatingTask(true)}>

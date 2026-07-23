@@ -59,7 +59,7 @@ export function Toaster() {
   const dismiss = useToastStore((s) => s.dismiss);
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[100] flex flex-col gap-2">
+    <div className="pointer-events-none fixed top-4 left-1/2 z-[100] flex -translate-x-1/2 flex-col items-center gap-2">
       {/* AnimatePresence 捕获 exit:toast 从 store 移除时滑出再卸载;layout 让其余 toast 平滑补位 */}
       <AnimatePresence initial={false}>
         {toasts.map((t) => {
@@ -68,9 +68,9 @@ export function Toaster() {
             <motion.div
               key={t.id}
               layout
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="pointer-events-auto flex items-center gap-2 rounded-md border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg"
             >
