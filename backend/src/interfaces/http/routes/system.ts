@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import path from 'node:path';
 import os from 'node:os';
 // @ts-ignore - node-file-dialog 没有类型定义(仅非 Windows 平台回退使用)
 import askdialog from 'node-file-dialog';
@@ -139,4 +140,28 @@ export async function registerSystemRoutes(
       }
     },
   );
+
+  // POST /api/system/mcp/setup — 一键把 MCP 挂载到 Claude Code(执行 scripts/setup-mcp.mjs)
+  // 浏览器无法直接跑本地命令,故由 backend spawn。脚本内部用 __dirname 自定位项目根,
+  // 这里只需给个合理的 cwd(本地开发时 backend 的 cwd 是 backend/,项目根是其上一级)。
+  fastify.post('/api/system/mcp/setup', async () => {
+    const projectRoot = path.resolve(process.cwd(), '..');
+    const script = path.join(projectRoot, 'scripts/setup-mcp.mjs');
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        process.execPath,
+        [script],
+        { cwd: projectRoot, maxBuffer: 2 * 1024 * 1024 },
+      );
+      return { ok: true, code: 0, output: stdout + stderr };
+    } catch (err) {
+      // 非零退出 execFile 会 reject,err 上带 stdout/stderr/code
+      const e = err as { code?: number; stdout?: string; stderr?: string; message?: string };
+      return {
+        ok: false,
+        code: e.code ?? -1,
+        output: `${e.stdout || ''}${e.stderr || ''}${e.message || ''}`,
+      };
+    }
+  });
 }

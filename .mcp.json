@@ -2,7 +2,9 @@
   "mcpServers": {
     "ai-task-flow": {
       "command": "node",
-      "args": ["backend/dist/interfaces/mcp/server.js"]
+      "args": [
+        "backend/dist/interfaces/mcp/server.js"
+      ]
     }
   }
 }

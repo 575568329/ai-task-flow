@@ -47,6 +47,10 @@ export const systemApi = {
   /** 打开终端启动 claude(可选 resume) */
   openClaudeSession: (data: OpenClaudeRequest) =>
     http.post<OpenClaudeResponse>('/system/claude-sessions/open', data),
+
+  /** 一键把本项目 MCP 挂载到 Claude Code(backend spawn setup-mcp.mjs) */
+  mcpSetup: () =>
+    http.post<{ ok: boolean; code: number; output: string }>('/system/mcp/setup', {}),
 };
 
 /**
