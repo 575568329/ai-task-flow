@@ -36,3 +36,7 @@ export const PRIORITY_BADGE: Record<Priority, { variant: BadgeVariant; label: st
 
 /** Select 组件「全部」选项的哨兵值(Radix Select 不允许空字符串 value) */
 export const ALL_OPTION = '__all__';
+
+/** 未填写 projectName 的任务归入此分组 key,UI 显示为「未分组」。 */
+export const UNGROUPED_KEY = '__ungrouped__';
+export const UNGROUPED_LABEL = '未分组';

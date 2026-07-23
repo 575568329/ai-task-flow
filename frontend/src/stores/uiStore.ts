@@ -4,6 +4,7 @@ import { create } from 'zustand';
 export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'ai-task-flow-theme';
+const GROUPS_KEY = 'ai-task-flow-collapsed-groups';
 
 function getInitialTheme(): Theme {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -24,6 +25,24 @@ function applyTheme(theme: Theme): void {
   }
 }
 
+/** 读看板项目分组折叠态:key=projectName(或 UNGROUPED_KEY), true=收起。 */
+function loadCollapsedGroups(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(GROUPS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCollapsedGroups(groups: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
+  } catch {
+    // 隐私模式/配额超限:静默忽略,折叠态退化为本次会话内存态
+  }
+}
+
 interface UIState {
   theme: Theme;
   selectedTaskId: string | null;
@@ -36,6 +55,8 @@ interface UIState {
   localAccess: boolean;
   /** 存储占用是否超阈值(单项或总计),用于侧边栏设置按钮红点提示 */
   storageWarn: boolean;
+  /** 看板列内项目分组折叠态:key=projectName(或 UNGROUPED_KEY), true=收起。localStorage 持久化。 */
+  collapsedGroups: Record<string, boolean>;
 
   toggleTheme: () => void;
   setSelectedTask: (id: string | null) => void;
@@ -45,6 +66,14 @@ interface UIState {
   setSearchQuery: (query: string) => void;
   setLocalAccess: (v: boolean) => void;
   setStorageWarn: (v: boolean) => void;
+  /** 切换某个项目分组的展开/收起。 */
+  toggleGroup: (key: string) => void;
+  /** 收起全部给定分组。 */
+  collapseAllGroups: (keys: string[]) => void;
+  /** 展开全部分组(清空折叠记录)。 */
+  expandAllGroups: () => void;
+  /** 首次初始化(无 localStorage 记忆时):只展开 defaultOpenKey,收起其余。已初始化则不动。 */
+  initGroups: (allKeys: string[], defaultOpenKey: string) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -57,6 +86,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   // 默认 true:fetch /health 前不误屏蔽本机用户的敏感页面
   localAccess: true,
   storageWarn: false,
+  collapsedGroups: loadCollapsedGroups(),
 
   toggleTheme: () => {
     const next: Theme = get().theme === 'dark' ? 'light' : 'dark';
@@ -72,6 +102,37 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   setLocalAccess: (v) => set({ localAccess: v }),
   setStorageWarn: (v) => set({ storageWarn: v }),
+
+  toggleGroup: (key) =>
+    set((s) => {
+      const next = { ...s.collapsedGroups };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      saveCollapsedGroups(next);
+      return { collapsedGroups: next };
+    }),
+  collapseAllGroups: (keys) => {
+    const next: Record<string, boolean> = {};
+    for (const k of keys) next[k] = true;
+    saveCollapsedGroups(next);
+    set({ collapsedGroups: next });
+  },
+  expandAllGroups: () => {
+    saveCollapsedGroups({});
+    set({ collapsedGroups: {} });
+  },
+  initGroups: (allKeys, defaultOpenKey) => {
+    // 已有折叠记忆(localStorage 非空)→ 尊重用户/历史,不覆盖
+    if (localStorage.getItem(GROUPS_KEY)) return;
+    // 单一分组(或空)无需折叠,保持全展开
+    if (allKeys.length <= 1) return;
+    const next: Record<string, boolean> = {};
+    for (const k of allKeys) {
+      if (k !== defaultOpenKey) next[k] = true;
+    }
+    saveCollapsedGroups(next);
+    set({ collapsedGroups: next });
+  },
 }));
 
 /** 应用启动时调用一次,把初始主题挂到 <html> */

@@ -1,7 +1,8 @@
 // frontend/src/components/board/Board.tsx
-// 看板主体:DndContext + 5 列,拖拽跨列 = optimisticMove 改 status。
+// 看板主体:DndContext + 3 列,拖拽跨列 = optimisticMove 改 status。
 // 应用 BoardToolbar 的筛选(project/source/search)。
-import { useMemo } from 'react';
+// 列内卡片由 KanbanColumn 按 projectName 二次分组(可折叠),缓解单列纵向过长。
+import { useEffect, useMemo } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -15,7 +16,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/components/ui/toaster';
 import { KanbanColumn } from './KanbanColumn';
-import { KANBAN_COLUMNS } from './meta';
+import { KANBAN_COLUMNS, UNGROUPED_KEY } from './meta';
 
 export function Board() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -23,6 +24,7 @@ export function Board() {
   const projectFilter = useUIStore((s) => s.projectFilter);
   const sourceFilter = useUIStore((s) => s.sourceFilter);
   const searchQuery = useUIStore((s) => s.searchQuery);
+  const initGroups = useUIStore((s) => s.initGroups);
 
   // distance 8px:小于阈值算点击(打开 Drawer),超过算拖拽
   const sensors = useSensors(
@@ -41,6 +43,26 @@ export function Board() {
       return true;
     });
   }, [tasks, projectFilter, sourceFilter, searchQuery]);
+
+  // 首次加载(无折叠记忆):默认只展开「卡片最多的项目」,其余收起,避免列内杂乱。
+  // initGroups 内部幂等——有 localStorage 记忆即跳过,故 filtered 变化重复调用安全。
+  useEffect(() => {
+    if (filtered.length === 0) return;
+    const counts = new Map<string, number>();
+    for (const task of filtered) {
+      const key = task.projectName?.trim() ? task.projectName : UNGROUPED_KEY;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    let topKey = UNGROUPED_KEY;
+    let topCount = -1;
+    for (const [key, count] of counts) {
+      if (count > topCount) {
+        topCount = count;
+        topKey = key;
+      }
+    }
+    initGroups(Array.from(counts.keys()), topKey);
+  }, [filtered, initGroups]);
 
   const tasksOfStatus = (status: TaskStatus) =>
     filtered.filter((task) => task.status === status);
