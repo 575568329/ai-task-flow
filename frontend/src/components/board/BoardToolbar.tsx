@@ -1,7 +1,7 @@
 // frontend/src/components/board/BoardToolbar.tsx
 // 看板顶部工具栏:连接状态 / 项目筛选 / 来源筛选 / 搜索 / 分组折叠快捷 + 新建任务。
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronsDownUp, ChevronsUpDown, Plus, Search } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, Plus, Search, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,6 +16,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';
 import { cn } from '@/lib/utils';
 import { ALL_OPTION, UNGROUPED_KEY } from './meta';
+import { OpenClaudeDialog } from './OpenClaudeDialog';
 
 export function BoardToolbar() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -49,6 +50,13 @@ export function BoardToolbar() {
     }
     return Array.from(keys);
   }, [tasks]);
+
+  // 看板级「打开终端」:可选项目路径 = 已有任务的 repoPath 去重
+  const repoPaths = useMemo(
+    () => Array.from(new Set(tasks.map((t) => t.repoPath).filter(Boolean))) as string[],
+    [tasks],
+  );
+  const [openClaude, setOpenClaude] = useState(false);
 
   return (
     <div className="bg-background/80 flex items-center gap-2 border-b px-3 py-2 backdrop-blur">
@@ -130,10 +138,25 @@ export function BoardToolbar() {
         收起分组
       </Button>
 
-      <Button size="sm" className="ml-auto" onClick={() => setCreatingTask(true)}>
-        <Plus className="size-4" />
-        新建任务
-      </Button>
+      <div className="ml-auto flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setOpenClaude(true)}>
+          <Terminal className="size-4" />
+          打开终端
+        </Button>
+        <Button size="sm" onClick={() => setCreatingTask(true)}>
+          <Plus className="size-4" />
+          新建任务
+        </Button>
+      </div>
+
+      {/* 看板级打开终端:选项目路径(已有或自选)→ 新建/恢复 Claude 会话 */}
+      <OpenClaudeDialog
+        open={openClaude}
+        onOpenChange={setOpenClaude}
+        env="cmd"
+        projectOptions={repoPaths}
+        allowPickRepo
+      />
     </div>
   );
 }

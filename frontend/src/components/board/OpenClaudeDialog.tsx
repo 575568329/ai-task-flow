@@ -3,10 +3,15 @@
 // - 新建:启动终端开新会话(无 sessionId),复制 claude 命令到剪贴板
 // - 恢复:列表来自 ~/.claude/projects 历史会话;选中后 --resume 继续
 //
+// 两种用法:
+//   1. 任务级(TaskDrawer):传入 repoPath → 固定路径,隐藏路径选择器
+//   2. 看板级(BoardToolbar):不传 repoPath,传 projectOptions + allowPickRepo
+//      → 显示「项目路径」选择器(下拉已有项目 + 浏览自选)
+//
 // 为什么不用 RadioGroup:项目未安装 @radix-ui/react-radio-group,前端装包是 Windows 专属
 // (见 memory),不为此新增依赖。改用可点击列表项 + selected-state 样式实现单选语义。
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, RotateCcw, Terminal } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, Terminal, FolderOpen } from 'lucide-react';
 import type { TaskEnv, ClaudeSessionMeta } from '@ai-task-flow/shared';
 import {
   Dialog,
@@ -32,8 +37,13 @@ import { cn } from '@/lib/utils';
 interface OpenClaudeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  repoPath: string;
+  /** 任务级固定路径(传入则隐藏路径选择器,直接用此路径) */
+  repoPath?: string;
   env: TaskEnv;
+  /** 看板级:可选项目路径列表(下拉项) */
+  projectOptions?: string[];
+  /** 看板级:允许选择/自选路径(repoPath 未传时显示路径选择器) */
+  allowPickRepo?: boolean;
 }
 
 export function OpenClaudeDialog({
@@ -41,7 +51,16 @@ export function OpenClaudeDialog({
   onOpenChange,
   repoPath,
   env,
+  projectOptions,
+  allowPickRepo,
 }: OpenClaudeDialogProps) {
+  // 任务级:传了 repoPath 视为固定,不显示路径选择器
+  const fixedRepo = !!repoPath;
+  // 看板级:用户选择/自选的路径
+  const [selectedRepo, setSelectedRepo] = useState('');
+
+  const effectiveRepo = fixedRepo ? (repoPath as string) : selectedRepo;
+
   const [sessions, setSessions] = useState<ClaudeSessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,6 +70,14 @@ export function OpenClaudeDialog({
   useEffect(() => {
     setSelectedEnv(env);
   }, [env]);
+
+  // 弹窗重新打开时,看板级重置已选路径(任务级用传入 repoPath)
+  useEffect(() => {
+    if (open) {
+      setSelectedRepo('');
+      setSelectedId(null);
+    }
+  }, [open]);
 
   // 按 selectedEnv 过滤会话:wsl↔Windows 两个 home 来源(cmd/pwsh 同属 Windows home)
   const filteredSessions = useMemo(
@@ -74,11 +101,11 @@ export function OpenClaudeDialog({
 
   // 打开时拉取历史会话(失败静默:该项目可能从无历史)
   useEffect(() => {
-    if (!open || !repoPath) return;
+    if (!open || !effectiveRepo) return;
     let cancelled = false;
     setLoading(true);
     systemApi
-      .listClaudeSessions(repoPath)
+      .listClaudeSessions(effectiveRepo)
       .then((res) => {
         if (cancelled) return;
         setSessions(res.sessions);
@@ -94,12 +121,26 @@ export function OpenClaudeDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, repoPath]);
+  }, [open, effectiveRepo]);
+
+  // 看板级:浏览自选项目目录
+  const onPickDir = async () => {
+    try {
+      const { path } = await systemApi.selectDirectory();
+      if (path) setSelectedRepo(path);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '选择目录失败');
+    }
+  };
 
   // fire-and-forget:不阻塞 UI,用户可连续点开多个终端窗口;成功/失败由 toast 异步反馈
   const openNew = () => {
+    if (!effectiveRepo) {
+      toast.error('请先选择项目路径');
+      return;
+    }
     systemApi
-      .openClaudeSession({ repoPath, env: selectedEnv })
+      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv })
       .then(({ claudeCommand }) => {
         // 把命令复制到剪贴板便于用户核对/手动粘贴
         navigator.clipboard.writeText(claudeCommand).catch(() => {});
@@ -113,9 +154,13 @@ export function OpenClaudeDialog({
   // fire-and-forget:同上,不阻塞 UI。闭包捕获 sessionId,避免请求进行中改选用错 id
   const resumeSelected = () => {
     if (!selectedId) return;
+    if (!effectiveRepo) {
+      toast.error('请先选择项目路径');
+      return;
+    }
     const sessionId = selectedId;
     systemApi
-      .openClaudeSession({ repoPath, env: selectedEnv, sessionId })
+      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv, sessionId })
       .then(() => {
         toast.success('已恢复会话,可继续选择下一个');
       })
@@ -126,15 +171,44 @@ export function OpenClaudeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl sm:max-w-4xl">
+      <DialogContent>
         <DialogHeader className="min-w-0">
           <DialogTitle>打开终端</DialogTitle>
           <DialogDescription>
-            在 <span className="font-mono text-xs break-all">{repoPath}</span> 下新建或恢复 Claude 会话
+            在 <span className="font-mono text-xs break-all">{effectiveRepo || '(未选择项目)'}</span> 下新建或恢复 Claude 会话
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex min-w-0 flex-col gap-3">
+          {/* 看板级:项目路径选择器(下拉已有项目 + 浏览自选) */}
+          {!fixedRepo && allowPickRepo && (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground w-16 shrink-0 text-xs font-medium">项目路径</span>
+              <Select value={selectedRepo} onValueChange={setSelectedRepo}>
+                <SelectTrigger className="h-8 w-full">
+                  <SelectValue placeholder="选择已有项目路径" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(projectOptions ?? []).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      <span className="truncate">{p}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8 shrink-0"
+                onClick={() => void onPickDir()}
+                aria-label="浏览选择目录"
+                title="浏览选择目录"
+              >
+                <FolderOpen className="size-4" />
+              </Button>
+            </div>
+          )}
+
           {/* 执行环境选择(覆盖任务默认 env;新建/恢复都用它) */}
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground w-16 shrink-0 text-xs font-medium">执行环境</span>
@@ -151,7 +225,7 @@ export function OpenClaudeDialog({
           </div>
 
           {/* 新建会话 */}
-          <Button variant="outline" onClick={openNew}>
+          <Button variant="outline" onClick={openNew} disabled={!effectiveRepo}>
             <Plus className="size-4" />
             新建会话
           </Button>
@@ -163,7 +237,11 @@ export function OpenClaudeDialog({
               {selectedEnv === 'wsl' ? 'WSL 侧' : 'Windows 侧'}
             </span>
           </div>
-          {loading ? (
+          {!effectiveRepo ? (
+            <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
+              请先选择项目路径
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="text-muted-foreground size-4 animate-spin" />
             </div>
@@ -172,7 +250,7 @@ export function OpenClaudeDialog({
               暂无历史会话
             </div>
           ) : (
-            <div className="flex max-h-64 min-w-0 flex-col gap-1 overflow-y-auto pr-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
               {filteredSessions.map((s) => {
                 const active = s.sessionId === selectedId;
                 return (
@@ -215,7 +293,7 @@ export function OpenClaudeDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button onClick={resumeSelected} disabled={!selectedId}>
+          <Button onClick={resumeSelected} disabled={!selectedId || !effectiveRepo}>
             <RotateCcw className="size-4" />
             恢复会话
           </Button>

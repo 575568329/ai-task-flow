@@ -62,7 +62,7 @@ export function KnowledgeView() {
       <div className="flex-1 overflow-hidden p-2">
         <ResizablePanelGroup orientation="horizontal">
           <ResizablePanel defaultSize="28%" minSize="18%">
-            <KnowledgeTree />
+            <KnowledgeTree onRefresh={() => void load()} refreshing={loading} />
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize="72%" minSize="30%">

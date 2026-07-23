@@ -117,11 +117,16 @@ export function TaskDrawer() {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [openClaude, setOpenClaude] = useState(false);
+  // 标题输入 ref:新建模式打开抽屉后自动聚焦,点「新建任务」即可直接输入
+  const titleRef = useRef<HTMLInputElement>(null);
 
   // 打开/切换选中时同步草稿;不依赖 task 本身,避免 SSE 更新打断编辑。
   useEffect(() => {
     if (creatingTask) {
       setDraft(EMPTY_DRAFT);
+      // 抽屉动画(~80ms)结束后聚焦标题,让新建「一步到位」可直接录入
+      const timer = setTimeout(() => titleRef.current?.focus(), 80);
+      return () => clearTimeout(timer);
     } else if (selectedTaskId) {
       const current = tasks.find((t) => t.id === selectedTaskId);
       if (current) setDraft(taskToDraft(current));
@@ -313,6 +318,7 @@ export function TaskDrawer() {
           <div className="bg-muted/20 flex w-[240px] shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-3">
             <Field label="标题 *">
               <Input
+                ref={titleRef}
                 value={draft.title}
                 onChange={(e) => patch({ title: e.target.value })}
                 placeholder="任务标题(必填)"

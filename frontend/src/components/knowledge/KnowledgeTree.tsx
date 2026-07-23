@@ -1,7 +1,18 @@
 // frontend/src/components/knowledge/KnowledgeTree.tsx
 // 知识库左侧:新建笔记 + 搜索 + 标签筛选 + 目录树(无筛选时)/ 扁平结果(有筛选时)。
-import { useState, type ReactNode } from 'react';
-import { Search, Folder, FolderOpen, FileText, FilePlus } from 'lucide-react';
+// 树默认全收起(根节点「知识库」明显加粗),顶部提供全部展开/全部收起 + 刷新。
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  Search,
+  Folder,
+  FolderOpen,
+  FileText,
+  FilePlus,
+  RefreshCw,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Database,
+} from 'lucide-react';
 import type { KnowledgeNode } from '@ai-task-flow/shared';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,7 +33,22 @@ import { formatRelativeTime } from '@/lib/formatDate';
 import { createDoc, fetchManifest } from '@/api/knowledge';
 import { toast } from '@/components/ui/toaster';
 
-export function KnowledgeTree() {
+/** 递归收集所有目录节点 name(用于默认全收起 / 全部收起) */
+function collectDirNames(node: KnowledgeNode, acc: Set<string>): void {
+  if (node.type === 'dir') {
+    acc.add(node.name);
+    node.children.forEach((c) => collectDirNames(c, acc));
+  }
+}
+
+interface KnowledgeTreeProps {
+  /** 手动刷新回调(刷新整棵 manifest) */
+  onRefresh?: () => void;
+  /** 刷新中状态(用于按钮禁用 + 图标旋转) */
+  refreshing?: boolean;
+}
+
+export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
   const manifest = useKnowledgeStore((s) => s.manifest);
   const currentPath = useKnowledgeStore((s) => s.currentPath);
   const setCurrentPath = useKnowledgeStore((s) => s.setCurrentPath);
@@ -34,22 +60,48 @@ export function KnowledgeTree() {
   const setSelectedTags = useKnowledgeStore((s) => s.setSelectedTags);
   const getFilteredDocs = useKnowledgeStore((s) => s.getFilteredDocs);
 
-  // collapsed 集合:默认展开,点击折叠
+  // 所有目录 name 集合(manifest 就绪后计算一次)
+  const allDirNames = useMemo(() => {
+    if (!manifest) return new Set<string>();
+    const acc = new Set<string>();
+    manifest.tree.children.forEach((c) => collectDirNames(c, acc));
+    return acc;
+  }, [manifest]);
+
+  // collapsed 集合:默认全收起(所有目录都在集合里);manifest 首次就绪时初始化
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [inited, setInited] = useState(false);
+  useEffect(() => {
+    if (!inited && manifest && allDirNames.size > 0) {
+      setCollapsed(new Set(allDirNames));
+      setInited(true);
+    }
+  }, [inited, manifest, allDirNames]);
+
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // manifest 切换(切换知识库根)时重置展开态,重新默认全收起
+  useEffect(() => {
+    setInited(false);
+  }, [manifest?.tree.name]);
 
   if (!manifest) return null;
 
   const hasFilter = searchQuery.trim().length > 0 || selectedTags.length > 0;
 
   const toggleDir = (key: string) => {
-    const next = new Set(collapsed);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setCollapsed(next);
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
+
+  const expandAll = () => setCollapsed(new Set());
+  const collapseAll = () => setCollapsed(new Set(allDirNames));
 
   // 新建笔记:服务端生成文件名 → 刷新树 → 打开新文档编辑态
   const onCreate = async () => {
@@ -133,6 +185,18 @@ export function KnowledgeTree() {
               className="h-8 pl-7"
             />
           </div>
+          {/* 刷新:紧贴文件树,图标+文字,加载中旋转 */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 gap-1 px-2"
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="刷新知识库"
+          >
+            <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
+            刷新
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -179,7 +243,37 @@ export function KnowledgeTree() {
               ))
             )
           ) : (
-            manifest.tree.children.map((child) => renderNode(child, 0))
+            <>
+              {/* 全部展开 / 全部收起(仅树模式显示) */}
+              <div className="flex items-center gap-1 px-1 pb-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground h-7 gap-1 px-1.5 text-xs"
+                  onClick={expandAll}
+                  title="展开全部目录"
+                >
+                  <ChevronsUpDown className="size-3.5" />
+                  全部展开
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground h-7 gap-1 px-1.5 text-xs"
+                  onClick={collapseAll}
+                  title="收起全部目录"
+                >
+                  <ChevronsDownUp className="size-3.5" />
+                  全部收起
+                </Button>
+              </div>
+              {/* 根节点:知识库(明显加粗) */}
+              <div className="flex items-center gap-1 rounded px-1 py-1">
+                <Database className="size-4 shrink-0 text-primary" />
+                <span className="truncate text-sm font-bold">{manifest.tree.title}</span>
+              </div>
+              {manifest.tree.children.map((child) => renderNode(child, 0))}
+            </>
           )}
         </div>
       </ScrollArea>

@@ -397,9 +397,9 @@ export function TaskDocsView() {
                                 <ChevronDown className="size-3.5" />
                               )}
                             </button>
-                            <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
-                            <span className="flex-1 truncate text-xs" title={root}>
-                              {root}
+                            <FolderOpen className="size-4 shrink-0 text-amber-500" />
+                            <span className="flex-1 truncate text-sm font-bold" title={root}>
+                              {basename(root) || root}
                             </span>
                             <button
                               type="button"

@@ -43,7 +43,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
           <DialogDescription>配置 LLM 模型、管理本地存储、查看 MCP 挂载方式。</DialogDescription>
