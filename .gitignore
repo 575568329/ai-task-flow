@@ -23,3 +23,6 @@ backend/public/
 
 # pnpm 锁文件(本项目统一用 npm,忽略 pnpm 误生成的锁文件)
 pnpm-lock.yaml
+
+# 看板程序(kanban-code)误把绝对路径当文件名写进项目目录的 hook-events 日志,反复出现
+*hook-events.jsonl
