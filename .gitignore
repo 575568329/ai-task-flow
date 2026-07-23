@@ -21,7 +21,9 @@ backend/public/
 # Claude Code 本地个人权限设置(每个开发者/每台机器不同,不进版本库)
 .claude/settings.local.json
 
-# pnpm 锁文件(本项目统一用 npm,忽略 pnpm 误生成的锁文件)
+# 锁文件不入版本库(跨内网/公网环境 lock 的 resolved 源来回变,提交只会反复冲突;
+# 各机器用自己 registry 解析生成,版本范围由各 package.json 的依赖声明保证)
+package-lock.json
 pnpm-lock.yaml
 
 # 看板程序(kanban-code)误把绝对路径当文件名写进项目目录的 hook-events 日志,反复出现
