@@ -306,9 +306,9 @@ export function TaskDrawer() {
       >
         {/* 顶部:标题/状态(跨三栏) */}
         <SheetHeader className="shrink-0 border-b px-4 py-3">
-          <SheetTitle>{isCreate ? '新建任务' : (task?.title ?? '任务详情')}</SheetTitle>
+          <SheetTitle>{isCreate ? (draft.title.trim() || '新任务') : (task?.title ?? '任务详情')}</SheetTitle>
           <SheetDescription>
-            {isCreate ? '仅标题必填,其余可留空' : task ? STATUS_LABELS[task.status] : ''}
+            {isCreate ? '新任务 · 填写后保存即创建' : task ? STATUS_LABELS[task.status] : ''}
           </SheetDescription>
         </SheetHeader>
 
@@ -459,7 +459,7 @@ export function TaskDrawer() {
           )}
           <Button size="sm" onClick={save} disabled={saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}
-            {isCreate ? '创建' : '保存'}
+            保存
           </Button>
           {!isCreate && (
             <Button

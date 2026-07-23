@@ -8,6 +8,9 @@
 //   2. 看板级(BoardToolbar):不传 repoPath,传 projectOptions + allowPickRepo
 //      → 显示「项目路径」选择器(下拉已有项目 + 浏览自选)
 //
+// 布局:DialogContent = flex flex-col max-h;标题(DialogHeader)/按钮(DialogFooter)
+// shrink-0 固定,只有「历史会话列表」区 flex-1 overflow-y-auto 滚动,避免长内容把标题/按钮滚没。
+//
 // 为什么不用 RadioGroup:项目未安装 @radix-ui/react-radio-group,前端装包是 Windows 专属
 // (见 memory),不为此新增依赖。改用可点击列表项 + selected-state 样式实现单选语义。
 import { useEffect, useMemo, useState } from 'react';
@@ -179,10 +182,12 @@ export function OpenClaudeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-w-0 flex-col gap-3">
+        {/* 中间区:flex-1 可收缩;项目路径/执行环境/新建会话/历史标题 shrink-0 固定,
+            只有历史会话列表滚动 → 标题与底部按钮永不随内容滚走 */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           {/* 看板级:项目路径选择器(下拉已有项目 + 浏览自选) */}
           {!fixedRepo && allowPickRepo && (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <span className="text-muted-foreground w-16 shrink-0 text-xs font-medium">项目路径</span>
               <Select value={selectedRepo} onValueChange={setSelectedRepo}>
                 <SelectTrigger className="h-8 w-full">
@@ -210,7 +215,7 @@ export function OpenClaudeDialog({
           )}
 
           {/* 执行环境选择(覆盖任务默认 env;新建/恢复都用它) */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <span className="text-muted-foreground w-16 shrink-0 text-xs font-medium">执行环境</span>
             <Select value={selectedEnv} onValueChange={(value) => setSelectedEnv(value as TaskEnv)}>
               <SelectTrigger className="h-8 w-full">
@@ -225,68 +230,72 @@ export function OpenClaudeDialog({
           </div>
 
           {/* 新建会话 */}
-          <Button variant="outline" onClick={openNew} disabled={!effectiveRepo}>
+          <Button variant="outline" className="shrink-0" onClick={openNew} disabled={!effectiveRepo}>
             <Plus className="size-4" />
             新建会话
           </Button>
 
-          {/* 历史会话列表(按 selectedEnv 过滤:cmd/pwsh→Windows 侧,wsl→WSL 侧) */}
-          <div className="text-muted-foreground text-xs font-medium">
+          {/* 历史会话标题(按 selectedEnv 过滤:cmd/pwsh→Windows 侧,wsl→WSL 侧) */}
+          <div className="text-muted-foreground shrink-0 text-xs font-medium">
             历史会话
             <span className="ml-2 font-normal">
               {selectedEnv === 'wsl' ? 'WSL 侧' : 'Windows 侧'}
             </span>
           </div>
-          {!effectiveRepo ? (
-            <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
-              请先选择项目路径
-            </div>
-          ) : loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="text-muted-foreground size-4 animate-spin" />
-            </div>
-          ) : filteredSessions.length === 0 ? (
-            <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
-              暂无历史会话
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-              {filteredSessions.map((s) => {
-                const active = s.sessionId === selectedId;
-                return (
-                  <button
-                    key={s.sessionId}
-                    type="button"
-                    onClick={() => setSelectedId(s.sessionId)}
-                    className={cn(
-                      'flex min-w-0 flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
-                      active ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Terminal className="text-muted-foreground size-3.5 shrink-0" />
-                      <span className="flex-1 truncate text-sm font-medium">
-                        {s.title || '(无标题)'}
-                      </span>
-                      <span
-                        className={cn(
-                          'shrink-0 rounded px-1 py-0 text-[10px]',
-                          s.source === 'wsl'
-                            ? 'bg-amber-500/10 text-amber-600'
-                            : 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {s.source === 'wsl' ? 'WSL' : 'Win'}
-                      </span>
-                    </div>
-                    <div className="text-muted-foreground pl-5 text-[10px]">
-                      {s.messageCount} 条消息 · {relativeTime(s.lastActiveAt)}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+
+          {/* 历史会话列表:唯一可滚动区(flex-1 + overflow-y-auto) */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+            {!effectiveRepo ? (
+              <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
+                请先选择项目路径
+              </div>
+            ) : loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="text-muted-foreground size-4 animate-spin" />
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
+                暂无历史会话
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {filteredSessions.map((s) => {
+                  const active = s.sessionId === selectedId;
+                  return (
+                    <button
+                      key={s.sessionId}
+                      type="button"
+                      onClick={() => setSelectedId(s.sessionId)}
+                      className={cn(
+                        'flex min-w-0 flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
+                        active ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Terminal className="text-muted-foreground size-3.5 shrink-0" />
+                        <span className="flex-1 truncate text-sm font-medium">
+                          {s.title || '(无标题)'}
+                        </span>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded px-1 py-0 text-[10px]',
+                            s.source === 'wsl'
+                              ? 'bg-amber-500/10 text-amber-600'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {s.source === 'wsl' ? 'WSL' : 'Win'}
+                        </span>
+                      </div>
+                      <div className="text-muted-foreground pl-5 text-[10px]">
+                        {s.messageCount} 条消息 · {relativeTime(s.lastActiveAt)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
