@@ -17,6 +17,15 @@ import { sseClient } from '@/api/sse';
 import { cn } from '@/lib/utils';
 import { ALL_OPTION, UNGROUPED_KEY } from './meta';
 import { OpenClaudeDialog } from './OpenClaudeDialog';
+import {
+  loadShortcuts,
+  eventToCombo,
+  isSingleKey,
+  isTypingTarget,
+  isCapturing,
+  formatCombo,
+  type ShortcutMap,
+} from '@/lib/shortcuts';
 
 export function BoardToolbar() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -27,12 +36,42 @@ export function BoardToolbar() {
   const setSourceFilter = useUIStore((s) => s.setSourceFilter);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const setCreatingTask = useUIStore((s) => s.setCreatingTask);
+  const selectedTaskId = useUIStore((s) => s.selectedTaskId);
+  const creatingTask = useUIStore((s) => s.creatingTask);
+
+  // 快捷键配置(设置面板改动后通过 'shortcuts-changed' 事件重载)
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
+  useEffect(() => {
+    const reload = () => setShortcuts(loadShortcuts());
+    window.addEventListener('shortcuts-changed', reload);
+    return () => window.removeEventListener('shortcuts-changed', reload);
+  }, []);
   const collapseAllGroups = useUIStore((s) => s.collapseAllGroups);
   const expandAllGroups = useUIStore((s) => s.expandAllGroups);
 
   // SSE 连接状态:绿点=已连接 / 灰点=断开(订阅 sseClient,onopen/onerror 自动更新)
   const [sseConnected, setSseConnected] = useState(false);
   useEffect(() => sseClient.onStatusChange(setSseConnected), []);
+
+  // 全局快捷键(配置可改):newTask=新建,openTerminal=打开终端(抽屉未开时走看板级)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isCapturing()) return; // 设置面板捕获重绑时暂停业务监听
+      const combo = eventToCombo(e);
+      if (!combo) return;
+      // 单键快捷键在输入框中跳过;带修饰(如 Ctrl+S)不跳过
+      if (isSingleKey(combo) && isTypingTarget(e.target as HTMLElement)) return;
+      if (combo === shortcuts.newTask) {
+        e.preventDefault();
+        setCreatingTask(true);
+      } else if (combo === shortcuts.openTerminal && selectedTaskId === null && !creatingTask) {
+        e.preventDefault();
+        setOpenClaude(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcuts, setCreatingTask, selectedTaskId, creatingTask]);
 
   const projects = useMemo(
     () =>
@@ -139,11 +178,20 @@ export function BoardToolbar() {
       </Button>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => setOpenClaude(true)}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setOpenClaude(true)}
+          title={`打开终端 (${formatCombo(shortcuts.openTerminal)})`}
+        >
           <Terminal className="size-4" />
           打开终端
         </Button>
-        <Button size="sm" onClick={() => setCreatingTask(true)}>
+        <Button
+          size="sm"
+          onClick={() => setCreatingTask(true)}
+          title={`新建任务 (${formatCombo(shortcuts.newTask)})`}
+        >
           <Plus className="size-4" />
           新建任务
         </Button>

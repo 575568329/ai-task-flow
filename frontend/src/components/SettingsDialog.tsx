@@ -3,7 +3,7 @@
 // 侧栏"设置"入口打开本弹窗。三个 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Plug } from 'lucide-react';
+import { Database, SlidersHorizontal, Plug, Keyboard } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils';
 import { LlmConfigPanel } from './LlmConfigPanel';
 import { StoragePanel } from './StoragePanel';
 import { McpHelpPanel } from './McpHelpPanel';
+import { ShortcutsPanel } from './ShortcutsPanel';
 
-type SettingsTab = 'llm' | 'storage' | 'mcp';
+type SettingsTab = 'llm' | 'storage' | 'mcp' | 'shortcuts';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ const TABS: TabDef[] = [
   { key: 'llm', label: '模型配置', icon: SlidersHorizontal },
   { key: 'storage', label: '存储管理', icon: Database },
   { key: 'mcp', label: 'MCP 挂载', icon: Plug },
+  { key: 'shortcuts', label: '快捷键', icon: Keyboard },
 ];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -83,8 +85,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <LlmConfigPanel />
               ) : tab === 'storage' ? (
                 <StoragePanel />
-              ) : (
+              ) : tab === 'mcp' ? (
                 <McpHelpPanel />
+              ) : (
+                <ShortcutsPanel />
               )}
             </motion.div>
           </AnimatePresence>

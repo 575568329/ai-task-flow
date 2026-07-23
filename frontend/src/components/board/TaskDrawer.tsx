@@ -48,6 +48,15 @@ import { systemApi } from '@/api/task';
 import { StepEditor } from './StepEditor';
 import { OpenClaudeDialog } from './OpenClaudeDialog';
 import { STATUS_LABELS } from '@/lib/taskMeta';
+import {
+  loadShortcuts,
+  eventToCombo,
+  isSingleKey,
+  isTypingTarget,
+  isCapturing,
+  formatCombo,
+  type ShortcutMap,
+} from '@/lib/shortcuts';
 
 interface Draft {
   prefix: string;
@@ -119,6 +128,14 @@ export function TaskDrawer() {
   const [openClaude, setOpenClaude] = useState(false);
   // 标题输入 ref:新建模式打开抽屉后自动聚焦,点「新建任务」即可直接输入
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // 快捷键配置(设置面板改动后重载)
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
+  useEffect(() => {
+    const reload = () => setShortcuts(loadShortcuts());
+    window.addEventListener('shortcuts-changed', reload);
+    return () => window.removeEventListener('shortcuts-changed', reload);
+  }, []);
 
   // 打开/切换选中时同步草稿;不依赖 task 本身,避免 SSE 更新打断编辑。
   useEffect(() => {
@@ -230,21 +247,33 @@ export function TaskDrawer() {
   // saveRef/savingRef:keydown 监听器用,始终指向最新值,避免监听器只绑一次时闭包捕获旧 draft
   const saveRef = useRef(save);
   const savingRef = useRef(saving);
+  const openClaudeRef = useRef<() => void>(() => {});
   saveRef.current = save;
   savingRef.current = saving;
 
-  // Ctrl/Cmd+S 保存(仅抽屉打开时);preventDefault 拦截浏览器默认保存,savingRef 防重复提交
+  // 抽屉内快捷键(配置可改):saveTask=保存,openTerminal=打开终端;仅抽屉打开时生效
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if (isCapturing()) return;
+      const combo = eventToCombo(e);
+      if (!combo) return;
+      // 保存(默认 Ctrl+S,带修饰在输入框中也触发)
+      if (combo === shortcuts.saveTask) {
         e.preventDefault();
         if (!savingRef.current) void saveRef.current();
+        return;
+      }
+      // 打开终端:单键在输入框中跳过
+      if (combo === shortcuts.openTerminal) {
+        if (isSingleKey(combo) && isTypingTarget(e.target as HTMLElement)) return;
+        e.preventDefault();
+        openClaudeRef.current();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open]);
+  }, [open, shortcuts]);
 
   const { confirm } = useConfirm();
 
@@ -256,6 +285,7 @@ export function TaskDrawer() {
     }
     setOpenClaude(true);
   };
+  openClaudeRef.current = onOpenClaude;
 
   // 复制执行指令(D4 统一入口 buildTaskPrompt),不触发状态变更,便于手动粘贴
   const onCopyPrompt = async () => {
@@ -447,7 +477,11 @@ export function TaskDrawer() {
         {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
             打开终端基于 draft.repoPath 可用,复制指令/删除依赖已保存任务,未保存时禁用 */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
-          <Button size="sm" onClick={onOpenClaude}>
+          <Button
+            size="sm"
+            onClick={onOpenClaude}
+            title={`打开终端 (${formatCombo(shortcuts.openTerminal)})`}
+          >
             <Terminal className="size-4" />
             打开终端
           </Button>
