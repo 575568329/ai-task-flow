@@ -191,7 +191,7 @@ export function TaskDrawer() {
     const relatedFiles = parseRelatedFiles();
     try {
       if (isCreate) {
-        await createTask({
+        const created = await createTask({
           prefix: draft.prefix.trim(),
           title: draft.title.trim(),
           description: draft.description,
@@ -203,8 +203,10 @@ export function TaskDrawer() {
           steps: draft.steps,
           env: draft.env,
         });
-        toast.success('任务已创建');
-        close();
+        toast.success('任务已创建,可继续编辑');
+        // 不关闭抽屉:切换到新任务的编辑态,所有编辑态按钮立即可用,无需重开
+        setCreatingTask(false);
+        setSelectedTask(created.id);
       } else if (task) {
         await updateTask(task.id, {
           title: draft.title.trim(),
@@ -246,9 +248,8 @@ export function TaskDrawer() {
 
   const { confirm } = useConfirm();
 
-  // 打开"打开终端"弹窗(新建 / 恢复 Claude 会话);需先有仓库路径
+  // 打开"打开终端"弹窗(新建 / 恢复 Claude 会话);基于 draft.repoPath,未保存任务也可用
   const onOpenClaude = () => {
-    if (!task) return;
     if (!draft.repoPath.trim()) {
       toast.error('请先填写仓库路径');
       return;
@@ -443,47 +444,48 @@ export function TaskDrawer() {
           )}
         </div>
 
-        {/* 底部:操作按钮(跨三栏) */}
+        {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
+            打开终端基于 draft.repoPath 可用,复制指令/删除依赖已保存任务,未保存时禁用 */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
-          {!isCreate && task && (
-            <Button size="sm" onClick={onOpenClaude}>
-              <Terminal className="size-4" />
-              打开终端
-            </Button>
-          )}
-          {!isCreate && task && (
-            <Button variant="outline" size="sm" onClick={onCopyPrompt}>
-              <Copy className="size-4" />
-              复制执行指令
-            </Button>
-          )}
+          <Button size="sm" onClick={onOpenClaude}>
+            <Terminal className="size-4" />
+            打开终端
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCopyPrompt}
+            disabled={!task}
+            title={!task ? '保存后可复制执行指令' : '复制执行指令'}
+          >
+            <Copy className="size-4" />
+            复制执行指令
+          </Button>
           <Button size="sm" onClick={save} disabled={saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}
             保存
           </Button>
-          {!isCreate && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive ml-auto"
-              onClick={onDelete}
-            >
-              <Trash2 className="size-4" />
-              删除
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive ml-auto"
+            onClick={onDelete}
+            disabled={!task}
+            title={!task ? '保存后可删除' : '删除任务'}
+          >
+            <Trash2 className="size-4" />
+            删除
+          </Button>
         </div>
       </SheetContent>
 
-      {/* 打开终端:新建 / 恢复 Claude 会话(任务级 env + repoPath 传入) */}
-      {!isCreate && task && (
-        <OpenClaudeDialog
-          open={openClaude}
-          onOpenChange={setOpenClaude}
-          repoPath={draft.repoPath}
-          env={draft.env}
-        />
-      )}
+      {/* 打开终端:新建 / 恢复 Claude 会话(基于 draft.repoPath;新建态也可用) */}
+      <OpenClaudeDialog
+        open={openClaude}
+        onOpenChange={setOpenClaude}
+        repoPath={draft.repoPath}
+        env={draft.env}
+      />
     </Sheet>
   );
 }
