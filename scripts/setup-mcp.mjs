@@ -38,7 +38,16 @@ if (!existsSync(serverJs)) {
     console.error('✗ build:shared 失败,请先 npm install 后重试');
     process.exit(1);
   }
-  spawnSync('npm', ['run', 'build:backend'], { cwd: root, stdio: 'inherit', shell: true });
+  const backendBuild = spawnSync('npm', ['run', 'build:backend'], { cwd: root, stdio: 'inherit', shell: true });
+  if (backendBuild.status !== 0) {
+    console.error('✗ build:backend 失败,请查看上方报错');
+    process.exit(1);
+  }
+}
+// build 后再确认一次,避免万一产物仍缺失却被误判为就绪
+if (!existsSync(serverJs)) {
+  console.error('✗ build 后仍未找到 server.js,请手动 npm run build 排查');
+  process.exit(1);
 }
 ok('backend/dist/interfaces/mcp/server.js 就绪');
 

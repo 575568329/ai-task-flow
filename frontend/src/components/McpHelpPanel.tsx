@@ -79,6 +79,9 @@ export function McpHelpPanel() {
           )}
           {installing ? '挂载中…' : '一键挂载到 Claude Code'}
         </Button>
+        <p className="text-muted-foreground text-xs">
+          未构建时点击会自动 npm run build(约 10-30s),请耐心等待,日志显示在下方。
+        </p>
         {output && (
           <pre className="bg-muted max-h-40 overflow-auto rounded-md p-2 text-xs leading-relaxed">
             <code>{output}</code>
