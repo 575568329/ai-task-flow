@@ -5,7 +5,6 @@ import { createHttpServer } from '../server.js';
 import { JsonTaskRepository } from '../../../infrastructure/persistence/JsonTaskRepository.js';
 import { InMemoryEventBus } from '../../../infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from '../../../infrastructure/pubsub/EventStore.js';
-import { WorktreeManager } from '../../../infrastructure/git/WorktreeManager.js';
 import { JsonChatRepository } from '../../../infrastructure/persistence/JsonChatRepository.js';
 import { GlmWebSearchClient } from '../../../infrastructure/search/GlmWebSearchClient.js';
 import { ArxivClient } from '../../../infrastructure/search/ArxivClient.js';
@@ -61,7 +60,6 @@ describe('HTTP Server', () => {
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       taskRepository,
       eventBus,
-      new WorktreeManager(),
       chatRepository,
       chatService,
       llmConfigService,
@@ -217,14 +215,14 @@ describe('HTTP Server', () => {
         url: '/api/tasks/WS-001',
         payload: {
           title: 'Updated title',
-          status: 'dispatched',
+          status: 'done',
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.title).toBe('Updated title');
-      expect(body.status).toBe('dispatched');
+      expect(body.status).toBe('done');
       expect(body.description).toBe('Original description'); // 未修改的字段保持不变
     });
 
@@ -279,11 +277,11 @@ describe('HTTP Server', () => {
         },
       });
 
-      // 更新一个任务状态
+      // 更新一个任务状态为已完成
       await server.inject({
         method: 'PATCH',
         url: '/api/tasks/WS-001',
-        payload: { status: 'dispatched' },
+        payload: { status: 'done' },
       });
 
       // 按状态查询
@@ -292,19 +290,19 @@ describe('HTTP Server', () => {
         url: '/api/tasks/status/todo',
       });
 
-      const dispatchedResponse = await server.inject({
+      const doneResponse = await server.inject({
         method: 'GET',
-        url: '/api/tasks/status/dispatched',
+        url: '/api/tasks/status/done',
       });
 
       const todoTasks = JSON.parse(todoResponse.body);
-      const dispatchedTasks = JSON.parse(dispatchedResponse.body);
+      const doneTasks = JSON.parse(doneResponse.body);
 
       expect(todoTasks).toHaveLength(1);
       expect(todoTasks[0].id).toBe('WS-002');
 
-      expect(dispatchedTasks).toHaveLength(1);
-      expect(dispatchedTasks[0].id).toBe('WS-001');
+      expect(doneTasks).toHaveLength(1);
+      expect(doneTasks[0].id).toBe('WS-001');
     });
 
     it('should create web-sourced task with sourceUrl', async () => {

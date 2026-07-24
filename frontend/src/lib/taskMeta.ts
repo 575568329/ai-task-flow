@@ -3,27 +3,10 @@ import { TaskStatus, Priority } from '@ai-task-flow/shared';
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.TODO]: '待办',
-  [TaskStatus.DISPATCHED]: '已派发',
-  [TaskStatus.REVIEW]: '审核中',
+  [TaskStatus.IN_PROGRESS]: '进行中',
   [TaskStatus.DONE]: '已完成',
   [TaskStatus.BLOCKED]: '已阻塞',
 };
-
-export const STATUS_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.TODO]: 'var(--primary-6)',       // 蓝色
-  [TaskStatus.DISPATCHED]: 'var(--warning-6)', // 橙色
-  [TaskStatus.REVIEW]: 'var(--primary-8)',     // 深蓝
-  [TaskStatus.DONE]: 'var(--success-6)',       // 绿色
-  [TaskStatus.BLOCKED]: 'var(--error-6)',      // 红色
-};
-
-/** 看板列展示顺序 */
-export const BOARD_COLUMNS: TaskStatus[] = [
-  TaskStatus.TODO,
-  TaskStatus.DISPATCHED,
-  TaskStatus.DONE,
-  TaskStatus.BLOCKED,
-];
 
 export const PRIORITY_COLORS: Record<Priority, string> = {
   [Priority.P0]: 'var(--error-6)',    // 红色 - 紧急

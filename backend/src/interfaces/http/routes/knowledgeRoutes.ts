@@ -4,6 +4,7 @@ import { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { KnowledgeService } from '../../../application/knowledge/KnowledgeService.js';
+import type { KnowledgeCreateRequest, KnowledgeSaveRequest } from '@ai-task-flow/shared';
 
 export async function registerKnowledgeRoutes(
   fastify: FastifyInstance,
@@ -99,6 +100,56 @@ export async function registerKnowledgeRoutes(
         return reply.status(403).send({ error: err.message });
       }
       return reply.status(400).send({ error: `删除失败: ${err.message}` });
+    }
+  });
+
+  // POST /api/knowledge/doc - 创建文档(文件名由服务端按命名规则生成,调用方无法干预)
+  fastify.post<{
+    Body: KnowledgeCreateRequest;
+  }>('/api/knowledge/doc', async (request, reply) => {
+    const body = request.body;
+    if (!body || !body.title?.trim()) {
+      return reply.status(400).send({ error: '标题不能为空' });
+    }
+    if (body.content == null) {
+      return reply.status(400).send({ error: '缺少 content' });
+    }
+
+    try {
+      const result = await knowledgeService.createDoc(body);
+      return reply.status(201).send(result);
+    } catch (err: any) {
+      if (err.message.includes('路径越界')) {
+        return reply.status(403).send({ error: err.message });
+      }
+      return reply.status(400).send({ error: `创建失败: ${err.message}` });
+    }
+  });
+
+  // PUT /api/knowledge/doc?path=xxx - 覆盖更新已有文档(content 即完整 md 正文)
+  fastify.put<{
+    Querystring: { path?: string };
+    Body: KnowledgeSaveRequest;
+  }>('/api/knowledge/doc', async (request, reply) => {
+    const { path } = request.query;
+    if (!path) {
+      return reply.status(400).send({ error: '缺少 path 参数' });
+    }
+    if (request.body?.content == null) {
+      return reply.status(400).send({ error: '缺少 content' });
+    }
+
+    try {
+      const result = await knowledgeService.saveDoc(path, request.body.content);
+      return { ok: true, path: result.path };
+    } catch (err: any) {
+      if (err.message.includes('路径越界')) {
+        return reply.status(403).send({ error: err.message });
+      }
+      if (err.message === '文件不存在') {
+        return reply.status(404).send({ error: err.message });
+      }
+      return reply.status(400).send({ error: `保存失败: ${err.message}` });
     }
   });
 }

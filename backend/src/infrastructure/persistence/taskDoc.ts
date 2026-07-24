@@ -37,7 +37,9 @@ export function buildTaskMarkdown(task: Task): string {
 
   if (task.steps.length > 0) {
     lines.push('## 任务步骤', '');
-    lines.push(stepsToMarkdown(task.steps), '');
+    // 存档 md 也供 AI/人读,标题恒带 ☑/☐(与 get_task / 前端预览统一)。注:此处为任务
+    // 保存时的快照,用户事后在看板勾选若未触发重新保存,标记可能滞后于看板实时状态。
+    lines.push(stepsToMarkdown(task.steps, 3), '');
   }
 
   if (task.relatedFiles.length > 0) {

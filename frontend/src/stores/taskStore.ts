@@ -12,8 +12,6 @@ interface TaskState {
   create: (data: CreateTaskRequest) => Promise<TaskDTO>;
   update: (id: string, data: UpdateTaskRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  /** 派发任务（创建 worktree），返回 Claude 指令 */
-  dispatch: (id: string) => Promise<string>;
   /** 拖拽乐观更新:先改本地,失败回滚 */
   optimisticMove: (id: string, status: TaskStatus) => Promise<void>;
   /** 收到 SSE 事件后,重新拉取该任务最新态合并进列表 */
@@ -51,21 +49,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
   },
 
-  dispatch: async (id) => {
-    const response = await taskApi.dispatch(id);
-    // 复制 Claude 指令到剪贴板（失败不阻断）
-    try {
-      await navigator.clipboard.writeText(response.claudeCommand);
-    } catch (error) {
-      console.warn('Failed to copy Claude command to clipboard:', error);
-    }
-    // 更新任务列表（去掉 claudeCommand 字段，只保留任务数据）
-    const { claudeCommand, ...task } = response;
-    get().upsert(task);
-    // 返回 claudeCommand 给调用方（用于显示成功提示）
-    return response.claudeCommand;
-  },
-
   optimisticMove: async (id, status) => {
     const prev = get().tasks;
     const target = prev.find((t) => t.id === id);
@@ -84,6 +67,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   applySSEEvent: (event) => {
+    // 外部进程(MCP stdio)直接改了 tasks.json:磁盘与本进程不同步,单事件无法定位变更范围,全量重拉最稳妥
+    if (event.type === 'TasksExternallyChanged') {
+      void get().fetchAll();
+      return;
+    }
     if (!event.aggregateId) return;
     // 事件只带状态变化,重新拉取该任务的完整最新态
     taskApi

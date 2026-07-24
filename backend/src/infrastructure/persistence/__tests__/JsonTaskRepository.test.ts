@@ -146,5 +146,23 @@ describe('JsonTaskRepository', () => {
     expect(found?.source).toBe('web');
     expect(found?.sourceUrl).toBe('https://example.com/page');
   });
+
+  it('应将旧数据 dispatched/review 状态迁移为 todo (幂等, done 不动)', async () => {
+    // 手写会话化改造前的旧格式 tasks.json: 含 dispatched 与 review 两态
+    const now = new Date().toISOString();
+    const legacy = [
+      { id: 'TEST-1', title: 't1', description: 'd', status: 'dispatched', priority: 'P1', source: 'manual', relatedFiles: [], steps: [], createdAt: now, updatedAt: now },
+      { id: 'TEST-2', title: 't2', description: 'd', status: 'review', priority: 'P1', source: 'manual', relatedFiles: [], steps: [], createdAt: now, updatedAt: now },
+      { id: 'TEST-3', title: 't3', description: 'd', status: 'done', priority: 'P1', source: 'manual', relatedFiles: [], steps: [], createdAt: now, updatedAt: now },
+    ];
+    await fs.writeFile(testFilePath, JSON.stringify(legacy, null, 2));
+
+    const tasks = await repository.findAll();
+    expect(tasks).toHaveLength(3);
+    // dispatched/review 归一为 todo;done 保持不变
+    expect(tasks.find(t => t.id.value === 'TEST-1')?.status).toBe(TaskStatus.TODO);
+    expect(tasks.find(t => t.id.value === 'TEST-2')?.status).toBe(TaskStatus.TODO);
+    expect(tasks.find(t => t.id.value === 'TEST-3')?.status).toBe(TaskStatus.DONE);
+  });
 });
 

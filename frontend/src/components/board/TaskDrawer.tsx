@@ -5,23 +5,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Loader2,
-  FolderOpen,
-  Rocket,
-  Check,
-  X,
+  Terminal,
   Trash2,
-  FileDiff,
   Copy,
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
 import {
   Priority,
-  TaskStatus,
   stepsToMarkdown,
-  buildClaudeCodePrompt,
+  buildTaskPrompt,
   type TaskDTO,
   type TaskStep,
+  type TaskEnv,
 } from '@ai-task-flow/shared';
 import {
   Sheet,
@@ -41,22 +37,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { usePreviewStore } from '@/stores/previewStore';
-import { taskApi, systemApi } from '@/api/task';
 import { StepEditor } from './StepEditor';
+import { RepoPathPicker } from './RepoPathPicker';
+import { OpenClaudeDialog } from './OpenClaudeDialog';
 import { STATUS_LABELS } from '@/lib/taskMeta';
+import {
+  loadShortcuts,
+  eventToCombo,
+  isSingleKey,
+  isTypingTarget,
+  isCapturing,
+  formatCombo,
+  type ShortcutMap,
+} from '@/lib/shortcuts';
 
 interface Draft {
   prefix: string;
@@ -65,6 +64,7 @@ interface Draft {
   priority: Priority;
   repoPath: string;
   projectName: string;
+  env: TaskEnv;
   relatedFilesText: string;
   steps: TaskStep[];
 }
@@ -76,6 +76,7 @@ const EMPTY_DRAFT: Draft = {
   priority: Priority.P2,
   repoPath: '',
   projectName: '',
+  env: 'pwsh',
   relatedFilesText: '',
   steps: [],
 };
@@ -88,6 +89,7 @@ function taskToDraft(task: TaskDTO): Draft {
     priority: task.priority,
     repoPath: task.repoPath ?? '',
     projectName: task.projectName ?? '',
+    env: task.env ?? 'pwsh',
     relatedFilesText: task.relatedFiles.join('\n'),
     steps: task.steps,
   };
@@ -112,7 +114,6 @@ export function TaskDrawer() {
   const createTask = useTaskStore((s) => s.create);
   const updateTask = useTaskStore((s) => s.update);
   const removeTask = useTaskStore((s) => s.remove);
-  const dispatchTask = useTaskStore((s) => s.dispatch);
 
   const task = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined;
   const isCreate = creatingTask || !task;
@@ -122,14 +123,26 @@ export function TaskDrawer() {
 
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
-  const [diffOpen, setDiffOpen] = useState(false);
-  const [diffText, setDiffText] = useState('');
   const [showPreview, setShowPreview] = useState(true);
+  const [openClaude, setOpenClaude] = useState(false);
+  // 标题输入 ref:新建模式打开抽屉后自动聚焦,点「新建任务」即可直接输入
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // 快捷键配置(设置面板改动后重载)
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
+  useEffect(() => {
+    const reload = () => setShortcuts(loadShortcuts());
+    window.addEventListener('shortcuts-changed', reload);
+    return () => window.removeEventListener('shortcuts-changed', reload);
+  }, []);
 
   // 打开/切换选中时同步草稿;不依赖 task 本身,避免 SSE 更新打断编辑。
   useEffect(() => {
     if (creatingTask) {
       setDraft(EMPTY_DRAFT);
+      // 抽屉动画(~80ms)结束后聚焦标题,让新建「一步到位」可直接录入
+      const timer = setTimeout(() => titleRef.current?.focus(), 80);
+      return () => clearTimeout(timer);
     } else if (selectedTaskId) {
       const current = tasks.find((t) => t.id === selectedTaskId);
       if (current) setDraft(taskToDraft(current));
@@ -165,20 +178,6 @@ export function TaskDrawer() {
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const onPickDir = async () => {
-    try {
-      const { path } = await systemApi.selectDirectory();
-      if (path) {
-        patch({
-          repoPath: path,
-          projectName: draft.projectName || path.split(/[\\/]/).pop() || '',
-        });
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '选择目录失败');
-    }
-  };
-
   const parseRelatedFiles = () =>
     draft.relatedFilesText
       .split('\n')
@@ -194,7 +193,7 @@ export function TaskDrawer() {
     const relatedFiles = parseRelatedFiles();
     try {
       if (isCreate) {
-        await createTask({
+        const created = await createTask({
           prefix: draft.prefix.trim(),
           title: draft.title.trim(),
           description: draft.description,
@@ -204,9 +203,12 @@ export function TaskDrawer() {
           source: 'manual',
           relatedFiles,
           steps: draft.steps,
+          env: draft.env,
         });
-        toast.success('任务已创建');
-        close();
+        toast.success('任务已创建,可继续编辑');
+        // 不关闭抽屉:切换到新任务的编辑态,所有编辑态按钮立即可用,无需重开
+        setCreatingTask(false);
+        setSelectedTask(created.id);
       } else if (task) {
         await updateTask(task.id, {
           title: draft.title.trim(),
@@ -216,6 +218,7 @@ export function TaskDrawer() {
           projectName: draft.projectName || undefined,
           relatedFiles,
           steps: draft.steps,
+          env: draft.env,
         });
         toast.success('已保存');
       }
@@ -229,41 +232,53 @@ export function TaskDrawer() {
   // saveRef/savingRef:keydown 监听器用,始终指向最新值,避免监听器只绑一次时闭包捕获旧 draft
   const saveRef = useRef(save);
   const savingRef = useRef(saving);
+  const openClaudeRef = useRef<() => void>(() => {});
   saveRef.current = save;
   savingRef.current = saving;
 
-  // Ctrl/Cmd+S 保存(仅抽屉打开时);preventDefault 拦截浏览器默认保存,savingRef 防重复提交
+  // 抽屉内快捷键(配置可改):saveTask=保存,openTerminal=打开终端;仅抽屉打开时生效
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if (isCapturing()) return;
+      const combo = eventToCombo(e);
+      if (!combo) return;
+      // 保存(默认 Ctrl+S,带修饰在输入框中也触发)
+      if (combo === shortcuts.saveTask) {
         e.preventDefault();
         if (!savingRef.current) void saveRef.current();
+        return;
+      }
+      // 打开终端:单键在输入框中跳过
+      if (combo === shortcuts.openTerminal) {
+        if (isSingleKey(combo) && isTypingTarget(e.target as HTMLElement)) return;
+        e.preventDefault();
+        openClaudeRef.current();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open]);
+  }, [open, shortcuts]);
 
-  const onDispatch = async () => {
-    if (!task) return;
-    try {
-      await dispatchTask(task.id);
-      toast.success('已派发,Claude 指令已复制到剪贴板');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '派发失败');
+  const { confirm } = useConfirm();
+
+  // 打开"打开终端"弹窗(新建 / 恢复 Claude 会话);基于 draft.repoPath,未保存任务也可用
+  const onOpenClaude = () => {
+    if (!draft.repoPath.trim()) {
+      toast.error('请先填写仓库路径');
+      return;
     }
+    setOpenClaude(true);
   };
+  openClaudeRef.current = onOpenClaude;
 
-  const { confirm, prompt: promptInput } = useConfirm();
-
-  // 复制派发指令(任务 markdown 的 Claude Code 拉取指令),不触发状态变更
+  // 复制执行指令(D4 统一入口 buildTaskPrompt),不触发状态变更,便于手动粘贴
   const onCopyPrompt = async () => {
     if (!task) return;
     try {
-      const prompt = buildClaudeCodePrompt(task);
+      const prompt = buildTaskPrompt(task);
       await navigator.clipboard.writeText(prompt);
-      toast.success('派发指令已复制到剪贴板');
+      toast.success('执行指令已复制到剪贴板');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '复制失败');
     }
@@ -289,51 +304,6 @@ export function TaskDrawer() {
     }
   };
 
-  const onShowDiff = async () => {
-    if (!task) return;
-    try {
-      const res = await taskApi.getDiff(task.id);
-      setDiffText(res.diff || '(无改动)');
-      setDiffOpen(true);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '获取 diff 失败');
-    }
-  };
-
-  const onApprove = async () => {
-    if (!task) return;
-    try {
-      await taskApi.approve(task.id);
-      toast.success('已通过,分支已合并');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '通过失败');
-    }
-  };
-
-  const onReject = async () => {
-    if (!task) return;
-    const reason = await promptInput({
-      title: '驳回任务',
-      description: '请输入驳回原因',
-      placeholder: '驳回原因…',
-    });
-    if (reason === null) return;
-    if (!reason.trim()) {
-      toast.error('驳回必须填写原因');
-      return;
-    }
-    try {
-      await taskApi.reject(task.id, { reason: reason.trim() });
-      toast.success('已驳回');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '驳回失败');
-    }
-  };
-
-  // 只有 TODO 态可派发(PLANNING 是从未使用的死状态,已从枚举删除)
-  const canDispatch = !isCreate && task?.status === TaskStatus.TODO;
-  const canReview = !isCreate && task?.status === TaskStatus.REVIEW;
-
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && close()}>
       <SheetContent
@@ -352,9 +322,9 @@ export function TaskDrawer() {
       >
         {/* 顶部:标题/状态(跨三栏) */}
         <SheetHeader className="shrink-0 border-b px-4 py-3">
-          <SheetTitle>{isCreate ? '新建任务' : (task?.title ?? '任务详情')}</SheetTitle>
+          <SheetTitle>{isCreate ? (draft.title.trim() || '新任务') : (task?.title ?? '任务详情')}</SheetTitle>
           <SheetDescription>
-            {isCreate ? '仅标题必填,其余可留空' : task ? STATUS_LABELS[task.status] : ''}
+            {isCreate ? '新任务 · 填写后保存即创建' : task ? STATUS_LABELS[task.status] : ''}
           </SheetDescription>
         </SheetHeader>
 
@@ -364,6 +334,7 @@ export function TaskDrawer() {
           <div className="bg-muted/20 flex w-[240px] shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-3">
             <Field label="标题 *">
               <Input
+                ref={titleRef}
                 value={draft.title}
                 onChange={(e) => patch({ title: e.target.value })}
                 placeholder="任务标题(必填)"
@@ -374,7 +345,8 @@ export function TaskDrawer() {
                 value={draft.description}
                 onChange={(e) => patch({ description: e.target.value })}
                 placeholder="任务的详细描述"
-                className="min-h-16"
+                disableAutoGrow
+                className="min-h-16 max-h-40 overflow-y-auto"
               />
             </Field>
             <Field label="优先级">
@@ -393,16 +365,16 @@ export function TaskDrawer() {
               </Select>
             </Field>
             <Field label="仓库路径">
-              <div className="flex gap-2">
-                <Input
-                  value={draft.repoPath}
-                  onChange={(e) => patch({ repoPath: e.target.value })}
-                  placeholder="/path/to/repo"
-                />
-                <Button variant="outline" size="icon" onClick={onPickDir} aria-label="选择目录">
-                  <FolderOpen className="size-4" />
-                </Button>
-              </div>
+              <RepoPathPicker
+                value={draft.repoPath}
+                onChange={(p) => patch({ repoPath: p })}
+                onPicked={(path) =>
+                  patch({
+                    repoPath: path,
+                    projectName: draft.projectName || path.split(/[\\/]/).pop() || '',
+                  })
+                }
+              />
             </Field>
             <Field label="项目名">
               <Input
@@ -410,6 +382,21 @@ export function TaskDrawer() {
                 onChange={(e) => patch({ projectName: e.target.value })}
                 placeholder="留空则从仓库路径提取"
               />
+            </Field>
+            <Field label="执行环境">
+              <Select
+                value={draft.env}
+                onValueChange={(value) => patch({ env: value as TaskEnv })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pwsh">pwsh (PowerShell 7)</SelectItem>
+                  <SelectItem value="wsl">wsl (Ubuntu)</SelectItem>
+                  <SelectItem value="cmd">cmd (Windows)</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
             <Field label="关联文件">
               <Textarea
@@ -473,62 +460,52 @@ export function TaskDrawer() {
           )}
         </div>
 
-        {/* 底部:操作按钮(跨三栏) */}
+        {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
+            打开终端基于 draft.repoPath 可用,复制指令/删除依赖已保存任务,未保存时禁用 */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
-          {canReview && (
-            <>
-              <Button variant="outline" size="sm" onClick={onShowDiff}>
-                <FileDiff className="size-4" />
-                Diff
-              </Button>
-              <Button size="sm" onClick={onApprove}>
-                <Check className="size-4" />
-                通过
-              </Button>
-              <Button variant="destructive" size="sm" onClick={onReject}>
-                <X className="size-4" />
-                驳回
-              </Button>
-            </>
-          )}
-          {canDispatch && (
-            <Button size="sm" onClick={onDispatch}>
-              <Rocket className="size-4" />
-              派发
-            </Button>
-          )}
-          {!isCreate && task && (
-            <Button variant="outline" size="sm" onClick={onCopyPrompt}>
-              <Copy className="size-4" />
-              复制派发指令
-            </Button>
-          )}
+          <Button
+            size="sm"
+            onClick={onOpenClaude}
+            title={`打开终端 (${formatCombo(shortcuts.openTerminal)})`}
+          >
+            <Terminal className="size-4" />
+            打开终端
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCopyPrompt}
+            disabled={!task}
+            title={!task ? '保存后可复制执行指令' : '复制执行指令'}
+          >
+            <Copy className="size-4" />
+            复制执行指令
+          </Button>
           <Button size="sm" onClick={save} disabled={saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}
-            {isCreate ? '创建' : '保存'}
+            保存
           </Button>
-          {!isCreate && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive ml-auto"
-              onClick={onDelete}
-            >
-              <Trash2 className="size-4" />
-              删除
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive ml-auto"
+            onClick={onDelete}
+            disabled={!task}
+            title={!task ? '保存后可删除' : '删除任务'}
+          >
+            <Trash2 className="size-4" />
+            删除
+          </Button>
         </div>
       </SheetContent>
 
-      <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>代码变更 (diff)</DialogTitle>
-          </DialogHeader>
-          <DiffViewer text={diffText} className="max-h-[60vh]" />
-        </DialogContent>
-      </Dialog>
+      {/* 打开终端:新建 / 恢复 Claude 会话(基于 draft.repoPath;新建态也可用) */}
+      <OpenClaudeDialog
+        open={openClaude}
+        onOpenChange={setOpenClaude}
+        repoPath={draft.repoPath}
+        env={draft.env}
+      />
     </Sheet>
   );
 }

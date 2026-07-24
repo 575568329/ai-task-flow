@@ -1,11 +1,17 @@
-import { FastifyPluginAsync } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import path from 'node:path';
 import os from 'node:os';
 // @ts-ignore - node-file-dialog 没有类型定义(仅非 Windows 平台回退使用)
 import askdialog from 'node-file-dialog';
 import { StorageService } from '../../../application/system/StorageService.js';
-import type { StorageClearRequest } from '@ai-task-flow/shared';
+import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
+import { TerminalLauncher } from '../../../infrastructure/system/TerminalLauncher.js';
+import type {
+  StorageClearRequest,
+  OpenClaudeRequest,
+} from '@ai-task-flow/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -57,7 +63,9 @@ async function selectDirectoryFallback(): Promise<string | null> {
   return dir || null;
 }
 
-const systemRoutes: FastifyPluginAsync = async (fastify) => {
+export async function registerSystemRoutes(
+  fastify: FastifyInstance,
+) {
   // 选择文件夹
   fastify.post('/api/system/select-directory', async (req, reply) => {
     try {
@@ -93,6 +101,67 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       return { results, storage };
     },
   );
-};
 
-export default systemRoutes;
+  // ===== Claude Code 历史会话(打开对话 / 恢复历史会话) =====
+  // 注:http 入口不走 DI container(那是 MCP 进程专用), 故此处不能用 container.resolve
+
+  // GET /api/system/claude-sessions?repoPath=... — 扫描该项目的 Claude 历史会话列表
+  fastify.get<{ Querystring: { repoPath?: string } }>(
+    '/api/system/claude-sessions',
+    async (request, reply) => {
+      const { repoPath } = request.query;
+      if (!repoPath) {
+        return reply.status(400).send({ error: 'repoPath 必填' });
+      }
+      try {
+        const sessions = await ClaudeSessionScanner.scan(repoPath);
+        return { sessions };
+      } catch (error) {
+        fastify.log.error(error, 'Failed to scan claude sessions');
+        return reply.status(500).send({ error: '扫描历史会话失败' });
+      }
+    },
+  );
+
+  // POST /api/system/claude-sessions/open — 打开新终端启动 claude(可选 resume)
+  fastify.post<{ Body: OpenClaudeRequest }>(
+    '/api/system/claude-sessions/open',
+    async (request, reply) => {
+      const { repoPath, env, sessionId } = request.body ?? {};
+      if (!repoPath || !env) {
+        return reply.status(400).send({ error: 'repoPath 与 env 必填' });
+      }
+      try {
+        const { claudeCommand } = await TerminalLauncher.openClaude({ repoPath, env, sessionId });
+        return { ok: true, claudeCommand };
+      } catch (error) {
+        fastify.log.error(error, 'Failed to open claude terminal');
+        return reply.status(500).send({ error: '打开终端失败' });
+      }
+    },
+  );
+
+  // POST /api/system/mcp/setup — 一键把 MCP 挂载到 Claude Code(执行 scripts/setup-mcp.mjs)
+  // 浏览器无法直接跑本地命令,故由 backend spawn。脚本内部用 __dirname 自定位项目根,
+  // 这里只需给个合理的 cwd(本地开发时 backend 的 cwd 是 backend/,项目根是其上一级)。
+  fastify.post('/api/system/mcp/setup', async () => {
+    const projectRoot = path.resolve(process.cwd(), '..');
+    const script = path.join(projectRoot, 'scripts/setup-mcp.mjs');
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        process.execPath,
+        [script],
+        { cwd: projectRoot, maxBuffer: 2 * 1024 * 1024 },
+      );
+      return { ok: true, code: 0, output: stdout + stderr };
+    } catch (err) {
+      // 非零退出 execFile 会 reject,err 上带 stdout/stderr/code
+      const e = err as { code?: number; stdout?: string; stderr?: string; message?: string };
+      return {
+        ok: false,
+        code: e.code ?? -1,
+        output: `${e.stdout || ''}${e.stderr || ''}${e.message || ''}`,
+      };
+    }
+  });
+}

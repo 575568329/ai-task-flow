@@ -2,6 +2,7 @@
 // 资料调研主视图:会话列表 + 消息流 + 输入区 + 流式驱动(streamChat → chatStore)。
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Plus, Send, Trash2, Settings2, Loader2, Globe, Pencil } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ResizableHandle as PanelResizeHandle,
   ResizablePanel as Panel,
@@ -357,14 +358,22 @@ export function ChatView() {
               输入问题开始调研…
             </div>
           )}
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              role={message.role}
-              content={message.content}
-              sources={message.sources}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <MessageBubble
+                  role={message.role}
+                  content={message.content}
+                  sources={message.sources}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
           {isStreaming && (
             <MessageBubble
               role="assistant"

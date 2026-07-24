@@ -2,11 +2,11 @@
 import 'reflect-metadata';
 import { startHttpServer } from './interfaces/http/server.js';
 import { JsonTaskRepository } from './infrastructure/persistence/JsonTaskRepository.js';
+import { TaskFileWatcher } from './infrastructure/persistence/TaskFileWatcher.js';
 import { InMemoryEventBus } from './infrastructure/pubsub/EventBus.js';
 import { JsonEventStore } from './infrastructure/pubsub/EventStore.js';
-import { WorktreeManager } from './infrastructure/git/WorktreeManager.js';
 import { findAvailablePort } from './utils/port-finder.js';
-import { resolveDataDir, taskDocPath } from './config/dataDir.js';
+import { resolveDataDir, taskDocPath, tasksFilePath } from './config/dataDir.js';
 import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -64,8 +64,12 @@ export async function startApp(options: StartAppOptions = {}) {
 
   const eventBus = new InMemoryEventBus();
   const eventStore = new JsonEventStore();
-  const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore);
-  const worktreeManager = new WorktreeManager();
+  // 文件监听器:轮询 tasks.json,感知外部进程(MCP stdio)写入 → 发事件 → SSE 推前端。
+  // 与 repository 共用 filePath;repository 写后 markSelfWrite 自标,避免重复推送。
+  const tasksFile = options.dataFile ?? tasksFilePath();
+  const taskFileWatcher = new TaskFileWatcher(tasksFile, eventBus);
+  const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore, taskFileWatcher);
+  void taskFileWatcher.start();
 
   // 调研聊天 Agent 初始化
   const chatRepository = new JsonChatRepository();
@@ -118,7 +122,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,

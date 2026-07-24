@@ -19,27 +19,13 @@ describe('list_pending_tasks MCP tool', () => {
 
   it('should list TODO tasks by default', async () => {
     const task1 = new Task(
-      TaskId.create('WS', 1),
-      'Fix bug',
-      'Description',
-      TaskStatus.TODO,
-      Priority.P0,
-      undefined,
-      undefined,
-      [],
-      []
+      TaskId.create('WS', 1), 'Fix bug', 'Description',
+      TaskStatus.TODO, Priority.P0, undefined, undefined, [], [],
     );
 
     const task2 = new Task(
-      TaskId.create('WS', 2),
-      'Add feature',
-      'Description',
-      TaskStatus.DONE,
-      Priority.P1,
-      undefined,
-      undefined,
-      [],
-      []
+      TaskId.create('WS', 2), 'Add feature', 'Description',
+      TaskStatus.DONE, Priority.P1, undefined, undefined, [], [],
     );
 
     await repository.save(task1);
@@ -50,23 +36,20 @@ describe('list_pending_tasks MCP tool', () => {
     expect(todoTasks[0].title).toBe('Fix bug');
   });
 
-  it('should list DISPATCHED tasks when specified', async () => {
-    const task = new Task(
-      TaskId.create('WS', 3),
-      'Dispatched task',
-      'Desc',
-      TaskStatus.DISPATCHED,
-      Priority.P1,
-      undefined,
-      undefined,
-      [],
-      []
+  it('should list all tasks via findAll (含已完成/已阻塞)', async () => {
+    const todo = new Task(
+      TaskId.create('WS', 3), 't1', 'd',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [], [],
+    );
+    const done = new Task(
+      TaskId.create('WS', 4), 't2', 'd',
+      TaskStatus.DONE, Priority.P1, undefined, undefined, [], [],
     );
 
-    await repository.save(task);
+    await repository.save(todo);
+    await repository.save(done);
 
-    const dispatchedTasks = await repository.findByStatus(TaskStatus.DISPATCHED);
-    expect(dispatchedTasks).toHaveLength(1);
+    const all = await repository.findAll();
+    expect(all).toHaveLength(2);
   });
 });
-

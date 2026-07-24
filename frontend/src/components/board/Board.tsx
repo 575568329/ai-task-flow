@@ -1,21 +1,25 @@
 // frontend/src/components/board/Board.tsx
-// 看板主体:DndContext + 5 列,拖拽跨列 = optimisticMove 改 status。
+// 看板主体:DndContext + 3 列,拖拽跨列 = optimisticMove 改 status。
 // 应用 BoardToolbar 的筛选(project/source/search)。
-import { useMemo } from 'react';
+// 列内卡片由 KanbanColumn 按 projectName 二次分组(可折叠),缓解单列纵向过长。
+import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   closestCorners,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import { TaskStatus } from '@ai-task-flow/shared';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/components/ui/toaster';
 import { KanbanColumn } from './KanbanColumn';
-import { KANBAN_COLUMNS } from './meta';
+import { TaskCardBody } from './TaskCard';
+import { KANBAN_COLUMNS, UNGROUPED_KEY } from './meta';
 
 export function Board() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -23,10 +27,17 @@ export function Board() {
   const projectFilter = useUIStore((s) => s.projectFilter);
   const sourceFilter = useUIStore((s) => s.sourceFilter);
   const searchQuery = useUIStore((s) => s.searchQuery);
+  const initGroups = useUIStore((s) => s.initGroups);
 
   // distance 8px:小于阈值算点击(打开 Drawer),超过算拖拽
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeTask = useMemo(
+    () => (activeId ? tasks.find((t) => t.id === activeId) ?? null : null),
+    [tasks, activeId],
   );
 
   const filtered = useMemo(() => {
@@ -42,10 +53,35 @@ export function Board() {
     });
   }, [tasks, projectFilter, sourceFilter, searchQuery]);
 
+  // 首次加载(无折叠记忆):默认只展开「卡片最多的项目」,其余收起,避免列内杂乱。
+  // initGroups 内部幂等——有 localStorage 记忆即跳过,故 filtered 变化重复调用安全。
+  useEffect(() => {
+    if (filtered.length === 0) return;
+    const counts = new Map<string, number>();
+    for (const task of filtered) {
+      const key = task.projectName?.trim() ? task.projectName : UNGROUPED_KEY;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    let topKey = UNGROUPED_KEY;
+    let topCount = -1;
+    for (const [key, count] of counts) {
+      if (count > topCount) {
+        topCount = count;
+        topKey = key;
+      }
+    }
+    initGroups(Array.from(counts.keys()), topKey);
+  }, [filtered, initGroups]);
+
   const tasksOfStatus = (status: TaskStatus) =>
     filtered.filter((task) => task.status === status);
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over) return;
     const taskId = String(active.id);
@@ -67,6 +103,7 @@ export function Board() {
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <div className="flex h-full gap-3 overflow-x-auto p-3">
@@ -78,6 +115,18 @@ export function Board() {
           />
         ))}
       </div>
+      {/*
+        DragOverlay 把拖拽预览 portal 到 body,脱离看板的 overflow-x-auto 容器与各列的
+        overflow-y-auto / 列头,始终处于最高层级——根治「拖到列头上方时卡片被列头遮住」。
+        原卡片在 TaskCard 的 isDragging 下保持 opacity-40 作占位。
+      */}
+      <DragOverlay>
+        {activeTask && (
+          <div className="bg-card flex w-full cursor-grabbing flex-col gap-1.5 rounded-md border p-2.5 shadow-lg">
+            <TaskCardBody task={activeTask} />
+          </div>
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }

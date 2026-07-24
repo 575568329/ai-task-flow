@@ -31,3 +31,15 @@ export function buildClaudeCodePrompt(task: TaskDTO): string {
 
 任务: [${id}] ${title}`;
 }
+
+/**
+ * 统一的"执行指令"文本(D4 替代前后端双轨)。
+ *
+ * 前端「复制执行指令」按钮、后端打开对话时的剪贴板兜底, 都走这一个入口,
+ * 消除"后端 claudeCommand vs 前端 buildClaudeCodePrompt"两套并存的不一致。
+ *
+ * Phase 1 委托 buildClaudeCodePrompt(逻辑等价), Phase 2 清理派发时再决定文案合并。
+ */
+export function buildTaskPrompt(task: TaskDTO): string {
+  return buildClaudeCodePrompt(task);
+}

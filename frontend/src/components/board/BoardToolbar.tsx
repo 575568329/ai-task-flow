@@ -1,7 +1,7 @@
 // frontend/src/components/board/BoardToolbar.tsx
-// 看板顶部工具栏:连接状态 / 项目筛选 / 来源筛选 / 搜索 + 新建任务。
+// 看板顶部工具栏:连接状态 / 项目筛选 / 来源筛选 / 搜索 / 分组折叠快捷 + 新建任务。
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, Plus, Search, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,7 +15,17 @@ import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';
 import { cn } from '@/lib/utils';
-import { ALL_OPTION } from './meta';
+import { ALL_OPTION, UNGROUPED_KEY } from './meta';
+import { OpenClaudeDialog } from './OpenClaudeDialog';
+import {
+  loadShortcuts,
+  eventToCombo,
+  isSingleKey,
+  isTypingTarget,
+  isCapturing,
+  formatCombo,
+  type ShortcutMap,
+} from '@/lib/shortcuts';
 
 export function BoardToolbar() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -26,10 +36,42 @@ export function BoardToolbar() {
   const setSourceFilter = useUIStore((s) => s.setSourceFilter);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const setCreatingTask = useUIStore((s) => s.setCreatingTask);
+  const selectedTaskId = useUIStore((s) => s.selectedTaskId);
+  const creatingTask = useUIStore((s) => s.creatingTask);
+
+  // 快捷键配置(设置面板改动后通过 'shortcuts-changed' 事件重载)
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
+  useEffect(() => {
+    const reload = () => setShortcuts(loadShortcuts());
+    window.addEventListener('shortcuts-changed', reload);
+    return () => window.removeEventListener('shortcuts-changed', reload);
+  }, []);
+  const collapseAllGroups = useUIStore((s) => s.collapseAllGroups);
+  const expandAllGroups = useUIStore((s) => s.expandAllGroups);
 
   // SSE 连接状态:绿点=已连接 / 灰点=断开(订阅 sseClient,onopen/onerror 自动更新)
   const [sseConnected, setSseConnected] = useState(false);
   useEffect(() => sseClient.onStatusChange(setSseConnected), []);
+
+  // 全局快捷键(配置可改):newTask=新建,openTerminal=打开终端(抽屉未开时走看板级)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isCapturing()) return; // 设置面板捕获重绑时暂停业务监听
+      const combo = eventToCombo(e);
+      if (!combo) return;
+      // 单键快捷键在输入框中跳过;带修饰(如 Ctrl+S)不跳过
+      if (isSingleKey(combo) && isTypingTarget(e.target as HTMLElement)) return;
+      if (combo === shortcuts.newTask) {
+        e.preventDefault();
+        setCreatingTask(true);
+      } else if (combo === shortcuts.openTerminal && selectedTaskId === null && !creatingTask) {
+        e.preventDefault();
+        setOpenClaude(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcuts, setCreatingTask, selectedTaskId, creatingTask]);
 
   const projects = useMemo(
     () =>
@@ -38,6 +80,17 @@ export function BoardToolbar() {
       ) as string[],
     [tasks]
   );
+
+  // 当前所有项目分组 key(含未分组哨兵),供「全部折叠」一键收起
+  const allGroupKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const t of tasks) {
+      keys.add(t.projectName?.trim() ? t.projectName : UNGROUPED_KEY);
+    }
+    return Array.from(keys);
+  }, [tasks]);
+
+  const [openClaude, setOpenClaude] = useState(false);
 
   return (
     <div className="bg-background/80 flex items-center gap-2 border-b px-3 py-2 backdrop-blur">
@@ -97,10 +150,55 @@ export function BoardToolbar() {
         />
       </div>
 
-      <Button size="sm" className="ml-auto" onClick={() => setCreatingTask(true)}>
-        <Plus className="size-4" />
-        新建任务
+      {/* 分组折叠快捷:展开全部 / 收起全部(列内按项目分组时用)。图标+文字组合,避免单独图标太突兀 */}
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-muted-foreground h-8 gap-1.5 px-2"
+        title="展开全部分组"
+        onClick={() => expandAllGroups()}
+      >
+        <ChevronsUpDown className="size-4" />
+        展开分组
       </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-muted-foreground h-8 gap-1.5 px-2"
+        title="折叠全部分组"
+        onClick={() => collapseAllGroups(allGroupKeys)}
+      >
+        <ChevronsDownUp className="size-4" />
+        收起分组
+      </Button>
+
+      <div className="ml-auto flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setOpenClaude(true)}
+          title={`打开终端 (${formatCombo(shortcuts.openTerminal)})`}
+        >
+          <Terminal className="size-4" />
+          打开终端
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setCreatingTask(true)}
+          title={`新建任务 (${formatCombo(shortcuts.newTask)})`}
+        >
+          <Plus className="size-4" />
+          新建任务
+        </Button>
+      </div>
+
+      {/* 看板级打开终端:选项目路径(已有或自选)→ 新建/恢复 Claude 会话 */}
+      <OpenClaudeDialog
+        open={openClaude}
+        onOpenChange={setOpenClaude}
+        env="pwsh"
+        allowPickRepo
+      />
     </div>
   );
 }

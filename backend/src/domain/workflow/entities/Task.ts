@@ -1,14 +1,10 @@
 // backend/src/domain/workflow/entities/Task.ts
 import { TaskId } from '../value-objects/TaskId.js';
-import { TaskStatus } from '../value-objects/TaskStatus.js';
+import { TaskStatus, isValidTransition } from '../value-objects/TaskStatus.js';
 import { Priority } from '../value-objects/Priority.js';
 import { WorktreeRef } from '../value-objects/WorktreeRef.js';
 import { ExecutionResult } from '../value-objects/ExecutionResult.js';
-import { TaskDispatched } from '../events/TaskDispatched.js';
-import { TaskResultRecorded } from '../events/TaskResultRecorded.js';
 import { TaskUpdated } from '../events/TaskUpdated.js';
-import { TaskApproved } from '../events/TaskApproved.js';
-import { TaskRejected } from '../events/TaskRejected.js';
 import { DomainEvent } from '../../_shared/DomainEvent.js';
 import type { TaskStep, TaskSource } from '@ai-task-flow/shared';
 
@@ -31,6 +27,7 @@ export class Task {
     public updatedAt: Date = new Date(),
     public source: TaskSource = 'manual',
     public sourceUrl?: string,
+    public env?: 'cmd' | 'wsl' | 'pwsh',
   ) {}
 
   get domainEvents(): DomainEvent[] {
@@ -41,51 +38,86 @@ export class Task {
     this._domainEvents = [];
   }
 
-  dispatch(worktree: WorktreeRef): void {
-    if (this.status !== TaskStatus.TODO) {
-      throw new Error('Only TODO tasks can be dispatched');
-    }
-    this.worktree = worktree;
-    this.status = TaskStatus.DISPATCHED;
-    this.updatedAt = new Date();
-    this._domainEvents.push(new TaskDispatched(this.id.value, worktree));
-  }
-
+  /**
+   * 记录执行结果并推进状态(由 Claude Code 通过 MCP record_result 调用)。
+   *
+   * 会话化改造后:打开终端不再改状态(任务停在 TODO),也不再走派发→审核两段式,
+   * 故去掉「必须 DISPATCHED」校验,TODO 也能直接回写结果。
+   * - status==='blocked' → BLOCKED;否则(done/partial) → DONE。
+   * - 复用 TaskUpdated 事件驱动前端 SSE 刷新(不再有 TaskResultRecorded 专用事件)。
+   * - worktree 字段(若存在)保留不动:它已降为可选关联,结果回写不清理它。
+   */
   recordResult(result: ExecutionResult): void {
-    if (this.status !== TaskStatus.DISPATCHED) {
-      throw new Error('Only dispatched tasks can record result');
-    }
+    const previousStatus = this.status;
     this.executionResult = result;
-    this.status = result.status === 'blocked' ? TaskStatus.BLOCKED : TaskStatus.REVIEW;
+    this.status = result.status === 'blocked' ? TaskStatus.BLOCKED : TaskStatus.DONE;
+    // done/partial → 兜底全勾步骤:任务整体完成,步骤自然全完成,避免卡片进度停在 0/N
+    if (this.status === TaskStatus.DONE) {
+      this.markAllStepsCompleted();
+    }
     this.updatedAt = new Date();
-    this._domainEvents.push(new TaskResultRecorded(this.id.value, result));
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
   }
 
-  approve(mergeStrategy: 'merge' | 'keep_branch'): void {
-    if (this.status !== TaskStatus.REVIEW) {
-      throw new Error('Only review tasks can be approved');
-    }
-    this.status = TaskStatus.DONE;
-    this.updatedAt = new Date();
-    this._domainEvents.push(new TaskApproved(this.id.value, mergeStrategy));
+  /** 把所有步骤标记完成(任务进入完成态时兜底调用,空步骤无操作) */
+  private markAllStepsCompleted(): void {
+    if (this.steps.length === 0) return;
+    this.steps = this.steps.map((s) => ({ ...s, completed: true }));
   }
 
-  reject(reason: string): void {
-    if (this.status !== TaskStatus.REVIEW) {
-      throw new Error('Only review tasks can be rejected');
+  /**
+   * 状态流转(带状态机校验 + 副作用)。
+   * 供拖拽改状态等场景复用:拖到「已完成」列 → 自动全勾步骤(任务完成则步骤全完成)。
+   * 非法流转抛异常,由调用方(PATCH 路由)转 400。
+   */
+  transitionTo(newStatus: TaskStatus): void {
+    if (newStatus === this.status) return;
+    if (!isValidTransition(this.status, newStatus)) {
+      throw new Error(`非法状态流转: ${this.status} → ${newStatus}`);
     }
-    this.status = TaskStatus.TODO;
-    this.worktree = undefined;
-    this.executionResult = undefined;
+    const previousStatus = this.status;
+    this.status = newStatus;
+    if (newStatus === TaskStatus.DONE) {
+      this.markAllStepsCompleted();
+    }
     this.updatedAt = new Date();
-    this._domainEvents.push(new TaskRejected(this.id.value, reason));
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
+  }
+
+  /**
+   * 标记单步完成状态,并按步骤完成度自动推进任务状态。
+   * 供 MCP complete_step 调用:Claude 每完成一步回写。
+   * - 全部步骤完成 → DONE
+   * - 有完成但未全完成 → IN_PROGRESS(仅当当前为 TODO,避免从 BLOCKED/DONE 误抽出)
+   * - 撤销单步完成不回退状态(避免进度抖动;如需回退用 transitionTo)
+   */
+  setStepCompleted(stepIndex: number, completed: boolean): void {
+    if (stepIndex < 0 || stepIndex >= this.steps.length) {
+      throw new Error(
+        `步骤下标越界: ${stepIndex}(任务 ${this.id.value} 共 ${this.steps.length} 步)`,
+      );
+    }
+    const previousStatus = this.status;
+    this.steps = this.steps.map((s, i) => (i === stepIndex ? { ...s, completed } : s));
+
+    const allDone = this.steps.length > 0 && this.steps.every((s) => s.completed);
+    if (allDone) {
+      this.status = TaskStatus.DONE;
+    } else if (completed && this.status === TaskStatus.TODO) {
+      this.status = TaskStatus.IN_PROGRESS;
+    }
+    if (this.status !== previousStatus) {
+      this.updatedAt = new Date();
+    }
+    // 步骤完成度变了也要通知前端刷新进度,即使任务状态未变
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
   }
 
   /**
    * 通用字段更新（供 HTTP PATCH 等场景使用）
    * 修改基础字段，并在状态变化时发布 TaskUpdated 事件以驱动前端实时刷新。
    * 注意：本方法不强制状态机校验，由调用方保证语义合理；
-   * 严格的状态流转请使用 dispatch / recordResult / approve / reject。
+   * 需要状态流转校验的场景请配合 isValidTransition 使用。
    */
   applyUpdate(updates: {
     title?: string;
@@ -98,6 +130,7 @@ export class Task {
     steps?: TaskStep[];
     source?: TaskSource;
     sourceUrl?: string;
+    env?: 'cmd' | 'wsl' | 'pwsh';
   }): void {
     const previousStatus = this.status;
 
@@ -111,6 +144,7 @@ export class Task {
     if (updates.steps !== undefined) this.steps = updates.steps;
     if (updates.source !== undefined) this.source = updates.source;
     if (updates.sourceUrl !== undefined) this.sourceUrl = updates.sourceUrl;
+    if (updates.env !== undefined) this.env = updates.env;
 
     this.updatedAt = new Date();
     this._domainEvents.push(
@@ -138,6 +172,7 @@ export class Task {
         createdAt: this.worktree.createdAt.toISOString(),
       } : undefined,
       executionResult: this.executionResult,
+      env: this.env,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

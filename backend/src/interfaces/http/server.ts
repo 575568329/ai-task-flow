@@ -9,7 +9,6 @@ import { uploadsDirPath } from '../../config/dataDir.js';
 import { findAvailablePort } from '../../utils/port-finder.js';
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
-import { WorktreeManager } from '../../infrastructure/git/WorktreeManager.js';
 import { registerTaskRoutes } from './routes/taskRoutes.js';
 import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
@@ -17,7 +16,7 @@ import { registerProjectRoutes } from './routes/projectRoutes.js';
 import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
-import systemRoutes from './routes/system.js';
+import { registerSystemRoutes } from './routes/system.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
@@ -27,6 +26,11 @@ import type { VocabService } from '../../application/vocab/VocabService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
+import { registerUsageRoutes } from './routes/usageRoutes.js';
+import { UsageService } from '../../application/usage/UsageService.js';
+
+/** 用量聚合服务(无外部依赖,模块级单例:跨请求保持 L1/L2 扫描缓存) */
+const usageService = new UsageService();
 
 /** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
  *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
@@ -52,7 +56,6 @@ export async function createHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
@@ -144,7 +147,7 @@ export async function createHttpServer(
   });
 
   // 注册业务路由
-  await registerTaskRoutes(fastify, taskRepository, worktreeManager);
+  await registerTaskRoutes(fastify, taskRepository);
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
@@ -154,7 +157,8 @@ export async function createHttpServer(
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
-  await fastify.register(systemRoutes);
+  await registerSystemRoutes(fastify);
+  await registerUsageRoutes(fastify, usageService);
 
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
@@ -215,7 +219,6 @@ export async function startHttpServer(
   config: HttpServerConfig,
   taskRepository: TaskRepository,
   eventBus: EventBus,
-  worktreeManager: WorktreeManager,
   chatRepository: ChatRepository,
   chatService: ChatService,
   llmConfigService: LlmConfigService,
@@ -227,7 +230,7 @@ export async function startHttpServer(
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, worktreeManager, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

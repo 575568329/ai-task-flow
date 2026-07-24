@@ -3,13 +3,12 @@ import type {
   TaskDTO,
   CreateTaskRequest,
   UpdateTaskRequest,
-  ApproveTaskRequest,
-  RejectTaskRequest,
-  TaskDiffResponse,
-  DispatchTaskResponse,
   StorageInfo,
   StorageClearResponse,
   StorageCategoryKey,
+  OpenClaudeRequest,
+  OpenClaudeResponse,
+  ClaudeSessionListResponse,
 } from '@ai-task-flow/shared';
 import { http } from './http';
 
@@ -22,14 +21,6 @@ export const taskApi = {
   /** 静默更新(拖拽乐观更新用,失败由调用方回滚) */
   updateSilent: (id: string, data: UpdateTaskRequest) =>
     http.patch<TaskDTO>(`/tasks/${id}`, data, true),
-  /** 派发任务（创建 worktree，返回任务 + Claude 指令） */
-  dispatch: (id: string) => http.post<DispatchTaskResponse>(`/tasks/${id}/dispatch`, {}),
-  getDiff: (id: string, base?: string) =>
-    http.get<TaskDiffResponse>(`/tasks/${id}/diff${base ? `?base=${base}` : ''}`),
-  approve: (id: string, data: ApproveTaskRequest = {}) =>
-    http.post<TaskDTO>(`/tasks/${id}/approve`, data),
-  reject: (id: string, data: RejectTaskRequest) =>
-    http.post<TaskDTO>(`/tasks/${id}/reject`, data),
   /** 获取任务转换好的 Markdown 文本(后端 buildTaskMarkdown 生成) */
   getMarkdown: (id: string) =>
     http.get<{ markdown: string }>(`/tasks/${id}/markdown`),
@@ -45,6 +36,21 @@ export const systemApi = {
   /** 按类别清理(仅 clearable 项生效),返回每类释放字节 + 清理后最新占用 */
   clearStorage: (categories: StorageCategoryKey[]) =>
     http.post<StorageClearResponse>('/system/storage/clear', { categories }),
+
+  /** 扫描某项目工作目录下的 Claude 历史会话(OpenClaudeDialog 列表用,silent) */
+  listClaudeSessions: (repoPath: string) =>
+    http.get<ClaudeSessionListResponse>(
+      `/system/claude-sessions?repoPath=${encodeURIComponent(repoPath)}`,
+      true,
+    ),
+
+  /** 打开终端启动 claude(可选 resume) */
+  openClaudeSession: (data: OpenClaudeRequest) =>
+    http.post<OpenClaudeResponse>('/system/claude-sessions/open', data),
+
+  /** 一键把本项目 MCP 挂载到 Claude Code(backend spawn setup-mcp.mjs) */
+  mcpSetup: () =>
+    http.post<{ ok: boolean; code: number; output: string }>('/system/mcp/setup', {}),
 };
 
 /**

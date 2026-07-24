@@ -171,7 +171,7 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
           <div
             key={index}
             className={cn(
-              'rounded-md border p-2 transition-colors',
+              'animate-in fade-in slide-in-from-top-2 duration-200 rounded-md border p-2 transition-colors',
               completed && 'bg-muted/40',
             )}
           >

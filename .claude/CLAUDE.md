@@ -10,6 +10,7 @@
 - **性能平衡**：不追求极致优化，但拒绝显而易见的性能陷阱（如循环查库、N+1 查询）。
 - **防御式编程**：优先"卫语句 (Guard Clauses)"尽早返回，拒绝深层嵌套（最多 3 层）。
 - **关注点分离**：每个模块/函数只做一件事，高内聚低耦合。
+- **配置与依赖方向**：能代码运行时自探测的，就别让用户/终端/外部环境去配置。别把「能不能正常工作」寄托在你管不了的外部环境（环境变量注入、终端行为、用户手动配 env）上——外部依赖越多，静默失效的链路越长、越难排查。自探测自洽（self-contained）、零配置、失败可优雅降级。
 
 ### 1.2 通用编码规范
 
@@ -501,7 +502,7 @@ Task 4: WorktreeManager (git worktree 管理)
   ↓
 Task 5: Task 聚合根 (dispatch/recordResult)
   ↓
-Task 6-12: MCP Server + 5 个工具
+Task 6-12: MCP Server + 6 个工具
   ↓
 Task 13-15: EventBus + EventStore
   ↓
@@ -636,3 +637,30 @@ Good luck! 🚀
 
 - **本项目需要发布到 npm**，包名 `@ai-task-flow/cli`，作为全局可安装的 CLI 工具
 - **发布流程与注意事项**详见 [npm-publishing-guide.md](npm-publishing-guide.md)
+
+---
+
+## 十、环境与避坑约定（红线）
+
+> 以下为必须遵守的硬性约定。完整原因 / 排查步骤 / 错误对照表见：
+> - 依赖安装：[docs/20260723130000_依赖安装排坑记录.md](../docs/20260723130000_依赖安装排坑记录.md)
+> - 运行时避坑：[docs/20260723130001_项目避坑与约定.md](../docs/20260723130001_项目避坑与约定.md)
+
+- **统一 npm**，禁用 pnpm / cnpm / yarn（pnpm 不支持 `workspaces`，子包依赖装不上）。
+- **非内网环境装前删 `package-lock.json`**（含科大讯飞内网源，公网 ENOTFOUND，报误导性的 `Exit handler never called!`）。
+- 前端固定 `5678`、backend 默认 `3000`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
+- MCP 的 `TaskRepository` 必须 `useFactory` 注册（否则启动 DI 崩溃）。
+- 任务**四态** `TODO` / `IN_PROGRESS` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
+- Claude 每完成一步调 MCP `complete_step`（`stepNumber` 1-based）回写：全步完成→自动转 `DONE`，否则→`IN_PROGRESS`。
+- `get_task` 返回的截图是本地路径（非 localhost 死链）：同时给 WSL（`/mnt/c/...`）和 Windows（`C:\...`）两种，按运行环境 `Read` 即可。
+- `LlmConfigService` 返回值含密钥，**禁止透传前端 / 日志**，用 `getMaskedConfig()`。
+- MCP 回写 `tasks.json` 后前端靠文件轮询刷新（非实时），等几秒再看板。
+- 运行时产物勿提交（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
+- MV3 扩展访问 localhost：PNA 只拦预检，POST 用 `text/plain` 绕过。
+- 终端 `start` 是 fire-and-forget，无法注入消息；`Failed to fetch` 先查后端日志。
+- **多 workspace 共享依赖（如 `vite`）版本范围须有交集**：否则 npm 装多份 → frontend build 报 `PluginOption` 类型冲突（指向两份 vite）；统一到一份。
+- **WSL ↔ Windows 混合环境**（后端跑 Windows、Claude Code/MCP 跑 WSL）：两边 `os.homedir()` 是不同物理目录，完整方案见 [WSL与Windows环境变量桥接通用方案](../knowledge-base/技术方案/工具流程/20260724095424_WSL与Windows环境变量桥接通用方案.md)：
+  - 不要散用 `os.homedir()` / `~` / `$HOME` 定位数据目录——跨进程两套 home 必对不上（MCP 拉到空任务就是它）。统一走 `resolveDataDir()` 单一入口，优先级 **显式 > env > WSL 自探测 Windows home > 默认 home**。
+  - **别用 WSLENV 桥接数据目录**：Windows Terminal 启动 wsl.exe 时用进程级 WSLENV（传 WT_SESSION 等）**覆盖**注册表 User 级，从 WT 启动的 WSL 永远拿不到桥接变量（`wsl --shutdown` 重启也没用）。**改用代码自探测**（resolveDataDir 内 `cmd.exe /c echo %USERPROFILE%` + `wslpath` 转路径，模块级缓存）。原则：**运行时自探测 > 外部环境注入**——自洽、clone 即用、不被宿主覆盖、失败优雅降级；环境注入依赖一长串外部前提，任一环失效就静默崩。
+  - **`appendWindowsPath=false` 下别裸调 `cmd` / `powershell` / `wsl.exe`**：它们不在 WSL PATH 里，用绝对路径 `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe`。
+  - **WSL 下跑 `vite build` 必失败**（node_modules 在 Windows 装的）：缺 `@rollup/rollup-linux-x64-gnu`。在 node_modules 安装侧（Windows）跑构建；WSL 里只做 `tsc` 类型检查。

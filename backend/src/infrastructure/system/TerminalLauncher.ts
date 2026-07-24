@@ -1,8 +1,38 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import { toWslPath } from './pathCodec.js';
+import type { TaskEnv } from '@ai-task-flow/shared';
 
 const execAsync = promisify(exec);
+
+/**
+ * 三种环境的终端启动命令构造器(策略映射)。
+ * 每个构造器接收 (Windows 路径, WSL 路径, resume 后缀),返回完整 start 命令。
+ *
+ * ⚠️ 切勿用 `mode con: cols=N lines=N` 强设终端尺寸!
+ *   Windows 11 默认终端是 Windows Terminal(非经典 conhost):mode con 改的是
+ *   conhost 兼容层缓冲区,而 WT 的真实可视区由 WT 窗口决定。两者一旦不一致,claude
+ *   (Ink TUI)启动瞬间读到的行列数就与实际窗口不符,按错误尺寸渲染 → 文字垂直重叠 /
+ *   右侧内容截断 / 内容堆在左上角 / 底部大片空白(TASK-005 步骤2「布局错乱」根因)。
+ *   正解:不设尺寸,让 claude 读取终端宿主的真实尺寸渲染。窗口偏小用户自行拖拽即可。
+ */
+const SHELL_LAUNCHERS: Record<
+  TaskEnv,
+  (winPath: string, wslPath: string, resumeArg: string) => string
+> = {
+  // cmd: 新开 cmd 窗口, /k 保持窗口, /d 切到工作目录
+  cmd: (winPath, _wsl, resume) =>
+    `start "Claude" cmd /k "cd /d "${winPath}" && claude${resume}"`,
+  // wsl: 不能直接 `wsl.exe -- claude`——claude 退出(或 interop 启动 claude.exe 失败)时
+  // wsl 进程立即结束、conhost 窗口一闪而过。用 bash -lc 包裹:登录 shell 确保 PATH/环境完整,
+  // 末尾 exec bash 保证 claude 退出后窗口不关(便于看到启动失败的原因,而不是闪退)。
+  wsl: (_win, wslPath, resume) =>
+    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${resume}; exec bash"`,
+  // pwsh: PowerShell 7, -NoExit 保持窗口
+  pwsh: (winPath, _wsl, resume) =>
+    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${resume}"`,
+};
 
 export class TerminalLauncher {
   /**
@@ -32,6 +62,44 @@ export class TerminalLauncher {
     } catch (error) {
       throw new Error(`Failed to launch terminal: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * 打开指定环境(cmd/wsl/pwsh)的新终端窗口并启动 claude,可选 resume 历史会话。
+   * Windows 专用:cmd/pwsh 走原生 start,wsl 走 wsl.exe。
+   *
+   * 注意:start 启动的窗口是 fire-and-forget,Node 无法向其注入消息;
+   * 真正"拉取任务"靠 Claude Code 内部调用 get_task 工具(MCP 拉模型),不走注入。
+   *
+   * @returns claudeCommand 给前端写剪贴板的命令文本(用户在新窗口看到的就是它的展开)
+   */
+  static async openClaude(params: {
+    repoPath: string;
+    env: TaskEnv;
+    sessionId?: string;
+  }): Promise<{ claudeCommand: string }> {
+    const { repoPath, env, sessionId } = params;
+    const resumeArg = sessionId ? ` --resume ${sessionId}` : '';
+    const claudeCommand = `claude${resumeArg}`;
+
+    // 非 Windows 回退到默认终端(仅 cmd 形态),多环境启动是 Windows 专属能力
+    if (os.platform() !== 'win32') {
+      await this.openAndRunClaude(repoPath);
+      return { claudeCommand };
+    }
+
+    const winPath = repoPath.replace(/\//g, '\\');
+    const wslPath = toWslPath(repoPath);
+    const command = SHELL_LAUNCHERS[env](winPath, wslPath, resumeArg);
+
+    try {
+      await execAsync(command);
+    } catch (error) {
+      throw new Error(
+        `Failed to launch ${env} terminal: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    return { claudeCommand };
   }
 }
 

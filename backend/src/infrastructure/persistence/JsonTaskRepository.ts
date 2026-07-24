@@ -12,6 +12,7 @@ import { ExecutionResult } from '../../domain/workflow/value-objects/ExecutionRe
 import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { EventBus } from '../pubsub/EventBus.js';
 import { EventStore } from '../pubsub/EventStore.js';
+import { TaskFileWatcher } from './TaskFileWatcher.js';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { normalizeSteps } from '@ai-task-flow/shared';
 
@@ -26,7 +27,8 @@ export class JsonTaskRepository implements TaskRepository {
   constructor(
     customPath?: string,
     private eventBus?: EventBus,
-    private eventStore?: EventStore
+    private eventStore?: EventStore,
+    private watcher?: TaskFileWatcher,
   ) {
     if (customPath) {
       this.filePath = customPath;
@@ -108,10 +110,20 @@ export class JsonTaskRepository implements TaskRepository {
   private async saveAll(tasks: Task[]): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     const dtos = tasks.map(t => t.toJSON());
-    await fs.writeFile(this.filePath, JSON.stringify(dtos, null, 2));
+    const raw = JSON.stringify(dtos, null, 2);
+    await fs.writeFile(this.filePath, raw);
+    // 通知文件监听器:这是本进程写入,刷新基线,避免随后轮询误判为外部变更而重复推送
+    this.watcher?.markSelfWrite(raw);
   }
 
   private dtoToEntity(dto: TaskDTO): Task {
+    // 数据迁移(幂等):会话化改造前任务可能处于 dispatched/review 两态,
+    // 状态机收敛为三态后统一归一为 TODO。executionResult/worktree 原样保留
+    // (后者降为可选关联,不再随派发强绑)。反复加载只归一一次——已 TODO 的不再动。
+    const rawStatus = dto.status as string;
+    const status: TaskStatus =
+      rawStatus === 'dispatched' || rawStatus === 'review' ? TaskStatus.TODO : dto.status;
+
     let worktree: WorktreeRef | undefined;
     if (dto.worktree) {
       worktree = new WorktreeRef(
@@ -137,7 +149,7 @@ export class JsonTaskRepository implements TaskRepository {
       TaskId.fromString(dto.id),
       dto.title,
       dto.description,
-      dto.status,
+      status,
       dto.priority,
       dto.repoPath,
       dto.projectName,
@@ -150,6 +162,7 @@ export class JsonTaskRepository implements TaskRepository {
       new Date(dto.updatedAt),
       dto.source ?? 'manual',   // 旧数据无 source 字段 → 视为手动
       dto.sourceUrl,
+      dto.env,
     );
   }
 }

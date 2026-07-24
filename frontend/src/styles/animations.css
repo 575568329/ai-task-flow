@@ -150,18 +150,6 @@
   transition: all 150ms ease-out;
 }
 
-.drag-placeholder {
-  border: 2px dashed var(--border-primary);
-  background: var(--surface-2);
-  opacity: 0.5;
-}
-
-.drop-target-highlight {
-  border-color: var(--primary-6);
-  background: var(--primary-1);
-  transition: all 150ms ease-out;
-}
-
 /* 通用过渡 */
 .transition-smooth {
   transition: all 300ms ease-in-out;
