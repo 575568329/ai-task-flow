@@ -7,16 +7,15 @@ import type { TaskEnv } from '@ai-task-flow/shared';
 const execAsync = promisify(exec);
 
 /**
- * 终端窗口目标尺寸:列 × 行。
- * 经典 conhost 默认仅 80×25,打开后偏小;设为 140×40 接近现代终端默认,宽敞可用。
- * cmd/pwsh 用 `mode con` 设置;wsl.exe 无尺寸参数,窗口尺寸随终端宿主(Windows Terminal/控制台)默认。
- */
-const TERM_COLS = 140;
-const TERM_LINES = 40;
-
-/**
  * 三种环境的终端启动命令构造器(策略映射)。
  * 每个构造器接收 (Windows 路径, WSL 路径, resume 后缀),返回完整 start 命令。
+ *
+ * ⚠️ 切勿用 `mode con: cols=N lines=N` 强设终端尺寸!
+ *   Windows 11 默认终端是 Windows Terminal(非经典 conhost):mode con 改的是
+ *   conhost 兼容层缓冲区,而 WT 的真实可视区由 WT 窗口决定。两者一旦不一致,claude
+ *   (Ink TUI)启动瞬间读到的行列数就与实际窗口不符,按错误尺寸渲染 → 文字垂直重叠 /
+ *   右侧内容截断 / 内容堆在左上角 / 底部大片空白(TASK-005 步骤2「布局错乱」根因)。
+ *   正解:不设尺寸,让 claude 读取终端宿主的真实尺寸渲染。窗口偏小用户自行拖拽即可。
  */
 const SHELL_LAUNCHERS: Record<
   TaskEnv,
@@ -24,7 +23,7 @@ const SHELL_LAUNCHERS: Record<
 > = {
   // cmd: 新开 cmd 窗口, /k 保持窗口, /d 切到工作目录
   cmd: (winPath, _wsl, resume) =>
-    `start "Claude" cmd /k "mode con: cols=${TERM_COLS} lines=${TERM_LINES} && cd /d "${winPath}" && claude${resume}"`,
+    `start "Claude" cmd /k "cd /d "${winPath}" && claude${resume}"`,
   // wsl: 不能直接 `wsl.exe -- claude`——claude 退出(或 interop 启动 claude.exe 失败)时
   // wsl 进程立即结束、conhost 窗口一闪而过。用 bash -lc 包裹:登录 shell 确保 PATH/环境完整,
   // 末尾 exec bash 保证 claude 退出后窗口不关(便于看到启动失败的原因,而不是闪退)。
@@ -32,7 +31,7 @@ const SHELL_LAUNCHERS: Record<
     `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${resume}; exec bash"`,
   // pwsh: PowerShell 7, -NoExit 保持窗口
   pwsh: (winPath, _wsl, resume) =>
-    `start pwsh.exe -NoExit -Command "cmd /c mode con: cols=${TERM_COLS} lines=${TERM_LINES} | Out-Null; cd '${winPath}'; claude${resume}"`,
+    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${resume}"`,
 };
 
 export class TerminalLauncher {
