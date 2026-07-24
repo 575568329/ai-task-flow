@@ -12,6 +12,8 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Database,
+  Star,
+  Sparkles,
 } from 'lucide-react';
 import type { KnowledgeNode } from '@ai-task-flow/shared';
 import { Input } from '@/components/ui/input';
@@ -28,7 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
-import { useKnowledgeStore } from '@/stores/knowledgeStore';
+import { useKnowledgeStore, RECENT_MS } from '@/stores/knowledgeStore';
 import { formatRelativeTime } from '@/lib/formatDate';
 import { createDoc, fetchManifest } from '@/api/knowledge';
 import { toast } from '@/components/ui/toaster';
@@ -40,6 +42,9 @@ function collectDirNames(node: KnowledgeNode, acc: Set<string>): void {
     node.children.forEach((c) => collectDirNames(c, acc));
   }
 }
+
+/** 是否「新内容」:mtime 在最近 3 天内 */
+const isNewDoc = (mtime: number): boolean => mtime >= Date.now() - RECENT_MS;
 
 interface KnowledgeTreeProps {
   /** 手动刷新回调(刷新整棵 manifest) */
@@ -59,6 +64,12 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
   const selectedTags = useKnowledgeStore((s) => s.selectedTags);
   const setSelectedTags = useKnowledgeStore((s) => s.setSelectedTags);
   const getFilteredDocs = useKnowledgeStore((s) => s.getFilteredDocs);
+  const favorites = useKnowledgeStore((s) => s.favorites);
+  const toggleFavorite = useKnowledgeStore((s) => s.toggleFavorite);
+  const filterFavorites = useKnowledgeStore((s) => s.filterFavorites);
+  const setFilterFavorites = useKnowledgeStore((s) => s.setFilterFavorites);
+  const filterRecent = useKnowledgeStore((s) => s.filterRecent);
+  const setFilterRecent = useKnowledgeStore((s) => s.setFilterRecent);
 
   // 所有目录 name 集合(manifest 就绪后计算一次)
   const allDirNames = useMemo(() => {
@@ -89,7 +100,11 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
 
   if (!manifest) return null;
 
-  const hasFilter = searchQuery.trim().length > 0 || selectedTags.length > 0;
+  const hasFilter =
+    searchQuery.trim().length > 0 ||
+    selectedTags.length > 0 ||
+    filterFavorites ||
+    filterRecent;
 
   const toggleDir = (key: string) => {
     setCollapsed((prev) => {
@@ -152,12 +167,13 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
       );
     }
     const active = currentPath === node.path;
+    const fav = favorites.includes(node.path);
     return (
       <button
         type="button"
         key={node.path}
         className={cn(
-          'hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+          'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
           active && 'bg-accent'
         )}
         style={{ paddingLeft: depth * 12 + 20 }}
@@ -165,8 +181,30 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
       >
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate">{node.title}</span>
+        {isNewDoc(node.mtime) && (
+          <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
+            新
+          </span>
+        )}
         <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
           {formatRelativeTime(node.mtime)}
+        </span>
+        {/* 收藏星:已收藏常显(实心黄),未收藏 hover 显;点击切换,stopPropagation 避免触发选中文档 */}
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={fav ? '取消收藏' : '收藏'}
+          title={fav ? '取消收藏' : '收藏'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFavorite(node.path);
+          }}
+          className={cn(
+            'shrink-0 cursor-pointer',
+            fav ? 'opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+          )}
+        >
+          <Star className={cn('size-3', fav && 'fill-amber-400 text-amber-400')} />
         </span>
       </button>
     );
@@ -216,6 +254,29 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             placeholder="按标签筛选"
           />
         )}
+        {/* 快捷过滤:仅收藏 / 近 3 天新内容(toggle,激活=primary) */}
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={filterFavorites ? 'default' : 'outline'}
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setFilterFavorites(!filterFavorites)}
+            title="只看收藏的文档"
+          >
+            <Star className={cn('size-3', filterFavorites && 'fill-current')} />
+            仅收藏
+          </Button>
+          <Button
+            size="sm"
+            variant={filterRecent ? 'default' : 'outline'}
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setFilterRecent(!filterRecent)}
+            title="只看最近 3 天新增/更新的文档"
+          >
+            <Sparkles className="size-3" />
+            近 3 天
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
@@ -224,23 +285,47 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             getFilteredDocs().length === 0 ? (
               <div className="text-muted-foreground p-2 text-xs">无匹配文档</div>
             ) : (
-              getFilteredDocs().map((doc) => (
-                <button
-                  type="button"
-                  key={doc.path}
-                  className={cn(
-                    'hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
-                    currentPath === doc.path && 'bg-accent'
-                  )}
-                  onClick={() => setCurrentPath(doc.path)}
-                >
-                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 truncate">{doc.title}</span>
-                  <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
-                    {formatRelativeTime(doc.mtime)}
-                  </span>
-                </button>
-              ))
+              getFilteredDocs().map((doc) => {
+                const fav = favorites.includes(doc.path);
+                return (
+                  <button
+                    type="button"
+                    key={doc.path}
+                    className={cn(
+                      'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+                      currentPath === doc.path && 'bg-accent'
+                    )}
+                    onClick={() => setCurrentPath(doc.path)}
+                  >
+                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 truncate">{doc.title}</span>
+                    {isNewDoc(doc.mtime) && (
+                      <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
+                        新
+                      </span>
+                    )}
+                    <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
+                      {formatRelativeTime(doc.mtime)}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={fav ? '取消收藏' : '收藏'}
+                      title={fav ? '取消收藏' : '收藏'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(doc.path);
+                      }}
+                      className={cn(
+                        'shrink-0 cursor-pointer',
+                        fav ? 'opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+                      )}
+                    >
+                      <Star className={cn('size-3', fav && 'fill-amber-400 text-amber-400')} />
+                    </span>
+                  </button>
+                );
+              })
             )
           ) : (
             <>

@@ -3,6 +3,20 @@
 import { create } from 'zustand';
 import type { KnowledgeManifest, KnowledgeFileNode } from '@ai-task-flow/shared';
 
+const FAVORITES_KEY = 'ai-task-flow-knowledge-favorites';
+
+/** 「新内容」阈值:最近 3 天 */
+export const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+
+function loadFavorites(): string[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 interface KnowledgeState {
   manifest: KnowledgeManifest | null;
   currentPath: string | null;
@@ -10,6 +24,12 @@ interface KnowledgeState {
   mode: 'view' | 'edit';
   searchQuery: string;
   selectedTags: string[];
+  /** 收藏的文档 path 列表(localStorage 持久化,跨会话保留) */
+  favorites: string[];
+  /** 过滤器:仅看收藏 */
+  filterFavorites: boolean;
+  /** 过滤器:仅看最近 3 天新增/更新的文档 */
+  filterRecent: boolean;
   loading: boolean;
   error: string | null;
 
@@ -21,10 +41,14 @@ interface KnowledgeState {
   setSelectedTags: (tags: string[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  toggleFavorite: (path: string) => void;
+  setFilterFavorites: (on: boolean) => void;
+  setFilterRecent: (on: boolean) => void;
 
   // Computed
   getCurrentDoc: () => KnowledgeFileNode | null;
   getFilteredDocs: () => KnowledgeFileNode[];
+  isFavorite: (path: string) => boolean;
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
@@ -33,6 +57,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   mode: 'view',
   searchQuery: '',
   selectedTags: [],
+  favorites: loadFavorites(),
+  filterFavorites: false,
+  filterRecent: false,
   loading: false,
   error: null,
 
@@ -45,31 +72,54 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
 
+  toggleFavorite: (path) => {
+    const cur = get().favorites;
+    const next = cur.includes(path) ? cur.filter((p) => p !== path) : [...cur, path];
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+    set({ favorites: next });
+  },
+  setFilterFavorites: (on) => set({ filterFavorites: on }),
+  setFilterRecent: (on) => set({ filterRecent: on }),
+
+  isFavorite: (path) => get().favorites.includes(path),
+
   getCurrentDoc: () => {
     const { manifest, currentPath } = get();
     if (!manifest || !currentPath) return null;
-    return manifest.flatDocs.find(doc => doc.path === currentPath) || null;
+    return manifest.flatDocs.find((doc) => doc.path === currentPath) || null;
   },
 
   getFilteredDocs: () => {
-    const { manifest, searchQuery, selectedTags } = get();
+    const { manifest, searchQuery, selectedTags, favorites, filterFavorites, filterRecent } = get();
     if (!manifest) return [];
 
     let docs = manifest.flatDocs;
 
+    // 收藏筛选
+    if (filterFavorites) {
+      docs = docs.filter((doc) => favorites.includes(doc.path));
+    }
+
+    // 新内容筛选(近 3 天)
+    if (filterRecent) {
+      const threshold = Date.now() - RECENT_MS;
+      docs = docs.filter((doc) => doc.mtime >= threshold);
+    }
+
     // 标签筛选
     if (selectedTags.length > 0) {
-      docs = docs.filter(doc =>
-        doc.tags && doc.tags.some(tag => selectedTags.includes(tag))
+      docs = docs.filter(
+        (doc) => doc.tags && doc.tags.some((tag) => selectedTags.includes(tag)),
       );
     }
 
     // 搜索筛选(标题 + 正文预览)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      docs = docs.filter(doc =>
-        doc.title.toLowerCase().includes(query) ||
-        doc.contentPreview?.toLowerCase().includes(query)
+      docs = docs.filter(
+        (doc) =>
+          doc.title.toLowerCase().includes(query) ||
+          doc.contentPreview?.toLowerCase().includes(query),
       );
     }
 

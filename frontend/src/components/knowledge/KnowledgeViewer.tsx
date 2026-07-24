@@ -2,7 +2,7 @@
 // 文档查看器:按 kind 分流(md 可编辑/预览 / img / pdf·html iframe / docx 下载)。
 // md 支持:编辑/预览切换、Ctrl+S 保存(PUT saveDoc)。新建入口在 KnowledgeTree(目录树顶部)。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Trash2, Printer, Download, Pencil, Eye, Save } from 'lucide-react';
+import { Trash2, Printer, Download, Pencil, Eye, Save, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { usePreviewStore } from '@/stores/previewStore';
 import { exportElementToPdf } from '@/lib/docExport';
+import { cn } from '@/lib/utils';
 
 export function KnowledgeViewer() {
   const getCurrentDoc = useKnowledgeStore((s) => s.getCurrentDoc);
@@ -22,9 +23,12 @@ export function KnowledgeViewer() {
   const setManifest = useKnowledgeStore((s) => s.setManifest);
   const mode = useKnowledgeStore((s) => s.mode);
   const setMode = useKnowledgeStore((s) => s.setMode);
+  const toggleFavorite = useKnowledgeStore((s) => s.toggleFavorite);
+  const favorites = useKnowledgeStore((s) => s.favorites);
   const { confirm } = useConfirm();
 
   const doc = getCurrentDoc();
+  const isFav = doc ? favorites.includes(doc.path) : false;
   const [draft, setDraft] = useState('');
   const [original, setOriginal] = useState('');
   const [loading, setLoading] = useState(false);
@@ -151,6 +155,20 @@ export function KnowledgeViewer() {
             {tag}
           </Badge>
         ))}
+
+        {/* 收藏(所有文档类型均可;点击切换,已收藏=实心黄星) */}
+        {doc && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={() => toggleFavorite(doc.path)}
+            aria-label={isFav ? '取消收藏' : '收藏'}
+            title={isFav ? '取消收藏' : '收藏'}
+          >
+            <Star className={cn('size-3.5', isFav && 'fill-amber-400 text-amber-400')} />
+          </Button>
+        )}
 
         {/* md 编辑/预览切换 + 保存(仅当前文档操作,新建在左侧目录树) */}
         {isMd && mode === 'view' && (
