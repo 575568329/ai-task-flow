@@ -5,9 +5,12 @@
 // 解析优先级:
 //   1. 显式传入(CLI --data-dir / startApp({ dataDir }))
 //   2. 环境变量 AI_TASK_FLOW_DATA_DIR
-//   3. 默认 ~/.ai-task-flow
+//   3. WSL 下探测 Windows 用户目录(代码兜底,不依赖 WSLENV)
+//   4. 默认 ~/.ai-task-flow
 import path from 'node:path';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /** 默认数据目录名(位于用户主目录下) */
@@ -17,6 +20,50 @@ const DEFAULT_DIR_NAME = '.ai-task-flow';
 export const DATA_DIR_ENV = 'AI_TASK_FLOW_DATA_DIR';
 
 let resolvedRoot: string | undefined;
+
+/**
+ * 是否运行在 WSL 内。后端常跑 Windows、MCP 常跑 WSL,需据此切换数据目录定位。
+ */
+const IS_WSL: boolean = (() => {
+  if (process.env.WSL_DISTRO_NAME) return true;
+  try {
+    return readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft');
+  } catch {
+    return false;
+  }
+})();
+
+/**
+ * WSL 下探测 Windows 用户目录并转成 WSL 路径(/mnt/c/Users/<user>),模块级缓存。
+ *
+ * 为什么需要:WSL 的 os.homedir() 是 /home/<user>,与 Windows 后端写的
+ * C:\Users\<user>\.ai-task-flow 不是同一物理目录。WSLENV 桥接本可解决,但
+ * Windows Terminal 启动 wsl.exe 时用进程级 WSLENV(传 WT_SESSION 等)覆盖了
+ * 注册表里的 WSLENV,桥接变量进不来。故在代码侧直接探测,不依赖 WSLENV。
+ */
+let cachedWindowsHome: string | null | undefined; // undefined=未探测 / null=失败 / string=结果
+function detectWindowsHome(): string | null {
+  if (cachedWindowsHome !== undefined) return cachedWindowsHome;
+  cachedWindowsHome = null;
+  try {
+    // appendWindowsPath=false 时 cmd.exe 不在 WSL PATH,用绝对路径
+    const win = execFileSync('/mnt/c/Windows/System32/cmd.exe', ['/c', 'echo %USERPROFILE%'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (win) {
+      // wslpath:C:\Users\<user> → /mnt/c/Users/<user>
+      const wsl = execFileSync('wslpath', [win], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (wsl) cachedWindowsHome = wsl;
+    }
+  } catch {
+    // 探测失败(非标准 WSL / cmd.exe 缺失):回退默认 home
+  }
+  return cachedWindowsHome;
+}
 
 /**
  * 解析并缓存数据根目录的绝对路径。
@@ -33,6 +80,16 @@ export function resolveDataDir(explicit?: string): string {
   if (fromEnv && fromEnv.trim()) {
     resolvedRoot = path.resolve(fromEnv.trim());
     return resolvedRoot;
+  }
+
+  // WSL 兜底:不依赖 WSLENV(会被 Windows Terminal 覆盖),直接探测 Windows 用户目录,
+  // 让 WSL 侧的 MCP 读到与 Windows 后端同一份数据。
+  if (IS_WSL) {
+    const winHome = detectWindowsHome();
+    if (winHome) {
+      resolvedRoot = path.join(winHome, DEFAULT_DIR_NAME);
+      return resolvedRoot;
+    }
   }
 
   resolvedRoot = path.join(os.homedir(), DEFAULT_DIR_NAME);

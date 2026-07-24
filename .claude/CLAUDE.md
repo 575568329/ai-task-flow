@@ -10,6 +10,7 @@
 - **性能平衡**：不追求极致优化，但拒绝显而易见的性能陷阱（如循环查库、N+1 查询）。
 - **防御式编程**：优先"卫语句 (Guard Clauses)"尽早返回，拒绝深层嵌套（最多 3 层）。
 - **关注点分离**：每个模块/函数只做一件事，高内聚低耦合。
+- **配置与依赖方向**：能代码运行时自探测的，就别让用户/终端/外部环境去配置。别把「能不能正常工作」寄托在你管不了的外部环境（环境变量注入、终端行为、用户手动配 env）上——外部依赖越多，静默失效的链路越长、越难排查。自探测自洽（self-contained）、零配置、失败可优雅降级。
 
 ### 1.2 通用编码规范
 
@@ -656,3 +657,8 @@ Good luck! 🚀
 - MV3 扩展访问 localhost：PNA 只拦预检，POST 用 `text/plain` 绕过。
 - 终端 `start` 是 fire-and-forget，无法注入消息；`Failed to fetch` 先查后端日志。
 - **多 workspace 共享依赖（如 `vite`）版本范围须有交集**：否则 npm 装多份 → frontend build 报 `PluginOption` 类型冲突（指向两份 vite）；统一到一份。
+- **WSL ↔ Windows 混合环境**（后端跑 Windows、Claude Code/MCP 跑 WSL）：两边 `os.homedir()` 是不同物理目录，完整方案见 [WSL与Windows环境变量桥接通用方案](../knowledge-base/技术方案/工具流程/20260724095424_WSL与Windows环境变量桥接通用方案.md)：
+  - 不要散用 `os.homedir()` / `~` / `$HOME` 定位数据目录——跨进程两套 home 必对不上（MCP 拉到空任务就是它）。统一走 `resolveDataDir()` 单一入口，优先级 **显式 > env > WSL 自探测 Windows home > 默认 home**。
+  - **别用 WSLENV 桥接数据目录**：Windows Terminal 启动 wsl.exe 时用进程级 WSLENV（传 WT_SESSION 等）**覆盖**注册表 User 级，从 WT 启动的 WSL 永远拿不到桥接变量（`wsl --shutdown` 重启也没用）。**改用代码自探测**（resolveDataDir 内 `cmd.exe /c echo %USERPROFILE%` + `wslpath` 转路径，模块级缓存）。原则：**运行时自探测 > 外部环境注入**——自洽、clone 即用、不被宿主覆盖、失败优雅降级；环境注入依赖一长串外部前提，任一环失效就静默崩。
+  - **`appendWindowsPath=false` 下别裸调 `cmd` / `powershell` / `wsl.exe`**：它们不在 WSL PATH 里，用绝对路径 `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe`。
+  - **WSL 下跑 `vite build` 必失败**（node_modules 在 Windows 装的）：缺 `@rollup/rollup-linux-x64-gnu`。在 node_modules 安装侧（Windows）跑构建；WSL 里只做 `tsc` 类型检查。

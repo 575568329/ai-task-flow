@@ -1,6 +1,6 @@
 // frontend/src/components/SettingsDialog.tsx
-// 设置弹窗(Tab 式):模型配置 / 存储管理 / MCP 挂载。
-// 侧栏"设置"入口打开本弹窗。三个 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
+// 设置弹窗(Tab 式):模型配置 / 存储管理 / MCP 挂载 / 快捷键。
+// 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { Database, SlidersHorizontal, Plug, Keyboard } from 'lucide-react';
@@ -48,7 +48,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription>配置 LLM 模型、管理本地存储、查看 MCP 挂载方式。</DialogDescription>
+          <DialogDescription>
+            配置 LLM 模型、管理本地存储、查看 MCP 挂载方式、自定义快捷键。
+          </DialogDescription>
         </DialogHeader>
 
         {/* Tab 切换条(按钮实现,无 Tabs 依赖) */}
