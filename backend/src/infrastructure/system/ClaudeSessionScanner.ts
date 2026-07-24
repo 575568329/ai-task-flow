@@ -13,11 +13,47 @@ import { execFileSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 import { encodeProjectPath, toWslPath } from './pathCodec.js';
-import type { ClaudeSessionMeta, ModelAccum, SessionUsage, TokenUsage } from '@ai-task-flow/shared';
+import type { ClaudeSessionMeta, ModelAccum, SessionUsage, TokenUsage, ChatTurn, ChatBlock } from '@ai-task-flow/shared';
+
+/** 诊断日志开关:scan 命中数等默认静默,DEBUG_AI_TASK_FLOW=1 时打印,避免常态刷屏(IM3) */
+const DEBUG_SCAN = !!process.env.DEBUG_AI_TASK_FLOW;
+function debugLog(...args: unknown[]): void {
+  if (DEBUG_SCAN) console.log(...args);
+}
 
 /** 空用量块(累加起点) */
 function emptyUsage(): TokenUsage {
   return { inputTokens: 0, outputTokens: 0, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0, cacheReadTokens: 0 };
+}
+
+// ── jsonl 时间线解析的最小类型(替代 any) ──────────────────────────────────
+// Claude Code 的 stream-json 行结构松散,这里只声明 loadTimeline 用到的字段。
+interface ClaudeToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: unknown;
+  is_error?: boolean;
+}
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  thinking?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  tool_use_id?: string;
+  content?: unknown;
+  is_error?: boolean;
+}
+interface ClaudeTimelineMessage {
+  role?: string;
+  content?: ClaudeContentBlock[];
+}
+interface ClaudeTimelineLine {
+  type?: string;
+  message?: ClaudeTimelineMessage;
+  role?: string;
+  content?: ClaudeContentBlock[];
 }
 
 /** 把单条 assistant message 的 usage 累加进 target(cache_creation 拆 5m 默认 / 1h) */
@@ -88,7 +124,7 @@ function listWslDistros(): string[] {
 
   cachedWslDistros = Array.from(distros);
   if (cachedWslDistros.length > 0) {
-    console.log(`[ClaudeSessionScanner] WSL distros: ${cachedWslDistros.join(', ')}`);
+    debugLog(`[ClaudeSessionScanner] WSL distros: ${cachedWslDistros.join(', ')}`);
   }
   return cachedWslDistros;
 }
@@ -177,7 +213,7 @@ export class ClaudeSessionScanner {
     const claudeDirs = resolveAllClaudeDirs();
 
     // 诊断日志:定位"WSL 选项无历史会话"类问题——看 repoPath 形态、候选目录名、扫了哪些 home
-    console.log(
+    debugLog(
       `[ClaudeSessionScanner] scan repoPath="${repoPath}" ` +
         `dirNameCandidates=[${Array.from(dirNameCandidates).join(', ')}] ` +
         `claudeDirs(${claudeDirs.length})=${JSON.stringify(claudeDirs)}`,
@@ -209,7 +245,7 @@ export class ClaudeSessionScanner {
     const result = Array.from(byId.values()).sort((a, b) =>
       b.lastActiveAt.localeCompare(a.lastActiveAt)
     );
-    console.log(`[ClaudeSessionScanner] scan 命中 ${result.length} 个会话`);
+    debugLog(`[ClaudeSessionScanner] scan 命中 ${result.length} 个会话`);
     return result;
   }
 
@@ -253,7 +289,7 @@ export class ClaudeSessionScanner {
       }
     }
 
-    console.log(`[ClaudeSessionScanner] scanAllProjects 命中 ${byId.size} 个会话`);
+    debugLog(`[ClaudeSessionScanner] scanAllProjects 命中 ${byId.size} 个会话`);
     return Array.from(byId.values());
   }
 
@@ -280,6 +316,101 @@ export class ClaudeSessionScanner {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 定位某 repoPath + sessionId 对应的 jsonl 文件(跨 Windows/WSL 两个 home、两种路径编码)。
+   * 用于「加载历史会话时间线」:前端选中某历史会话后,据此找文件解析。
+   */
+  static async findSessionFile(repoPath: string, sessionId: string): Promise<string | null> {
+    // 安全:sessionId 来自 URL param,直接拼 `${sessionId}.jsonl` 会路径穿越(../../foo 读任意 jsonl)。
+    // claude sessionId 是 UUID 形态,只允许字母数字与连字符(S8)
+    if (!/^[A-Za-z0-9-]+$/.test(sessionId)) return null;
+    const dirNameCandidates = new Set<string>([
+      encodeProjectPath(repoPath),
+      encodeProjectPath(toWslPath(repoPath)),
+    ]);
+    for (const projectsRoot of resolveAllClaudeDirs()) {
+      for (const dirName of dirNameCandidates) {
+        const candidate = path.join(projectsRoot, dirName, `${sessionId}.jsonl`);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 解析某历史会话 jsonl 为前端可渲染的 turns/blocks(与实时流归一化形态一致)。
+   * 只保留 user 真实文本 + assistant 回复;tool_result 回填到对应 tool_use(按 id)。
+   * 系统注入行(<local-command-...> 等)不计为用户消息。
+   */
+  static async loadTimeline(repoPath: string, sessionId: string): Promise<ChatTurn[] | null> {
+    const filePath = await this.findSessionFile(repoPath, sessionId);
+    if (!filePath) return null;
+    const content = await fs.readFile(filePath, 'utf-8');
+    const turns: ChatTurn[] = [];
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      let msg: ClaudeTimelineLine;
+      try {
+        msg = JSON.parse(line) as ClaudeTimelineLine;
+      } catch {
+        continue;
+      }
+      const message = msg.message ?? msg;
+      const role = msg.type || message?.role;
+      const blocks0: ClaudeContentBlock[] = Array.isArray(message?.content) ? message.content : [];
+
+      if (role === 'assistant') {
+        const blocks: ChatBlock[] = [];
+        for (const b of blocks0) {
+          if (b.type === 'text' && typeof b.text === 'string') {
+            const last = blocks[blocks.length - 1];
+            if (last && last.kind === 'text') last.text += b.text;
+            else blocks.push({ kind: 'text', text: b.text });
+          } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+            const last = blocks[blocks.length - 1];
+            if (last && last.kind === 'thinking') last.thinking += b.thinking;
+            else blocks.push({ kind: 'thinking', thinking: b.thinking });
+          } else if (b.type === 'tool_use' && typeof b.id === 'string') {
+            blocks.push({
+              kind: 'tool_use',
+              id: b.id,
+              name: typeof b.name === 'string' ? b.name : 'tool',
+              input: b.input,
+            });
+          }
+        }
+        if (blocks.length > 0) turns.push({ id: `${turns.length}-a`, role: 'assistant', blocks });
+      } else if (role === 'user') {
+        // tool_result:回填到最近的同名 tool_use
+        const toolResults = blocks0.filter((b): b is ClaudeToolResultBlock => b.type === 'tool_result');
+        for (const tr of toolResults) {
+          const text = this.collectAllText(tr.content);
+          const target = this.findLastToolUse(turns, tr.tool_use_id);
+          if (target) target.result = { content: text, isError: tr.is_error === true };
+        }
+        // user 行若同时含真实文本(非纯 tool_result),作为用户消息
+        const userText = this.extractText(message?.content);
+        if (userText && !this.isSystemInjection(userText)) {
+          turns.push({ id: `${turns.length}-u`, role: 'user', text: userText });
+        }
+      }
+    }
+    return turns;
+  }
+
+  /** 在 turns 里按 tool_use_id 找最后一个匹配的 tool_use 块(回填 result 用) */
+  private static findLastToolUse(turns: ChatTurn[], id: string): Extract<ChatBlock, { kind: 'tool_use' }> | undefined {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i];
+      if (!t.blocks) continue;
+      for (let j = t.blocks.length - 1; j >= 0; j--) {
+        const b = t.blocks[j];
+        if (b.kind === 'tool_use' && b.id === id) return b;
+      }
+    }
+    return undefined;
   }
 
   /**

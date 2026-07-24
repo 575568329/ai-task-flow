@@ -133,16 +133,11 @@ describe('ClaudeSessionScanner.parseSessionMeta — 用量累加', () => {
     ];
     const byDay = parse(lines).usage.byDay;
     expect(Object.keys(byDay).length).toBe(2);
-    const sum = Object.values(byDay).reduce(
-      (s, d) => s + d.inputTokens + (Object.values(d).reduce((x: number, m: any) => x + (m?.inputTokens ?? 0), 0)),
-      0,
-    );
     // byDay 是 Record<day, Record<model, ModelAccum>>;取内层 inputTokens 合计
     const inner = Object.values(byDay).reduce((s, models) => {
       return s + Object.values(models).reduce((x, m) => x + m.inputTokens, 0);
     }, 0);
     expect(inner).toBe(150);
-    expect(sum).toBe(150); // 守护:两种算法一致
   });
 });
 

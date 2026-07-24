@@ -157,6 +157,11 @@ export function taskDocPath(taskId: string, dataDir?: string): string {
   return path.join(taskDocsDirPath(dataDir), `${taskId}.md`);
 }
 
+/** 任务对话 sessionId 存储( taskId → claude session_id,用于 --resume 续接) */
+export function taskSessionsFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'task-sessions.json');
+}
+
 /** 日志目录(后端运行日志,如聊天链路全量日志) */
 export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');

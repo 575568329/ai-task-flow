@@ -40,12 +40,14 @@ import {
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
+import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { StepEditor } from './StepEditor';
 import { RepoPathPicker } from './RepoPathPicker';
 import { OpenClaudeDialog } from './OpenClaudeDialog';
+import { TaskConversation } from './TaskConversation';
 import { STATUS_LABELS } from '@/lib/taskMeta';
 import {
   loadShortcuts,
@@ -125,6 +127,8 @@ export function TaskDrawer() {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [openClaude, setOpenClaude] = useState(false);
+  // 栏3 tab:对话(Claude 实时聊)/ 预览(Markdown)。默认对话(主场景)。关抽屉不持久化。
+  const [rightTab, setRightTab] = useState<'chat' | 'preview'>('chat');
   // 标题输入 ref:新建模式打开抽屉后自动聚焦,点「新建任务」即可直接输入
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -438,23 +442,51 @@ export function TaskDrawer() {
             </div>
           </div>
 
-          {/* 栏3:预览(实时 Markdown;与步骤平分剩余宽度) */}
+          {/* 栏3:对话 / 预览(tab 切换;与步骤平分剩余宽度) */}
           {showPreview && (
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l">
-              <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-3 py-2">
+              <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-2 py-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-7"
                   onClick={() => setShowPreview(false)}
-                  aria-label="收起预览"
+                  aria-label="收起右侧栏"
                 >
                   <ChevronRight className="size-4" />
                 </Button>
-                <span className="text-sm font-semibold">预览</span>
+                <div className="flex items-center gap-0.5">
+                  {(['chat', 'preview'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setRightTab(t)}
+                      className={cn(
+                        'rounded px-2.5 py-1 text-xs transition-colors',
+                        rightTab === t
+                          ? 'bg-muted font-medium'
+                          : 'text-muted-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      {t === 'chat' ? '对话' : '预览'}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-3">
-                <MessageContent content={markdown} />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {rightTab === 'chat' ? (
+                  task ? (
+                    <TaskConversation taskId={task.id} />
+                  ) : (
+                    <div className="text-muted-foreground flex h-full items-center justify-center px-4 text-center text-sm">
+                      保存任务后即可在此与 Claude 对话
+                    </div>
+                  )
+                ) : (
+                  <div className="h-full overflow-y-auto px-3 py-3">
+                    <MessageContent content={markdown} />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -488,7 +520,7 @@ export function TaskDrawer() {
           <Button
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive ml-auto"
+            className="text-destructive hover:text-destructive"
             onClick={onDelete}
             disabled={!task}
             title={!task ? '保存后可删除' : '删除任务'}

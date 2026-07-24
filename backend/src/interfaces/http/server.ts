@@ -28,9 +28,16 @@ import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
 import { UsageService } from '../../application/usage/UsageService.js';
+import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
+import { AgentRunner } from '../../application/agent/AgentRunner.js';
+import { TaskSessionStore } from '../../infrastructure/persistence/TaskSessionStore.js';
 
 /** 用量聚合服务(无外部依赖,模块级单例:跨请求保持 L1/L2 扫描缓存) */
 const usageService = new UsageService();
+
+/** 任务对话 Agent + sessionId 存储(模块级单例:无请求级状态,跨请求复用) */
+const agentRunner = new AgentRunner();
+const taskSessionStore = new TaskSessionStore();
 
 /** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
  *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
@@ -148,6 +155,7 @@ export async function createHttpServer(
 
   // 注册业务路由
   await registerTaskRoutes(fastify, taskRepository);
+  await registerTaskChatRoutes(fastify, taskRepository, agentRunner, taskSessionStore);
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
