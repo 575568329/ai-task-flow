@@ -345,7 +345,8 @@ export function TaskDrawer() {
                 value={draft.description}
                 onChange={(e) => patch({ description: e.target.value })}
                 placeholder="任务的详细描述"
-                className="min-h-16"
+                disableAutoGrow
+                className="min-h-16 max-h-40 overflow-y-auto"
               />
             </Field>
             <Field label="优先级">

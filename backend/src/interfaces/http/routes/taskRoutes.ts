@@ -58,7 +58,7 @@ export async function registerTaskRoutes(
 
   // POST /api/tasks - 创建任务
   fastify.post<{ Body: CreateTaskRequest }>('/api/tasks', async (request, reply) => {
-    const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps, source, sourceUrl } = request.body;
+    const { prefix, title, description, priority, repoPath, projectName, relatedFiles, steps, source, sourceUrl, env } = request.body;
 
     // prefix 容错:TaskId 要求 [A-Z][A-Z0-9]* 格式(如 WS/BUG/E2E)。
     // 留空或非法时回落到默认 TASK,实现"前缀非必填"。
@@ -87,6 +87,7 @@ export async function registerTaskRoutes(
       new Date(),       // updatedAt
       source ?? 'manual',
       sourceUrl,
+      env,
     );
 
     await taskRepository.save(task);

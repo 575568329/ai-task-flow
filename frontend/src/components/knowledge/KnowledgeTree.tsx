@@ -76,6 +76,30 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     return acc;
   }, [manifest]);
 
+  // 预计算每个目录子树是否含「新文件 / 收藏文件」,renderNode 直接查表,
+  // 避免每个目录节点递归整棵子树(O(n²)→O(n));manifest / favorites 变化时重算。
+  // WeakMap 以 node 对象为 key,避开 path / name 唯一性问题。
+  const dirFlags = useMemo(() => {
+    const flags = new WeakMap<KnowledgeNode, { hasRecent: boolean; hasFavorite: boolean }>();
+    if (!manifest) return flags;
+    const visit = (node: KnowledgeNode): { hasRecent: boolean; hasFavorite: boolean } => {
+      if (node.type === 'file') {
+        return { hasRecent: isRecentMtime(node.mtime), hasFavorite: favorites.includes(node.path) };
+      }
+      let hasRecent = false;
+      let hasFavorite = false;
+      for (const child of node.children) {
+        const r = visit(child);
+        if (r.hasRecent) hasRecent = true;
+        if (r.hasFavorite) hasFavorite = true;
+      }
+      flags.set(node, { hasRecent, hasFavorite });
+      return { hasRecent, hasFavorite };
+    };
+    visit(manifest.tree);
+    return flags;
+  }, [manifest, favorites]);
+
   // collapsed 集合:默认全收起(所有目录都在集合里);manifest 首次就绪时初始化
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [inited, setInited] = useState(false);
@@ -142,6 +166,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     if (node.type === 'dir') {
       const key = node.name;
       const isOpen = !collapsed.has(key);
+      const flags = dirFlags.get(node);
       return (
         <div key={key}>
           <button
@@ -156,6 +181,14 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
               <Folder className="size-3.5 shrink-0 text-amber-500" />
             )}
             <span className="truncate font-medium">{node.title}</span>
+            {flags?.hasRecent && (
+              <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
+                新
+              </span>
+            )}
+            {flags?.hasFavorite && (
+              <Star className="size-3 shrink-0 fill-amber-400 text-amber-400" />
+            )}
           </button>
           <Collapse open={isOpen}>
             {node.children.map((child) => renderNode(child, depth + 1))}
