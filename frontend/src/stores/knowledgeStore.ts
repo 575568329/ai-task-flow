@@ -5,8 +5,17 @@ import type { KnowledgeManifest, KnowledgeFileNode } from '@ai-task-flow/shared'
 
 const FAVORITES_KEY = 'ai-task-flow-knowledge-favorites';
 
-/** 「新内容」阈值:最近 3 天 */
+/** 「新内容」阈值:最近 3 天(毫秒,用于和 Date.now() 对齐) */
 export const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * 判断 mtime 是否落在「近3天」内。
+ * 后端返回的 mtime 是 Unix 秒(见 shared 的 KnowledgeFileNode),
+ * 这里统一 *1000 转毫秒再与 Date.now() 比较 —— 直接拿秒跟毫秒阈值比会恒为 false。
+ */
+export function isRecentMtime(mtimeSec: number): boolean {
+  return mtimeSec * 1000 >= Date.now() - RECENT_MS;
+}
 
 function loadFavorites(): string[] {
   try {
@@ -102,8 +111,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
     // 新内容筛选(近 3 天)
     if (filterRecent) {
-      const threshold = Date.now() - RECENT_MS;
-      docs = docs.filter((doc) => doc.mtime >= threshold);
+      docs = docs.filter((doc) => isRecentMtime(doc.mtime));
     }
 
     // 标签筛选

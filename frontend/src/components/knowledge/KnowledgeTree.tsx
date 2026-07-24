@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
-import { useKnowledgeStore, RECENT_MS } from '@/stores/knowledgeStore';
+import { useKnowledgeStore, isRecentMtime } from '@/stores/knowledgeStore';
 import { formatRelativeTime } from '@/lib/formatDate';
 import { createDoc, fetchManifest } from '@/api/knowledge';
 import { toast } from '@/components/ui/toaster';
@@ -42,9 +42,6 @@ function collectDirNames(node: KnowledgeNode, acc: Set<string>): void {
     node.children.forEach((c) => collectDirNames(c, acc));
   }
 }
-
-/** 是否「新内容」:mtime 在最近 3 天内 */
-const isNewDoc = (mtime: number): boolean => mtime >= Date.now() - RECENT_MS;
 
 interface KnowledgeTreeProps {
   /** 手动刷新回调(刷新整棵 manifest) */
@@ -181,7 +178,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
       >
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate">{node.title}</span>
-        {isNewDoc(node.mtime) && (
+        {isRecentMtime(node.mtime) && (
           <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
             新
           </span>
@@ -299,7 +296,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
                   >
                     <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 truncate">{doc.title}</span>
-                    {isNewDoc(doc.mtime) && (
+                    {isRecentMtime(doc.mtime) && (
                       <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
                         新
                       </span>
