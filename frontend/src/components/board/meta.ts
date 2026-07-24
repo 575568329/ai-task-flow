@@ -11,10 +11,11 @@ export interface KanbanColumnDef {
   dotClass: string;
 }
 
-// 看板列顺序(3 列,横向铺满):会话化改造后派发/审核两态已移除,
-// 生命周期收敛为 待办 / 已完成 / 已阻塞。
+// 看板列顺序(4 列,横向铺满):待办 / 进行中 / 已完成 / 已阻塞。
+// 进行中:Claude 通过 MCP complete_step 回写步骤完成后,任务自动从待办推进到进行中。
 export const KANBAN_COLUMNS: KanbanColumnDef[] = [
   { status: TaskStatus.TODO, label: STATUS_LABELS[TaskStatus.TODO], dotClass: 'bg-blue-500' },
+  { status: TaskStatus.IN_PROGRESS, label: STATUS_LABELS[TaskStatus.IN_PROGRESS], dotClass: 'bg-amber-500' },
   { status: TaskStatus.DONE, label: STATUS_LABELS[TaskStatus.DONE], dotClass: 'bg-emerald-500' },
   { status: TaskStatus.BLOCKED, label: STATUS_LABELS[TaskStatus.BLOCKED], dotClass: 'bg-rose-500' },
 ];

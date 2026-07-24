@@ -1,6 +1,6 @@
 // backend/src/domain/workflow/entities/Task.ts
 import { TaskId } from '../value-objects/TaskId.js';
-import { TaskStatus } from '../value-objects/TaskStatus.js';
+import { TaskStatus, isValidTransition } from '../value-objects/TaskStatus.js';
 import { Priority } from '../value-objects/Priority.js';
 import { WorktreeRef } from '../value-objects/WorktreeRef.js';
 import { ExecutionResult } from '../value-objects/ExecutionResult.js';
@@ -51,7 +51,65 @@ export class Task {
     const previousStatus = this.status;
     this.executionResult = result;
     this.status = result.status === 'blocked' ? TaskStatus.BLOCKED : TaskStatus.DONE;
+    // done/partial → 兜底全勾步骤:任务整体完成,步骤自然全完成,避免卡片进度停在 0/N
+    if (this.status === TaskStatus.DONE) {
+      this.markAllStepsCompleted();
+    }
     this.updatedAt = new Date();
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
+  }
+
+  /** 把所有步骤标记完成(任务进入完成态时兜底调用,空步骤无操作) */
+  private markAllStepsCompleted(): void {
+    if (this.steps.length === 0) return;
+    this.steps = this.steps.map((s) => ({ ...s, completed: true }));
+  }
+
+  /**
+   * 状态流转(带状态机校验 + 副作用)。
+   * 供拖拽改状态等场景复用:拖到「已完成」列 → 自动全勾步骤(任务完成则步骤全完成)。
+   * 非法流转抛异常,由调用方(PATCH 路由)转 400。
+   */
+  transitionTo(newStatus: TaskStatus): void {
+    if (newStatus === this.status) return;
+    if (!isValidTransition(this.status, newStatus)) {
+      throw new Error(`非法状态流转: ${this.status} → ${newStatus}`);
+    }
+    const previousStatus = this.status;
+    this.status = newStatus;
+    if (newStatus === TaskStatus.DONE) {
+      this.markAllStepsCompleted();
+    }
+    this.updatedAt = new Date();
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
+  }
+
+  /**
+   * 标记单步完成状态,并按步骤完成度自动推进任务状态。
+   * 供 MCP complete_step 调用:Claude 每完成一步回写。
+   * - 全部步骤完成 → DONE
+   * - 有完成但未全完成 → IN_PROGRESS(仅当当前为 TODO,避免从 BLOCKED/DONE 误抽出)
+   * - 撤销单步完成不回退状态(避免进度抖动;如需回退用 transitionTo)
+   */
+  setStepCompleted(stepIndex: number, completed: boolean): void {
+    if (stepIndex < 0 || stepIndex >= this.steps.length) {
+      throw new Error(
+        `步骤下标越界: ${stepIndex}(任务 ${this.id.value} 共 ${this.steps.length} 步)`,
+      );
+    }
+    const previousStatus = this.status;
+    this.steps = this.steps.map((s, i) => (i === stepIndex ? { ...s, completed } : s));
+
+    const allDone = this.steps.length > 0 && this.steps.every((s) => s.completed);
+    if (allDone) {
+      this.status = TaskStatus.DONE;
+    } else if (completed && this.status === TaskStatus.TODO) {
+      this.status = TaskStatus.IN_PROGRESS;
+    }
+    if (this.status !== previousStatus) {
+      this.updatedAt = new Date();
+    }
+    // 步骤完成度变了也要通知前端刷新进度,即使任务状态未变
     this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
   }
 

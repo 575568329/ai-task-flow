@@ -3,6 +3,7 @@ import { TaskStatus, Priority } from '@ai-task-flow/shared';
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.TODO]: '待办',
+  [TaskStatus.IN_PROGRESS]: '进行中',
   [TaskStatus.DONE]: '已完成',
   [TaskStatus.BLOCKED]: '已阻塞',
 };

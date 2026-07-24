@@ -46,8 +46,8 @@ export async function registerTaskRoutes(
   fastify.get<{ Params: { status: string } }>('/api/tasks/status/:status', async (request, reply) => {
     const status = request.params.status as TaskStatus;
 
-    // 验证状态值(dispatched/review 已随派发/审查流移除)
-    const validStatuses = ['planning', 'todo', 'done', 'blocked'];
+    // 验证状态值(planning/dispatched/review 已随历史改造移除,现四态)
+    const validStatuses = ['todo', 'in_progress', 'done', 'blocked'];
     if (!validStatuses.includes(status)) {
       return reply.status(400).send({ error: 'Invalid status' });
     }
@@ -113,8 +113,18 @@ export async function registerTaskRoutes(
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      // 通过领域方法更新，发布 TaskUpdated 事件以驱动前端 SSE 实时刷新
-      task.applyUpdate(request.body);
+      // 状态变更走 transitionTo(带状态机校验 + DONE 全勾步骤副作用,如拖到「已完成」列);
+      // 其余字段走 applyUpdate。非法状态流转 → 400。
+      try {
+        if (request.body.status !== undefined && request.body.status !== task.status) {
+          task.transitionTo(request.body.status);
+        }
+        const { status: _omitStatus, ...rest } = request.body;
+        task.applyUpdate(rest);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return reply.status(400).send({ error: message });
+      }
 
       await taskRepository.save(task);
 

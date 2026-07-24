@@ -12,7 +12,9 @@ import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepo
 import { TaskStatus } from '../../domain/workflow/value-objects/TaskStatus.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
+import path from 'node:path';
 import { stepsToMarkdown } from '@ai-task-flow/shared';
+import { uploadsDirPath, uploadsDirWindowsPath } from '../../config/dataDir.js';
 
 /**
  * AI Task Flow MCP Server
@@ -23,6 +25,16 @@ import { stepsToMarkdown } from '@ai-task-flow/shared';
  * - record_result: 记录执行结果
  * - add_note_to_task: 添加备注
  */
+
+/** 匹配 markdown 图片语法 ![alt](url),用于 get_task 把截图链接替换为本地双路径 */
+const UPLOAD_URL_RE = /!\[[^\]]*\]\(([^)]+)\)/g;
+/** 从 url 提取 uploads 文件名(仅本服务 /api/uploads/ 路径的图才替换) */
+const UPLOADS_ROUTE_RE = /\/api\/uploads\/([^/?#]+)$/;
+
+function extractUploadFilename(url: string): string | null {
+  const m = UPLOADS_ROUTE_RE.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 class AITaskFlowServer {
   private server: Server;
@@ -62,8 +74,8 @@ class AITaskFlowServer {
             properties: {
               status: {
                 type: 'string',
-                enum: ['todo', 'all'],
-                description: '筛选状态，默认 todo',
+                enum: ['todo', 'pending', 'all'],
+                description: '筛选状态:todo=仅待办;pending=待办+进行中(默认);all=全部',
               },
             },
           },
@@ -105,6 +117,26 @@ class AITaskFlowServer {
               blockedReason: { type: 'string' },
             },
             required: ['taskId', 'status', 'changedFiles', 'notes'],
+          },
+        },
+        {
+          name: 'complete_step',
+          description:
+            '标记任务的某个步骤完成/未完成,并按步骤完成度自动推进任务状态(全部完成→已完成,否则→进行中)。每完成一步调用一次。',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              taskId: { type: 'string', description: '任务 ID(例如 WS-001)' },
+              stepNumber: {
+                type: 'integer',
+                description: '步骤序号,从 1 开始(对应 get_task 显示的「步骤 1/2/3」)',
+              },
+              completed: {
+                type: 'boolean',
+                description: 'true=标记完成(默认),false=取消完成',
+              },
+            },
+            required: ['taskId', 'stepNumber'],
           },
         },
         {
@@ -166,6 +198,8 @@ class AITaskFlowServer {
           return this.handleGetTask(args);
         case 'record_result':
           return this.handleRecordResult(args);
+        case 'complete_step':
+          return this.handleCompleteStep(args);
         case 'add_note_to_task':
           return this.handleAddNoteToTask(args);
         case 'save_to_knowledge':
@@ -209,13 +243,21 @@ class AITaskFlowServer {
   }
 
   private async handleListPendingTasks(args: any) {
-    const statusFilter = args?.status || 'todo';
+    // 默认 pending:同时看待办 + 进行中(进行中的任务 Claude 也要能继续拉到)
+    const statusFilter = args?.status || 'pending';
 
     let tasks;
     if (statusFilter === 'all') {
       tasks = await this.taskRepository.findAll();
-    } else {
+    } else if (statusFilter === 'todo') {
       tasks = await this.taskRepository.findByStatus(TaskStatus.TODO);
+    } else {
+      // pending = 待办 + 进行中
+      const [todo, inProgress] = await Promise.all([
+        this.taskRepository.findByStatus(TaskStatus.TODO),
+        this.taskRepository.findByStatus(TaskStatus.IN_PROGRESS),
+      ]);
+      tasks = [...todo, ...inProgress];
     }
 
     // 格式化为 Markdown 表格
@@ -321,13 +363,36 @@ class AITaskFlowServer {
     lines.push(`创建时间: ${task.createdAt.toISOString()}`);
     lines.push(`更新时间: ${task.updatedAt.toISOString()}`);
 
+    // 任务步骤里的截图原本是 markdown 链接,指向后端 localhost:5678;WSL 侧 Claude Code
+    // 访问不到该地址(死链)。把每张 /api/uploads/ 图替换成本地文件的两种路径(WSL + Windows),
+    // Claude 按自身运行环境取用 Read 即可,无需访问 HTTP,也不把 base64 塞进上下文(省 token)。
+    let markdown = lines.join('\n');
+    const wslUploads = uploadsDirPath();
+    const winUploads = uploadsDirWindowsPath();
+    const ranges: Array<{ start: number; end: number; label: string }> = [];
+    let imgIdx = 0;
+    for (const m of markdown.matchAll(UPLOAD_URL_RE)) {
+      const filename = extractUploadFilename(m[1]);
+      if (!filename) continue; // 外链图:保留原 markdown url
+      imgIdx += 1;
+      const start = m.index ?? 0;
+      const labelLines = [
+        `（截图 ${imgIdx}:按你的环境用 Read 读取本地文件)`,
+        `  - WSL: \`${path.posix.join(wslUploads, filename)}\``,
+      ];
+      if (winUploads) {
+        labelLines.push(`  - Windows: \`${path.win32.join(winUploads, filename)}\``);
+      }
+      ranges.push({ start, end: start + m[0].length, label: labelLines.join('\n') });
+    }
+    // 从后往前替换,避免前面的替换使后续 index 偏移
+    ranges.sort((a, b) => b.start - a.start);
+    for (const r of ranges) {
+      markdown = markdown.slice(0, r.start) + r.label + markdown.slice(r.end);
+    }
+
     return {
-      content: [
-        {
-          type: 'text',
-          text: lines.join('\n'),
-        },
-      ],
+      content: [{ type: 'text' as const, text: markdown }],
     };
   }
 
@@ -389,6 +454,63 @@ class AITaskFlowServer {
         ],
       };
     }
+  }
+
+  private async handleCompleteStep(args: any) {
+    const { taskId, stepNumber, completed } = args;
+
+    if (!taskId) {
+      throw new Error('taskId is required');
+    }
+    if (
+      typeof stepNumber !== 'number' ||
+      !Number.isInteger(stepNumber) ||
+      stepNumber < 1
+    ) {
+      throw new Error('stepNumber is required (正整数, 1-based, 对应 get_task 的「步骤 N」)');
+    }
+    // stepNumber 是给 Claude 用的人类序号(1-based),domain 层仍用 0-based 下标
+    const stepIndex = stepNumber - 1;
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+
+    if (!task) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ 任务 ${taskId} 不存在`,
+          },
+        ],
+      };
+    }
+
+    const completedVal = completed ?? true;
+    try {
+      task.setStepCompleted(stepIndex, completedVal);
+    } catch (error: any) {
+      return {
+        content: [
+          { type: 'text', text: `❌ ${error.message}` },
+        ],
+      };
+    }
+
+    await this.taskRepository.save(task);
+
+    const doneCount = task.steps.filter((s) => s.completed).length;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: [
+            `✅ 任务 ${taskId} 步骤 ${stepNumber} 已标记为${completedVal ? '完成' : '未完成'}`,
+            `进度: ${doneCount}/${task.steps.length}`,
+            `任务状态: ${task.status}`,
+          ].join('\n'),
+        },
+      ],
+    };
   }
 
   private async handleAddNoteToTask(args: any) {

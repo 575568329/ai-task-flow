@@ -105,4 +105,88 @@ describe('Task', () => {
     task.applyUpdate({ sourceUrl: 'https://example.com/bug/2' });
     expect(task.sourceUrl).toBe('https://example.com/bug/2');
   });
+
+  it('setStepCompleted: 标记一步完成,TODO 自动推进到 IN_PROGRESS', () => {
+    const task = new Task(
+      TaskId.create('WS', 20), 'Steps', 'Desc',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [],
+      [
+        { blocks: [{ type: 'text', content: 'a' }], completed: false },
+        { blocks: [{ type: 'text', content: 'b' }], completed: false },
+      ],
+    );
+
+    task.setStepCompleted(0, true);
+
+    expect(task.steps[0].completed).toBe(true);
+    expect(task.steps[1].completed).toBe(false);
+    expect(task.status).toBe(TaskStatus.IN_PROGRESS);
+  });
+
+  it('setStepCompleted: 全部步骤完成 → DONE', () => {
+    const task = new Task(
+      TaskId.create('WS', 21), 'Steps', 'Desc',
+      TaskStatus.IN_PROGRESS, Priority.P1, undefined, undefined, [],
+      [
+        { blocks: [{ type: 'text', content: 'a' }], completed: true },
+        { blocks: [{ type: 'text', content: 'b' }], completed: false },
+      ],
+    );
+
+    task.setStepCompleted(1, true);
+
+    expect(task.steps.every((s) => s.completed)).toBe(true);
+    expect(task.status).toBe(TaskStatus.DONE);
+  });
+
+  it('setStepCompleted: 下标越界抛错', () => {
+    const task = new Task(
+      TaskId.create('WS', 22), 'Steps', 'Desc',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [],
+      [{ blocks: [{ type: 'text', content: 'a' }], completed: false }],
+    );
+
+    expect(() => task.setStepCompleted(5, true)).toThrow(/步骤下标越界/);
+  });
+
+  it('transitionTo DONE: 自动全勾步骤', () => {
+    const task = new Task(
+      TaskId.create('WS', 23), 'Steps', 'Desc',
+      TaskStatus.TODO, Priority.P1, undefined, undefined, [],
+      [
+        { blocks: [{ type: 'text', content: 'a' }], completed: false },
+        { blocks: [{ type: 'text', content: 'b' }], completed: false },
+      ],
+    );
+
+    task.transitionTo(TaskStatus.DONE);
+
+    expect(task.status).toBe(TaskStatus.DONE);
+    expect(task.steps.every((s) => s.completed)).toBe(true);
+  });
+
+  it('transitionTo 非法流转抛错(DONE → IN_PROGRESS 不允许)', () => {
+    const task = new Task(
+      TaskId.create('WS', 24), 'Done', 'Desc',
+      TaskStatus.DONE, Priority.P1, undefined, undefined, [], [],
+    );
+
+    expect(() => task.transitionTo(TaskStatus.IN_PROGRESS)).toThrow(/非法状态流转/);
+  });
+
+  it('recordResult done: 兜底全勾步骤(避免卡片进度停在 0/N)', () => {
+    const task = new Task(
+      TaskId.create('WS', 25), 'Steps', 'Desc',
+      TaskStatus.IN_PROGRESS, Priority.P1, undefined, undefined, [],
+      [
+        { blocks: [{ type: 'text', content: 'a' }], completed: false },
+        { blocks: [{ type: 'text', content: 'b' }], completed: false },
+      ],
+    );
+
+    task.recordResult(new ExecutionResult('done', ['a.ts'], '完成'));
+
+    expect(task.status).toBe(TaskStatus.DONE);
+    expect(task.steps.every((s) => s.completed)).toBe(true);
+  });
 });

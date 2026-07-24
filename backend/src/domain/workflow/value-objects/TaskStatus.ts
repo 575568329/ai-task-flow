@@ -1,18 +1,20 @@
 // backend/src/domain/workflow/value-objects/TaskStatus.ts
 export enum TaskStatus {
   TODO = 'todo',
+  IN_PROGRESS = 'in_progress',
   DONE = 'done',
   BLOCKED = 'blocked',
 }
 
 export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
-  // 会话化改造后状态机收敛为三态:打开终端不改状态(打开 ≠ 进行中, 无可靠触发点),
-  // 只有 Claude Code 通过 MCP record_result 回写结果才推进生命周期。
-  // 详见 docs/20260722172646_任务会话化改造设计方案.md §2.3 D1。
+  // 四态状态机:TODO → IN_PROGRESS(开始做/有步骤完成)→ DONE(全步骤完成);
+  // 任何态可转 BLOCKED;BLOCKED 可回 TODO/IN_PROGRESS/DONE;DONE 可回 TODO(拖回待办重开)。
+  // 步骤完成度由 Task.setStepCompleted 自动推进状态,Claude 每完成一步回写即推进。
   const validTransitions: Record<TaskStatus, TaskStatus[]> = {
-    [TaskStatus.TODO]: [TaskStatus.DONE, TaskStatus.BLOCKED],
-    [TaskStatus.DONE]: [],
-    [TaskStatus.BLOCKED]: [TaskStatus.TODO],
+    [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS, TaskStatus.DONE, TaskStatus.BLOCKED],
+    [TaskStatus.IN_PROGRESS]: [TaskStatus.DONE, TaskStatus.BLOCKED, TaskStatus.TODO],
+    [TaskStatus.DONE]: [TaskStatus.TODO, TaskStatus.BLOCKED],
+    [TaskStatus.BLOCKED]: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE],
   };
   return validTransitions[from].includes(to);
 }

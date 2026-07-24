@@ -122,6 +122,31 @@ export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');
 }
 
+let cachedWinUploads: string | null | undefined;
+/**
+ * uploads 目录的 Windows 路径形式(`wslpath -w` 转换,模块级缓存)。
+ *
+ * 用途:MCP get_task 给 Claude 两种本地路径——WSL 侧读 uploadsDirPath()(/mnt/c/...),
+ * Windows 侧读本函数值(C:\\...)——按自身环境取用,无需访问后端 HTTP(localhost:5678 在
+ * WSL 侧是死链)。非 WSL 或转换失败返回 null(此时无 Windows 形式可转,只给 WSL 路径)。
+ */
+export function uploadsDirWindowsPath(): string | null {
+  if (cachedWinUploads !== undefined) return cachedWinUploads;
+  if (!IS_WSL) {
+    cachedWinUploads = null;
+    return null;
+  }
+  try {
+    cachedWinUploads = execFileSync('wslpath', ['-w', uploadsDirPath()], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    cachedWinUploads = null;
+  }
+  return cachedWinUploads;
+}
+
 /** 任务 markdown 存档目录(派发时落盘,供 Claude Code 读取 + 用户存档) */
 export function taskDocsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'tasks');
