@@ -32,6 +32,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useTaskStore } from '@/stores/taskStore';
 import { taskApi, systemApi } from '@/api/task';
+import { addRepoHistory } from '@/lib/repoHistory';
 import { readFile, writeFile } from '@/api/files';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
@@ -212,6 +213,7 @@ export function TaskDocsView() {
     try {
       const res = await systemApi.selectDirectory();
       if (!res.path) return;
+      addRepoHistory(res.path); // 共享到全局历史,其它 repo-path 入口可见
       if (roots.includes(res.path)) {
         toast.info('该项目已在列表中');
         return;

@@ -14,7 +14,7 @@
 // 为什么不用 RadioGroup:项目未安装 @radix-ui/react-radio-group,前端装包是 Windows 专属
 // (见 memory),不为此新增依赖。改用可点击列表项 + selected-state 样式实现单选语义。
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, RotateCcw, Terminal, FolderOpen } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, Terminal } from 'lucide-react';
 import type { TaskEnv, ClaudeSessionMeta } from '@ai-task-flow/shared';
 import {
   Dialog,
@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/toaster';
 import { systemApi } from '@/api/task';
+import { RepoPathPicker } from './RepoPathPicker';
 import { relativeTime } from '@/lib/taskMeta';
 import { cn } from '@/lib/utils';
 
@@ -43,8 +44,6 @@ interface OpenClaudeDialogProps {
   /** 任务级固定路径(传入则隐藏路径选择器,直接用此路径) */
   repoPath?: string;
   env: TaskEnv;
-  /** 看板级:可选项目路径列表(下拉项) */
-  projectOptions?: string[];
   /** 看板级:允许选择/自选路径(repoPath 未传时显示路径选择器) */
   allowPickRepo?: boolean;
 }
@@ -54,7 +53,6 @@ export function OpenClaudeDialog({
   onOpenChange,
   repoPath,
   env,
-  projectOptions,
   allowPickRepo,
 }: OpenClaudeDialogProps) {
   // 任务级:传了 repoPath 视为固定,不显示路径选择器
@@ -126,16 +124,6 @@ export function OpenClaudeDialog({
     };
   }, [open, effectiveRepo]);
 
-  // 看板级:浏览自选项目目录
-  const onPickDir = async () => {
-    try {
-      const { path } = await systemApi.selectDirectory();
-      if (path) setSelectedRepo(path);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '选择目录失败');
-    }
-  };
-
   // fire-and-forget:不阻塞 UI,用户可连续点开多个终端窗口;成功/失败由 toast 异步反馈
   const openNew = () => {
     if (!effectiveRepo) {
@@ -185,32 +173,15 @@ export function OpenClaudeDialog({
         {/* 中间区:flex-1 可收缩;项目路径/执行环境/新建会话/历史标题 shrink-0 固定,
             只有历史会话列表滚动 → 标题与底部按钮永不随内容滚走 */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-          {/* 看板级:项目路径选择器(下拉已有项目 + 浏览自选) */}
+          {/* 看板级:项目路径(手输 / 历史建议 / 浏览,共享全局历史) */}
           {!fixedRepo && allowPickRepo && (
             <div className="flex shrink-0 items-center gap-2">
               <span className="text-muted-foreground w-16 shrink-0 text-xs font-medium">项目路径</span>
-              <Select value={selectedRepo} onValueChange={setSelectedRepo}>
-                <SelectTrigger className="h-8 w-full">
-                  <SelectValue placeholder="选择已有项目路径" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(projectOptions ?? []).map((p) => (
-                    <SelectItem key={p} value={p}>
-                      <span className="truncate">{p}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-8 shrink-0"
-                onClick={() => void onPickDir()}
-                aria-label="浏览选择目录"
-                title="浏览选择目录"
-              >
-                <FolderOpen className="size-4" />
-              </Button>
+              <RepoPathPicker
+                value={selectedRepo}
+                onChange={setSelectedRepo}
+                placeholder="选择或输入项目路径"
+              />
             </div>
           )}
 

@@ -90,11 +90,6 @@ export function BoardToolbar() {
     return Array.from(keys);
   }, [tasks]);
 
-  // 看板级「打开终端」:可选项目路径 = 已有任务的 repoPath 去重
-  const repoPaths = useMemo(
-    () => Array.from(new Set(tasks.map((t) => t.repoPath).filter(Boolean))) as string[],
-    [tasks],
-  );
   const [openClaude, setOpenClaude] = useState(false);
 
   return (
@@ -202,7 +197,6 @@ export function BoardToolbar() {
         open={openClaude}
         onOpenChange={setOpenClaude}
         env="pwsh"
-        projectOptions={repoPaths}
         allowPickRepo
       />
     </div>

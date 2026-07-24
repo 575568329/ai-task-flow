@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Loader2,
-  FolderOpen,
   Terminal,
   Trash2,
   Copy,
@@ -44,8 +43,8 @@ import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { usePreviewStore } from '@/stores/previewStore';
-import { systemApi } from '@/api/task';
 import { StepEditor } from './StepEditor';
+import { RepoPathPicker } from './RepoPathPicker';
 import { OpenClaudeDialog } from './OpenClaudeDialog';
 import { STATUS_LABELS } from '@/lib/taskMeta';
 import {
@@ -178,20 +177,6 @@ export function TaskDrawer() {
   };
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
-
-  const onPickDir = async () => {
-    try {
-      const { path } = await systemApi.selectDirectory();
-      if (path) {
-        patch({
-          repoPath: path,
-          projectName: draft.projectName || path.split(/[\\/]/).pop() || '',
-        });
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '选择目录失败');
-    }
-  };
 
   const parseRelatedFiles = () =>
     draft.relatedFilesText
@@ -379,16 +364,16 @@ export function TaskDrawer() {
               </Select>
             </Field>
             <Field label="仓库路径">
-              <div className="flex gap-2">
-                <Input
-                  value={draft.repoPath}
-                  onChange={(e) => patch({ repoPath: e.target.value })}
-                  placeholder="/path/to/repo"
-                />
-                <Button variant="outline" size="icon" onClick={onPickDir} aria-label="选择目录">
-                  <FolderOpen className="size-4" />
-                </Button>
-              </div>
+              <RepoPathPicker
+                value={draft.repoPath}
+                onChange={(p) => patch({ repoPath: p })}
+                onPicked={(path) =>
+                  patch({
+                    repoPath: path,
+                    projectName: draft.projectName || path.split(/[\\/]/).pop() || '',
+                  })
+                }
+              />
             </Field>
             <Field label="项目名">
               <Input
