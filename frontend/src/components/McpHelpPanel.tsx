@@ -139,6 +139,9 @@ export function McpHelpPanel() {
         </div>
         <ul className="text-muted-foreground flex list-disc flex-col gap-0.5 pl-5">
           <li>
+            <span className="text-foreground font-medium">WSL 双环境:</span>项目 .mcp.json 用相对路径,Windows 与 WSL 的 Claude Code 打开项目时都自动挂载;若 WSL 装了 claude,一键挂载会额外注册 WSL 侧 local scope(免首次信任弹窗)。
+          </li>
+          <li>
             须在项目根打开 Claude Code 才能解析相对路径;改了 MCP 代码需重新{' '}
             <code className="bg-muted rounded px-1">npm run build:backend</code>
           </li>
