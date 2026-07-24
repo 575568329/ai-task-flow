@@ -257,8 +257,27 @@ export function OpenClaudeDialog({
                           {s.source === 'wsl' ? 'WSL' : 'Win'}
                         </span>
                       </div>
-                      <div className="text-muted-foreground pl-5 text-[10px]">
-                        {s.messageCount} 条消息 · {relativeTime(s.lastActiveAt)}
+                      <div className="text-muted-foreground flex items-center gap-1 pl-5 text-[10px]">
+                        <span className="shrink-0">
+                          {s.messageCount} 条消息 · {relativeTime(s.lastActiveAt)}
+                        </span>
+                        <span className="shrink-0">·</span>
+                        {/* sessionId:显示前 8 位(够区分),点击复制完整 id;外层是 button 不能再嵌 button,用 span role=button */}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title={`点击复制完整会话 id:\n${s.sessionId}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(s.sessionId).then(
+                              () => toast.success('会话 id 已复制'),
+                              () => toast.error('复制失败'),
+                            );
+                          }}
+                          className="hover:text-foreground font-mono shrink-0 cursor-pointer transition-colors"
+                        >
+                          {s.sessionId.slice(0, 8)}
+                        </span>
                       </div>
                     </button>
                   );
