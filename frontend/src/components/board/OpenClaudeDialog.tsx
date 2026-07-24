@@ -180,7 +180,6 @@ export function OpenClaudeDialog({
               <RepoPathPicker
                 value={selectedRepo}
                 onChange={setSelectedRepo}
-                placeholder="选择或输入项目路径"
               />
             </div>
           )}

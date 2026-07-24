@@ -1,12 +1,18 @@
 // frontend/src/components/board/RepoPathPicker.tsx
-// 全局共享的仓库路径选择器:可手输 / 从历史建议选 / 浏览系统目录。
-// - 历史建议用 HTML 原生 <datalist>(原生能力,聚焦即见,无需自建下拉)
-// - 浏览调用系统原生文件夹选择器(原生能力,不自己模拟)
-// - 确认的合法路径写入全局历史(localStorage),其它入口立即可用
-import { useEffect, useId, useMemo, useState } from 'react';
+// 全局共享的仓库路径选择器:标准 Radix Select 下拉 + 「浏览选择…」哨兵项。
+// - 下拉项 = 已有任务用过的 repoPath + 全局历史(localStorage),合并去重
+// - 选「浏览选择…」→ 调系统原生文件夹选择器(原生能力,不自己模拟)
+// - 确认的合法路径写入全局历史,其它入口立即可用
+// 复用 ui/select(与执行环境等 Select 交互一致),不自建输入框。
+import { useEffect, useMemo, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { systemApi } from '@/api/task';
 import { useTaskStore } from '@/stores/taskStore';
 import { toast } from '@/components/ui/toaster';
@@ -21,9 +27,12 @@ interface RepoPathPickerProps {
   value: string;
   onChange: (path: string) => void;
   placeholder?: string;
-  /** 浏览/选中目录成功后的额外回调(如 TaskDrawer 据此回填 projectName) */
+  /** 选中/浏览目录成功后的额外回调(如 TaskDrawer 据此回填 projectName) */
   onPicked?: (path: string) => void;
 }
+
+/** 「浏览选择…」哨兵值(合法路径不会以双下划线开头,无冲突) */
+const BROWSE_SENTINEL = '__browse__';
 
 export function RepoPathPicker({
   value,
@@ -31,7 +40,6 @@ export function RepoPathPicker({
   placeholder,
   onPicked,
 }: RepoPathPickerProps) {
-  const listId = useId();
   const [history, setHistory] = useState<string[]>(() => loadRepoHistory());
 
   useEffect(
@@ -40,18 +48,18 @@ export function RepoPathPicker({
   );
 
   // 已有任务用过的 repoPath(运行时从 store 取;与全局历史合并,
-  // 无需手动积累即可在 datalist 里选到「已经有的项目路径」)
+  // 无需手动积累即可在下拉里选到「已经有的项目路径」)
   const tasks = useTaskStore((s) => s.tasks);
   const taskRepoPaths = useMemo(
     () => tasks.map((t) => t.repoPath).filter((p): p is string => !!p),
     [tasks],
   );
 
-  // 建议项 = 全局历史 + 已有任务 repoPath(合并去重,过滤脏数据与当前值)
-  const suggestions = useMemo(() => {
-    const merged = [...history, ...taskRepoPaths];
-    return Array.from(new Set(merged.filter((p) => VALID_REPO_PATH.test(p) && p !== value)));
-  }, [history, taskRepoPaths, value]);
+  // 选项 = 当前值 + 已有任务路径 + 全局历史(合并去重,过滤脏数据)
+  const options = useMemo(() => {
+    const merged = [value, ...taskRepoPaths, ...history];
+    return Array.from(new Set(merged.filter((p) => VALID_REPO_PATH.test(p))));
+  }, [value, taskRepoPaths, history]);
 
   const onBrowse = async () => {
     try {
@@ -65,35 +73,33 @@ export function RepoPathPicker({
     }
   };
 
-  // 失焦时若值是合法绝对路径,顺手写入历史(手输的新路径也进历史)
-  const onBlur = () => {
-    const v = value.trim();
-    if (v && VALID_REPO_PATH.test(v)) addRepoHistory(v);
+  const handleSelect = (v: string) => {
+    if (v === BROWSE_SENTINEL) {
+      void onBrowse();
+      return;
+    }
+    onChange(v);
+    onPicked?.(v); // 选已有路径也触发,便于上层回填 projectName
   };
 
   return (
-    <div className="flex gap-2">
-      <Input
-        list={listId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder ?? '/path/to/repo'}
-      />
-      <datalist id={listId}>
-        {suggestions.map((p) => (
-          <option key={p} value={p} />
+    <Select value={value || undefined} onValueChange={handleSelect}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={placeholder ?? '选择或浏览项目路径'} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((p) => (
+          <SelectItem key={p} value={p}>
+            <span className="truncate">{p}</span>
+          </SelectItem>
         ))}
-      </datalist>
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => void onBrowse()}
-        aria-label="选择目录"
-        title="选择目录"
-      >
-        <FolderOpen className="size-4" />
-      </Button>
-    </div>
+        <SelectItem value={BROWSE_SENTINEL}>
+          <span className="flex items-center gap-1">
+            <FolderOpen className="size-3.5" />
+            浏览选择…
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
