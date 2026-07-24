@@ -366,7 +366,10 @@ class AITaskFlowServer {
     // 任务步骤里的截图原本是 markdown 链接,指向后端 localhost:5678;WSL 侧 Claude Code
     // 访问不到该地址(死链)。把每张 /api/uploads/ 图替换成本地文件的两种路径(WSL + Windows),
     // Claude 按自身运行环境取用 Read 即可,无需访问 HTTP,也不把 base64 塞进上下文(省 token)。
-    let markdown = lines.join('\n');
+    // 顶部注入任务标记(HTML 注释,前端不渲染但写进 jsonl 日志):ClaudeSessionScanner
+    // 扫该会话 user 行(get_task 的 tool_result)时据此把后续 assistant 用量关联到本任务。
+    // jsonl 追加只写、历史行不可变,标记不会被冲掉。
+    let markdown = `<!-- ai-task-flow: task=${task.id.value} -->\n` + lines.join('\n');
     const wslUploads = uploadsDirPath();
     const winUploads = uploadsDirWindowsPath();
     const ranges: Array<{ start: number; end: number; label: string }> = [];

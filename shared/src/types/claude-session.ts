@@ -2,6 +2,7 @@
 // Claude Code 历史会话相关共享类型(前后端单一来源)
 
 import type { TaskEnv } from './task.js';
+import type { SessionUsage } from './usage.js';
 
 /** 单个 Claude 历史会话的元信息(后端扫描 ~/.claude/projects 得出) */
 export interface ClaudeSessionMeta {
@@ -11,6 +12,8 @@ export interface ClaudeSessionMeta {
   lastActiveAt: string;    // ISO, 取文件 mtime
   messageCount: number;    // 消息条数(近似活跃度)
   source?: 'windows' | 'wsl';  // 会话来源:cwd 盘符路径→windows(原生 cmd/pwsh Claude),/mnt 或 / 开头→wsl(WSL 内 Claude)
+  /** 会话 Token 用量(扫 jsonl 行级 message.usage 累加);无 assistant 消息的空会话为空总量 */
+  usage?: SessionUsage;
 }
 
 /** GET /api/system/claude-sessions 响应 */

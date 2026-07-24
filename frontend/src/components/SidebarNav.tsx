@@ -9,6 +9,7 @@ import {
   FileText,
   BookOpen,
   Languages,
+  Gauge,
   Sun,
   Moon,
   Settings,
@@ -21,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/lib/utils';
 
-export type ViewKey = 'board' | 'chat' | 'docs' | 'knowledge' | 'vocab';
+export type ViewKey = 'board' | 'chat' | 'docs' | 'knowledge' | 'vocab' | 'usage';
 
 interface NavItem {
   key: ViewKey;
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'docs', label: '任务文档', icon: FileText },
   { key: 'knowledge', label: '知识库', icon: BookOpen },
   { key: 'vocab', label: '生词本', icon: Languages },
+  { key: 'usage', label: '用量', icon: Gauge },
 ];
 
 const COLLAPSE_KEY = 'ai-task-flow-sidebar-collapsed';

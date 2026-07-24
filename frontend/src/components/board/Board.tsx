@@ -2,20 +2,23 @@
 // 看板主体:DndContext + 3 列,拖拽跨列 = optimisticMove 改 status。
 // 应用 BoardToolbar 的筛选(project/source/search)。
 // 列内卡片由 KanbanColumn 按 projectName 二次分组(可折叠),缓解单列纵向过长。
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   closestCorners,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import { TaskStatus } from '@ai-task-flow/shared';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/components/ui/toaster';
 import { KanbanColumn } from './KanbanColumn';
+import { TaskCardBody } from './TaskCard';
 import { KANBAN_COLUMNS, UNGROUPED_KEY } from './meta';
 
 export function Board() {
@@ -29,6 +32,12 @@ export function Board() {
   // distance 8px:小于阈值算点击(打开 Drawer),超过算拖拽
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeTask = useMemo(
+    () => (activeId ? tasks.find((t) => t.id === activeId) ?? null : null),
+    [tasks, activeId],
   );
 
   const filtered = useMemo(() => {
@@ -67,7 +76,12 @@ export function Board() {
   const tasksOfStatus = (status: TaskStatus) =>
     filtered.filter((task) => task.status === status);
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over) return;
     const taskId = String(active.id);
@@ -89,6 +103,7 @@ export function Board() {
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <div className="flex h-full gap-3 overflow-x-auto p-3">
@@ -100,6 +115,18 @@ export function Board() {
           />
         ))}
       </div>
+      {/*
+        DragOverlay 把拖拽预览 portal 到 body,脱离看板的 overflow-x-auto 容器与各列的
+        overflow-y-auto / 列头,始终处于最高层级——根治「拖到列头上方时卡片被列头遮住」。
+        原卡片在 TaskCard 的 isDragging 下保持 opacity-40 作占位。
+      */}
+      <DragOverlay>
+        {activeTask && (
+          <div className="bg-card flex w-full cursor-grabbing flex-col gap-1.5 rounded-md border p-2.5 shadow-lg">
+            <TaskCardBody task={activeTask} />
+          </div>
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }
