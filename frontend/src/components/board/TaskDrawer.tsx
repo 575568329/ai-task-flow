@@ -77,7 +77,7 @@ const EMPTY_DRAFT: Draft = {
   priority: Priority.P2,
   repoPath: '',
   projectName: '',
-  env: 'cmd',
+  env: 'pwsh',
   relatedFilesText: '',
   steps: [],
 };
@@ -90,7 +90,7 @@ function taskToDraft(task: TaskDTO): Draft {
     priority: task.priority,
     repoPath: task.repoPath ?? '',
     projectName: task.projectName ?? '',
-    env: task.env ?? 'cmd',
+    env: task.env ?? 'pwsh',
     relatedFilesText: task.relatedFiles.join('\n'),
     steps: task.steps,
   };
@@ -406,9 +406,9 @@ export function TaskDrawer() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cmd">cmd (Windows)</SelectItem>
-                  <SelectItem value="wsl">wsl (Ubuntu)</SelectItem>
                   <SelectItem value="pwsh">pwsh (PowerShell 7)</SelectItem>
+                  <SelectItem value="wsl">wsl (Ubuntu)</SelectItem>
+                  <SelectItem value="cmd">cmd (Windows)</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

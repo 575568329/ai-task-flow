@@ -201,7 +201,7 @@ export function BoardToolbar() {
       <OpenClaudeDialog
         open={openClaude}
         onOpenChange={setOpenClaude}
-        env="cmd"
+        env="pwsh"
         projectOptions={repoPaths}
         allowPickRepo
       />

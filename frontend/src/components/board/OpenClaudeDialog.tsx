@@ -222,9 +222,9 @@ export function OpenClaudeDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cmd">cmd (Windows)</SelectItem>
-                <SelectItem value="wsl">wsl (Ubuntu)</SelectItem>
                 <SelectItem value="pwsh">pwsh (PowerShell 7)</SelectItem>
+                <SelectItem value="wsl">wsl (Ubuntu)</SelectItem>
+                <SelectItem value="cmd">cmd (Windows)</SelectItem>
               </SelectContent>
             </Select>
           </div>

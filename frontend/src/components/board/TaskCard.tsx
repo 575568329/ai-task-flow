@@ -45,6 +45,9 @@ export function TaskCard({ task }: TaskCardProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1 pl-5">
+        <Badge variant="outline" className="px-1.5 py-0 font-mono text-[10px]">
+          {task.id}
+        </Badge>
         <Badge variant={priorityMeta.variant} className="px-1.5 py-0 text-[10px]">
           {priorityMeta.label}
         </Badge>
