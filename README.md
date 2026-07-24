@@ -31,7 +31,7 @@
 ⑥看板 SSE 自动刷新  ←  ⑤Claude 回写结果  ←  ④你在终端用 Claude Code 经 MCP 拉取任务
 ```
 
-任务状态机:`planning → todo → dispatched → review → done`(可 `blocked`)。
+任务状态机(四态):`TODO → IN_PROGRESS → DONE`(任意态可 `BLOCKED`)。打开终端不改状态,`TODO` 直接回写结果即完成。
 
 ---
 
@@ -89,15 +89,16 @@ npm run build:backend
 
 ## MCP 工具(给 Claude Code)
 
-配置好后,在 Claude Code 里可直接调用以下 5 个工具:
+配置好后,在 Claude Code 里可直接调用以下 **6 个工具**(完整说明见 [`docs/MCP_TOOLS_GUIDE.md`](docs/MCP_TOOLS_GUIDE.md)):
 
 | 工具 | 作用 |
 |------|------|
-| `list_pending_tasks` | 列出待办/已派发任务(支持 `status` 过滤) |
-| `get_task` | 获取任务详情(Markdown 格式,含验收标准/相关文件/worktree) |
-| `record_result` | 回写执行结果(done/partial/blocked + 变更文件 + 备注) |
-| `get_task_diff` | 获取任务 worktree 相对基线分支的 git diff |
+| `list_pending_tasks` | 列出待办/进行中任务(`status`:todo/pending/all,默认 pending) |
+| `get_task` | 获取任务详情(Markdown,含步骤勾选 + 截图本地双路径) |
+| `record_result` | 回写整任务结果(done/partial/blocked + 变更文件 + 备注) |
+| `complete_step` | 回写单步完成度(1-based stepNumber),自动推进状态 |
 | `add_note_to_task` | 给任务追加备注 |
+| `save_to_knowledge` | 把结论沉淀到知识库 |
 
 典型用法:在 Claude Code 里说「列出待办任务」→「拉取 WS-001」→ 完成后「回写 WS-001 的结果」。
 
@@ -122,19 +123,16 @@ npm run build:backend
 | GET | `/health` | 健康检查 |
 | GET | `/api/tasks` | 所有任务 |
 | GET | `/api/tasks/:id` | 单个任务 |
-| GET | `/api/tasks/status/:status` | 按状态查询 |
+| GET | `/api/tasks/status/:status` | 按状态查询(todo / in_progress / done / blocked) |
 | POST | `/api/tasks` | 创建任务 |
-| PATCH | `/api/tasks/:id` | 更新任务(发布 `TaskUpdated` 事件,驱动 SSE) |
+| PATCH | `/api/tasks/:id` | 更新任务(status 走状态机校验,驱动 SSE) |
 | DELETE | `/api/tasks/:id` | 删除任务 |
-| GET | `/api/tasks/:id/diff` | 获取 worktree 的 git diff(支持 `?base=`) |
-| POST | `/api/tasks/:id/approve` | 审查通过(review→done,发布 `TaskApproved`) |
-| POST | `/api/tasks/:id/reject` | 审查打回(review→todo,发布 `TaskRejected`) |
 | GET | `/api/events` | SSE 事件流(实时推送) |
-| GET | `/api/llm-config` | LLM 配置(apiKey 脱敏) |
-| PUT | `/api/llm-config` | 保存 LLM 配置(保存即热生效) |
+| GET / PUT | `/api/llm-config` | LLM 配置(GET 脱敏 / PUT 保存即热生效) |
 | POST | `/api/llm-config/test` | 测试连接(验证 端点/Key/模型,不保存) |
-| GET | `/api/system/storage` | 数据目录存储占用(分类统计) |
-| POST | `/api/system/storage/clear` | 按类别清理存储 |
+| GET / POST | `/api/system/storage`(`/clear`) | 数据目录占用统计 / 按类别清理 |
+
+> 另有 knowledge / chat(资料调研)/ vocab(翻译生词本)/ upload / file / project / system 等模块路由,详见后端 `backend/src/interfaces/http/routes/`。
 
 ---
 
@@ -153,7 +151,7 @@ ai-task-flow/
 │       │   └── di/                  # tsyringe 容器
 │       └── interfaces/
 │           ├── http/                # Fastify REST API + SSE
-│           └── mcp/                 # MCP Server(5 工具)
+│           └── mcp/                 # MCP Server(6 工具)
 ├── frontend/
 │   └── src/
 │       ├── api/                     # HTTP 封装 + SSE 客户端
@@ -201,7 +199,6 @@ BASE_URL=http://localhost:3001 bash tests/run_all.sh   # 终端 B
 - **无 AI 任务拆解**(任务靠人工录入)
 - **无鉴权**:默认 HTTP 监听 `0.0.0.0`(局域网可访问,便于团队共用)。敏感入口(如设置)按来源 IP 判定本机,非本机自动隐藏;但这**不是真正的鉴权**,公网暴露请自行加鉴权并改监听地址
 - **JSON 文件存储**:无事务/并发控制,适合单人本地场景
-- `applyUpdate`(看板拖拽改状态)不强制状态机校验,允许任意状态跳转
 
 ---
 

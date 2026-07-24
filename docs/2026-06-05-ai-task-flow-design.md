@@ -205,6 +205,8 @@ v3 保留的核心:
 
 ### 3.1 暴露的 MCP 工具清单
 
+> ⚠️ **已演进**：下表为 v3 初始设计快照（含 `update_status` / `get_task_diff` 等**未实现**项）。**现状以代码为准**：共 6 个工具（`list_pending_tasks` / `get_task` / `record_result` / `complete_step` / `add_note_to_task` / `save_to_knowledge`），详见 [MCP_TOOLS_GUIDE](MCP_TOOLS_GUIDE.md)。
+
 | 工具名 | 用途 | 调用频率 |
 |-------|------|---------|
 | `list_pending_tasks` | 列出当前项目待执行任务(status=dispatched) | 较少,通常用户已知 ID |
@@ -429,6 +431,8 @@ enum TaskStatus {
 ```
 
 简化说明: v2 的 RUNNING 状态在 v3 不需要（v2 是 Agent SDK 启动 session 后的状态，v3 没有 session 概念）。Claude 拉取任务瞬间仍标记 DISPATCHED，直到它回写才进 REVIEW。
+
+> ⚠️ **已演进为四态**：现状为 `TODO` / `IN_PROGRESS` / `DONE` / `BLOCKED`（已去掉 `planning` / `dispatched` / `review`，会话化不再走「派发→审核」两段式）。详见 [避坑约定第三节](20260723130001_项目避坑与约定.md) 与 [MCP_TOOLS_GUIDE](MCP_TOOLS_GUIDE.md)。
 
 ### 4.2 目录结构 (v3 精简版)
 

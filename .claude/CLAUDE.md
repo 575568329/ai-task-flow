@@ -502,7 +502,7 @@ Task 4: WorktreeManager (git worktree 管理)
   ↓
 Task 5: Task 聚合根 (dispatch/recordResult)
   ↓
-Task 6-12: MCP Server + 5 个工具
+Task 6-12: MCP Server + 6 个工具
   ↓
 Task 13-15: EventBus + EventStore
   ↓
@@ -650,7 +650,9 @@ Good luck! 🚀
 - **非内网环境装前删 `package-lock.json`**（含科大讯飞内网源，公网 ENOTFOUND，报误导性的 `Exit handler never called!`）。
 - 前端固定 `5678`、backend 默认 `3000`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
 - MCP 的 `TaskRepository` 必须 `useFactory` 注册（否则启动 DI 崩溃）。
-- 任务三态 `TODO` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
+- 任务**四态** `TODO` / `IN_PROGRESS` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
+- Claude 每完成一步调 MCP `complete_step`（`stepNumber` 1-based）回写：全步完成→自动转 `DONE`，否则→`IN_PROGRESS`。
+- `get_task` 返回的截图是本地路径（非 localhost 死链）：同时给 WSL（`/mnt/c/...`）和 Windows（`C:\...`）两种，按运行环境 `Read` 即可。
 - `LlmConfigService` 返回值含密钥，**禁止透传前端 / 日志**，用 `getMaskedConfig()`。
 - MCP 回写 `tasks.json` 后前端靠文件轮询刷新（非实时），等几秒再看板。
 - 运行时产物勿提交（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
