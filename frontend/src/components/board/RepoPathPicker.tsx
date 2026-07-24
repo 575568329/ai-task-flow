@@ -3,11 +3,12 @@
 // - 历史建议用 HTML 原生 <datalist>(原生能力,聚焦即见,无需自建下拉)
 // - 浏览调用系统原生文件夹选择器(原生能力,不自己模拟)
 // - 确认的合法路径写入全局历史(localStorage),其它入口立即可用
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { systemApi } from '@/api/task';
+import { useTaskStore } from '@/stores/taskStore';
 import { toast } from '@/components/ui/toaster';
 import {
   loadRepoHistory,
@@ -38,8 +39,19 @@ export function RepoPathPicker({
     [],
   );
 
-  // datalist 建议不含当前值(避免重复项)
-  const suggestions = history.filter((p) => p !== value);
+  // 已有任务用过的 repoPath(运行时从 store 取;与全局历史合并,
+  // 无需手动积累即可在 datalist 里选到「已经有的项目路径」)
+  const tasks = useTaskStore((s) => s.tasks);
+  const taskRepoPaths = useMemo(
+    () => tasks.map((t) => t.repoPath).filter((p): p is string => !!p),
+    [tasks],
+  );
+
+  // 建议项 = 全局历史 + 已有任务 repoPath(合并去重,过滤脏数据与当前值)
+  const suggestions = useMemo(() => {
+    const merged = [...history, ...taskRepoPaths];
+    return Array.from(new Set(merged.filter((p) => VALID_REPO_PATH.test(p) && p !== value)));
+  }, [history, taskRepoPaths, value]);
 
   const onBrowse = async () => {
     try {
