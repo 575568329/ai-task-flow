@@ -8,11 +8,7 @@ import {
   FolderOpen,
   File as FileIcon,
   ChevronDown,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  Loader2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { listFiles, type FileEntry } from '@/api/files';
 import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
@@ -29,7 +25,6 @@ export function FileTree({ root, selectedFile, onSelectFile, refreshSignal }: Fi
   // 已加载目录内容:sub path → entries('' 为根)
   const [tree, setTree] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [expanding, setExpanding] = useState(false);
 
   // root 切换判断 + 展开态最新值(ref 绕过 effect 依赖,避免展开即重载)
   const rootRef = useRef(root);
@@ -84,45 +79,6 @@ export function FileTree({ root, selectedFile, onSelectFile, refreshSignal }: Fi
     }
     setExpanded(next);
   };
-
-  // 全部展开:BFS 递归懒加载所有子目录并标记展开(已加载的复用,避免重复请求)
-  const expandAll = async () => {
-    setExpanding(true);
-    try {
-      const newTree: Record<string, FileEntry[]> = { ...tree };
-      const newExpanded = new Set<string>();
-      const visited = new Set<string>();
-      const queue: string[] = [''];
-      while (queue.length > 0) {
-        const sub = queue.shift()!;
-        if (visited.has(sub)) continue;
-        visited.add(sub);
-        let entries = newTree[sub];
-        if (!entries) {
-          try {
-            const res = await listFiles(root, sub || undefined);
-            entries = res.entries;
-            newTree[sub] = entries;
-          } catch {
-            entries = [];
-            newTree[sub] = [];
-          }
-        }
-        for (const e of entries) {
-          if (e.type === 'dir') {
-            newExpanded.add(e.path);
-            if (!visited.has(e.path)) queue.push(e.path);
-          }
-        }
-      }
-      setTree(newTree);
-      setExpanded(newExpanded);
-    } finally {
-      setExpanding(false);
-    }
-  };
-
-  const collapseAll = () => setExpanded(new Set());
 
   const renderDir = (sub: string, depth: number): ReactNode => {
     const entries = tree[sub];
@@ -183,31 +139,6 @@ export function FileTree({ root, selectedFile, onSelectFile, refreshSignal }: Fi
 
   return (
     <div className="flex flex-col py-1">
-      {/* 全部展开 / 全部收起(懒加载树:全部展开时递归加载所有子目录) */}
-      <div className="flex items-center gap-1 px-1 pb-1">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-muted-foreground h-7 gap-1 px-1.5 text-xs"
-          onClick={() => void expandAll()}
-          disabled={expanding}
-          title="展开全部目录"
-        >
-          <ChevronsUpDown className="size-3.5" />
-          全部展开
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-muted-foreground h-7 gap-1 px-1.5 text-xs"
-          onClick={collapseAll}
-          title="收起全部目录"
-        >
-          <ChevronsDownUp className="size-3.5" />
-          全部收起
-        </Button>
-        {expanding && <Loader2 className="text-muted-foreground ml-auto size-3 animate-spin" />}
-      </div>
       {renderDir('', 0)}
     </div>
   );
