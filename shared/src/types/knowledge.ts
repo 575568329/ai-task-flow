@@ -37,6 +37,8 @@ export interface KnowledgeManifest {
   tags: string[];                 // 所有 tags 去重排序(供下拉筛选)
   backlinks: BacklinksIndex;      // 反向链接索引
   generatedAt: number;            // 生成时间戳(Unix 毫秒)
+  /** 知识库物理根目录绝对路径(前端拼「复制磁盘路径」用:basePath + '/' + doc.path) */
+  basePath: string;
 }
 
 /** GET /api/knowledge/doc 返回 */

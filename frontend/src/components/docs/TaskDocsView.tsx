@@ -20,6 +20,7 @@ import {
   Save,
   Printer,
   Download,
+  Copy,
 } from 'lucide-react';
 import {
   ResizablePanelGroup,
@@ -39,6 +40,7 @@ import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { MdEditor } from '../knowledge/MdEditor';
 import { exportElementToPdf, downloadText } from '@/lib/docExport';
+import { copyDiskPath } from '@/lib/copyPath';
 import { FileTree } from './FileTree';
 
 type Mode = 'tasks' | 'files';
@@ -162,6 +164,13 @@ export function TaskDocsView() {
     mode === 'tasks'
       ? `${safeName(selectedTask?.title || selectedTask?.id || 'task')}.md`
       : (basename(selectedFilePath) || 'file.md');
+  /** 「复制磁盘路径」取值:任务文档用落盘的 taskFilePath,项目文件拼 root + 相对路径 */
+  const copyPathValue =
+    mode === 'tasks'
+      ? (selectedTask?.taskFilePath ?? '')
+      : selectedFilePath
+        ? `${activeRoot}/${selectedFilePath}`
+        : '';
 
   const previewEmpty =
     (mode === 'tasks' && !selectedTaskId) ||
@@ -488,6 +497,21 @@ export function TaskDocsView() {
                     <Save className="size-3.5" />
                   </Button>
                 </>
+              )}
+
+              {/* 复制磁盘路径(任务文档用 taskFilePath;项目文件拼 root+path) */}
+              {!previewEmpty && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground size-7"
+                  onClick={() => void copyDiskPath(copyPathValue)}
+                  disabled={!copyPathValue}
+                  aria-label="复制磁盘路径"
+                  title={copyPathValue ? '复制磁盘路径' : '无可用路径'}
+                >
+                  <Copy className="size-3.5" />
+                </Button>
               )}
 
               {/* 导出 PDF / 下载 md(预览态可用;PDF 依赖预览 DOM) */}

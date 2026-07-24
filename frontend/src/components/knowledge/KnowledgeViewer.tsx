@@ -2,7 +2,7 @@
 // 文档查看器:按 kind 分流(md 可编辑/预览 / img / pdf·html iframe / docx 下载)。
 // md 支持:编辑/预览切换、Ctrl+S 保存(PUT saveDoc)。新建入口在 KnowledgeTree(目录树顶部)。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Trash2, Printer, Download, Pencil, Eye, Save, Star } from 'lucide-react';
+import { Trash2, Printer, Download, Pencil, Eye, Save, Star, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { usePreviewStore } from '@/stores/previewStore';
 import { exportElementToPdf } from '@/lib/docExport';
+import { copyDiskPath } from '@/lib/copyPath';
 import { cn } from '@/lib/utils';
 
 export function KnowledgeViewer() {
@@ -29,6 +30,7 @@ export function KnowledgeViewer() {
 
   const doc = getCurrentDoc();
   const isFav = doc ? favorites.includes(doc.path) : false;
+  const basePath = useKnowledgeStore((s) => s.manifest?.basePath ?? '');
   const [draft, setDraft] = useState('');
   const [original, setOriginal] = useState('');
   const [loading, setLoading] = useState(false);
@@ -211,6 +213,16 @@ export function KnowledgeViewer() {
 
         {doc && (
           <>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="text-muted-foreground size-7"
+              onClick={() => void copyDiskPath(`${basePath}/${doc.path}`)}
+              aria-label="复制磁盘路径"
+              title="复制磁盘路径"
+            >
+              <Copy className="size-3.5" />
+            </Button>
             {isMd && mode === 'view' && (
               <Button
                 size="icon"
