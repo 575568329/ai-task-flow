@@ -3,6 +3,7 @@
 // 后端透传 Claude Code stream-json 事件(assistant/user/result/init/error),前端按 type 分发渲染。
 import type { AgentEvent, ChatSessionSummary, ChatTurn } from '@ai-task-flow/shared';
 import { http } from './http';
+import { streamAgentEvents } from './sse-utils';
 
 /** 列出该任务仓库下的历史 Claude 会话(复用后端 ClaudeSessionScanner) */
 export function listTaskChatSessions(taskId: string) {
@@ -43,7 +44,6 @@ export async function* streamTaskChat(
   });
 
   if (!response.ok) {
-    // 非流式错误(404/400 等):后端返回 JSON { error }
     let detail = `HTTP ${response.status}`;
     try {
       const data = await response.json();
@@ -53,38 +53,6 @@ export async function* streamTaskChat(
     }
     throw new Error(detail);
   }
-  if (!response.body) throw new Error('响应无 body');
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // 解析 SSE 帧:"data: {...}\n\n"
-    const frames = buffer.split('\n\n');
-    buffer = frames.pop() ?? '';
-    for (const frame of frames) {
-      yield* parseFrame(frame);
-    }
-  }
-  // 流结束后处理 buffer 残留:后端若因异常/abort 退出,最后一帧可能没补 \n\n,
-  // 不处理会丢 result 事件 → streaming 卡死、sessionId 不落盘、续接断链。
-  if (buffer.trim()) yield* parseFrame(buffer);
-}
-
-/** 解析单个 SSE 帧,产出其中的 AgentEvent(非 data 行 / 非 JSON 静默忽略) */
-function* parseFrame(frame: string): Generator<AgentEvent> {
-  const trimmed = frame.trim();
-  if (!trimmed) return;
-  const match = trimmed.match(/^data: (.+)$/s);
-  if (!match) return;
-  try {
-    yield JSON.parse(match[1]) as AgentEvent;
-  } catch {
-    // 非 JSON 帧(keep-alive 注释等)忽略
-  }
+  yield* streamAgentEvents(response);
 }
