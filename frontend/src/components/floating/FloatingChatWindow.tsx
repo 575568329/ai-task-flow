@@ -4,15 +4,19 @@
 //  - onPointerDown 在拖拽 handle,setPointerCapture 保证指针移出元素仍可拖(不丢拖拽);
 //  - 实时只更内存 bounds,松手才落盘(避免疯狂写 localStorage);
 //  - clamp 到视口,保证标题栏始终可抓回(浏览器 resize 时也拉回)。
-// 内容:项目 tab(按 repoPath 分组)+ 对话视图(chat-first,无列表态;历史切换走顶栏历史按钮)。
-// bounds 持久化从原 floatingChatStore 内联到此(多任务 tab 模式已被项目 tab 取代,该 store 删除)。
+// 内容:项目 tab(按 repoPath 分组)+ 左右分栏(左 SessionList 常驻对话列表 + 右 ConversationPanel)。
+// 左栏可一键收起,收起状态与 bounds 一起记忆 localStorage(沿用 bounds 同模式,不污染 store)。
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { X } from 'lucide-react';
+import { X, PanelLeft } from 'lucide-react';
 import { ConversationPanel } from './ConversationPanel';
+import { SessionList } from './SessionList';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useProjectChatStore } from '@/stores/projectChatStore';
 import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'ai-task-flow:project-chat-bounds:v1';
+const SIDEBAR_KEY = 'ai-task-flow:project-chat-sidebar-collapsed:v1';
 const MIN_WIDTH = 380;
 const MIN_HEIGHT = 420;
 
@@ -74,6 +78,18 @@ export function FloatingChatWindow() {
   const activeRepoPath = useProjectChatStore((s) => s.activeRepoPath);
   const selectProject = useProjectChatStore((s) => s.selectProject);
   const closeWindow = useProjectChatStore((s) => s.closeWindow);
+  const openSession = useProjectChatStore((s) => s.openSession);
+  const startNew = useProjectChatStore((s) => s.startNew);
+  // 当前会话 id/side(左栏高亮 + 收起新建用);当前项目的会话列表(左栏数据源)
+  const currentSessionId = useProjectChatStore((s) =>
+    activeRepoPath ? s.conversations[activeRepoPath]?.sessionId : undefined,
+  );
+  const currentSide = useProjectChatStore((s) =>
+    activeRepoPath ? s.conversations[activeRepoPath]?.side : undefined,
+  );
+  const currentSessions = activeRepoPath
+    ? projects.find((p) => p.repoPath === activeRepoPath)?.sessions ?? []
+    : [];
 
   // bounds 用 ref + state:ref 持有最新值(拖拽/缩放 handler 读 ref,不依赖闭包过期),state 触发重渲染
   const boundsRef = useRef<Bounds>(loadBounds());
@@ -82,6 +98,36 @@ export function FloatingChatWindow() {
     boundsRef.current = next;
     setBoundsState(next);
   };
+
+  // 左栏收起状态:记忆 localStorage,命令式 collapse/expand 通过 panelRef(react-resizable-panels v4)
+  const leftPanelRef = useRef<PanelImperativeHandle>(null);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const persistCollapsed = (next: boolean) => {
+    setCollapsed(next);
+    try {
+      localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+    } catch {
+      // 忽略:隐私模式/配额,收起状态不落盘不影响功能(下次仍可手动收起)
+    }
+  };
+  const toggleSidebar = () => {
+    // 以 panel 真实状态为准(v4 拖拽到阈值会自动收起),避免按钮图标与实际不同步
+    const next = !(leftPanelRef.current?.isCollapsed() ?? collapsed);
+    if (next) leftPanelRef.current?.collapse();
+    else leftPanelRef.current?.expand();
+    persistCollapsed(next);
+  };
+  // 初次挂载:若记忆为收起,命令 Panel 收起(panelRef 首帧可用后)。onCollapse 也会同步 state,幂等。
+  useEffect(() => {
+    if (collapsed) leftPanelRef.current?.collapse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 拖拽:记录指针起点 + 窗口起点,松手落盘。dragging 用 ref 不触发重渲染。
   const dragging = useRef(false);
@@ -194,6 +240,20 @@ export function FloatingChatWindow() {
             </div>
           ))}
         </div>
+        {/* 列表收起按钮(关闭按钮左侧):一键收起/展开左栏对话列表 */}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={toggleSidebar}
+          className={cn(
+            'text-muted-foreground hover:text-foreground hover:bg-background/60 inline-flex size-6 shrink-0 items-center justify-center rounded',
+            collapsed && 'bg-background/50',
+          )}
+          aria-label={collapsed ? '展开对话列表' : '收起对话列表'}
+          title={collapsed ? '展开对话列表' : '收起对话列表'}
+        >
+          <PanelLeft className="size-3.5" />
+        </button>
         <button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
@@ -206,9 +266,34 @@ export function FloatingChatWindow() {
         </button>
       </div>
 
-      {/* 内容:对话视图(chat-first,历史切换走顶栏历史按钮) */}
+      {/* 内容:左右分栏(左 SessionList 常驻对话列表 + 右 ConversationPanel)。左栏可收起。 */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <ConversationPanel />
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel
+            defaultSize={22}
+            minSize={15}
+            collapsible
+            collapsedSize={0}
+            panelRef={leftPanelRef}
+            className="border-r"
+          >
+            <SessionList
+              sessions={currentSessions}
+              activeSessionId={currentSessionId}
+              loading={projectsLoading}
+              onSelect={(id, source) => {
+                if (!activeRepoPath) return;
+                const s = currentSessions.find((x) => x.sessionId === id);
+                void openSession(activeRepoPath, id, source, { title: s?.title, taskTitle: s?.taskTitle });
+              }}
+              onNew={() => activeRepoPath && startNew(activeRepoPath, currentSide ?? 'windows')}
+            />
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel defaultSize={78}>
+            <ConversationPanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       {/* 右下角缩放 handle:clipPath 裁成三角形,占位小但可抓 */}

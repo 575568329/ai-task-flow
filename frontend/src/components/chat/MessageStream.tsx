@@ -1,8 +1,11 @@
 // frontend/src/components/chat/MessageStream.tsx
-// 对话消息流渲染:turns → user 气泡 / assistant 归一化 blocks + 自动滚动 + 流式「思考中」占位 + 空态 + 终态 footer。
-// 任务对话(TaskConversation)与项目对话(ConversationPanel)共用,从 TaskConversation 抽取。
-// 交互细节借鉴 multica + 线上产品(见知识库「AI 对话流式交互细节调研」)。
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+// 对话消息流渲染:turns → user 气泡 / assistant 归一化 blocks。
+// 性能:浏览器原生 content-visibility:auto —— 屏幕外 turn 跳过布局/绘制(原生虚拟化),
+//   几百上千条不卡;不卸载 DOM(保留滚动位置/组件状态),对不定高消息无需测高、无绝对定位抖动。
+//   配合 TurnRow memo(applyChatEvent 对未变 turn 保持引用),流式仅末尾 turn 重渲。
+// 保留交互:自动滚底(nearBottom 判断)、流式占位、过程折叠、终态 footer、复制、错误、空态。
+// taskChat(TaskConversation)与 projectChat(ConversationPanel)共用。
+import { memo, useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { Copy } from 'lucide-react';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { Collapse } from '@/components/ui/collapse';
@@ -11,10 +14,15 @@ import { ToolUseCard } from '@/components/board/ToolUseCard';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatTurn } from '@ai-task-flow/shared';
 
-const NEAR_BOTTOM_THRESHOLD = 120; // 距底部 120px 内算「在底部」
+const NEAR_BOTTOM_THRESHOLD = 120;
+// content-visibility 屏幕外占位估计高度:'auto' 前缀让浏览器记住曾渲染过的真实高度,避免滚动条抖动
+const TURN_INTRINSIC_SIZE = 'auto 120px';
+// 屏幕外 turn 的容器样式:content-visibility:auto 跳过渲染,containIntrinsicSize 提供占位尺寸
+const turnContainerStyle: CSSProperties = {
+  contentVisibility: 'auto',
+  containIntrinsicSize: TURN_INTRINSIC_SIZE,
+};
 
-/** 把 assistant 一轮的 blocks 切成 preface / middle / final(借鉴 multica splitTimeline):
- *  非文本块(thinking/tool_use)视为「过程」,首末过程之间为 middle,其前 preface、其后 final。 */
 function splitBlocks(blocks: ChatBlock[]): { preface: ChatBlock[]; middle: ChatBlock[]; final: ChatBlock[] } {
   const firstNonText = blocks.findIndex((b) => b.kind !== 'text');
   if (firstNonText === -1) return { preface: blocks, middle: [], final: [] };
@@ -32,7 +40,6 @@ function splitBlocks(blocks: ChatBlock[]): { preface: ChatBlock[]; middle: ChatB
   };
 }
 
-/** 过程折叠:流式时展开,完成自动收(借鉴 multica OuterProcessFold) */
 function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: boolean }) {
   const [open, setOpen] = useState(streaming);
   const wasStreaming = useRef(streaming);
@@ -72,7 +79,6 @@ function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: bo
   );
 }
 
-/** 渲染一个 assistant 轮:preface → 过程折叠 → final(最终答案突出) */
 function AssistantTurn({ turn, streaming }: { turn: ChatTurn; streaming: boolean }) {
   const blocks = turn.blocks ?? [];
   const { preface, middle, final } = splitBlocks(blocks);
@@ -90,15 +96,11 @@ function AssistantTurn({ turn, streaming }: { turn: ChatTurn; streaming: boolean
   );
 }
 
-/** 「思考中…」内联指示(三个点呼吸动画 + 已用时长) */
 function ThinkingIndicator() {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    // 即便 claude 思考阶段不发中间事件,用户也能看到「还在工作、已 N 秒」,而非空白
     const start = Date.now();
-    const timer = setInterval(() => {
-      setSeconds(Math.floor((Date.now() - start) / 1000));
-    }, 500);
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 500);
     return () => clearInterval(timer);
   }, []);
   return (
@@ -122,33 +124,75 @@ interface MessageStreamProps {
   turns: ChatTurn[];
   streaming: boolean;
   error?: string;
-  /** 终态用量(显示用时);由调用方从 store 的 usage 传入 */
   usage?: MessageStreamUsage;
-  /** 空态提示;默认通用文案 */
   emptyHint?: ReactNode;
-  /** 复制最后一条 assistant 文本(footer 复制按钮);不传则不显示复制 */
   onCopyLast?: () => void;
 }
 
-/**
- * 对话消息流:自动滚动(仅靠近底部跟随,上翻看历史不被拉回)+ 流式占位 + 空态 + 终态 footer。
- * 用户发送(末尾变 user turn)时强制滚到底,确保看到自己刚发的消息。
- */
+/** 单 turn 渲染(memo):applyChatEvent 对未变 turn 保持引用,流式时仅末尾 turn 重渲 */
+const TurnRow = memo(function TurnRow({
+  turn,
+  isLast,
+  streaming,
+  usage,
+  onCopyLast,
+}: {
+  turn: ChatTurn;
+  isLast: boolean;
+  streaming: boolean;
+  usage?: MessageStreamUsage;
+  onCopyLast?: () => void;
+}) {
+  if (turn.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="bg-primary text-primary-foreground max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm">
+          {turn.text}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <AssistantTurn turn={turn} streaming={streaming && isLast} />
+      {!streaming && (
+        <div className="text-muted-foreground/70 flex items-center gap-2 text-[11px]">
+          {usage && typeof usage.duration_ms === 'number' && (
+            <span>用时 {(usage.duration_ms / 1000).toFixed(1)}s</span>
+          )}
+          {onCopyLast && (
+            <button
+              type="button"
+              onClick={onCopyLast}
+              className="hover:text-foreground inline-flex items-center gap-0.5 transition-colors"
+              title="复制回复"
+            >
+              <Copy className="size-3" />
+              复制
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
 export function MessageStream({ turns, streaming, error, usage, emptyHint, onCopyLast }: MessageStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
 
-  const scrollToBottom = (smooth: boolean) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-  };
-
+  // 末尾是 user turn = 用户刚发送,强制跟随;否则仅 nearBottom 时跟随
   useEffect(() => {
-    // 末尾是 user turn = 用户刚发送,强制跟随到底(替代原 TaskConversation onSend 里置 nearBottom=true)
     const last = turns[turns.length - 1];
     if (last?.role === 'user') nearBottomRef.current = true;
-    if (nearBottomRef.current) scrollToBottom(turns.length > 0);
+    if (nearBottomRef.current && turns.length > 0) {
+      const el = scrollRef.current;
+      if (!el) return;
+      const raf = requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+      return () => cancelAnimationFrame(raf);
+    }
   }, [turns, streaming]);
 
   const onScroll = () => {
@@ -160,50 +204,39 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
 
   const lastIsUser = turns.length === 0 || turns[turns.length - 1]?.role === 'user';
 
-  return (
-    <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
-      {turns.length === 0 &&
-        (emptyHint ?? (
-          <div className="text-muted-foreground py-8 text-center text-sm">在这里和 Claude 对话。</div>
-        ))}
-      {turns.map((t, i) => {
-        const isLast = i === turns.length - 1;
-        if (t.role === 'user') {
-          return (
-            <div key={t.id} className="flex justify-end">
-              <div className="bg-primary text-primary-foreground max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm">
-                {t.text}
-              </div>
-            </div>
-          );
-        }
-        return (
-          <div key={t.id} className="space-y-1.5">
-            <AssistantTurn turn={t} streaming={streaming && isLast} />
-            {/* 终态 footer:耗时 + 复制(非流式才显示) */}
-            {!streaming && (
-              <div className="text-muted-foreground/70 flex items-center gap-2 text-[11px]">
-                {usage && typeof usage.duration_ms === 'number' && (
-                  <span>用时 {(usage.duration_ms / 1000).toFixed(1)}s</span>
-                )}
-                {onCopyLast && (
-                  <button
-                    type="button"
-                    onClick={onCopyLast}
-                    className="hover:text-foreground inline-flex items-center gap-0.5 transition-colors"
-                    title="复制回复"
-                  >
-                    <Copy className="size-3" />
-                    复制
-                  </button>
-                )}
-              </div>
-            )}
+  if (turns.length === 0) {
+    return (
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
+        {emptyHint ?? <div className="text-muted-foreground py-8 text-center text-sm">在这里和 Claude 对话。</div>}
+        {streaming && lastIsUser && <ThinkingIndicator />}
+        {error && (
+          <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs whitespace-pre-wrap">
+            {error}
           </div>
-        );
-      })}
-      {/* 发送后→首个 assistant 事件前的空白期:streaming 且末尾仍是用户消息时,
-          立即补「思考中」占位(消除空白感)。收到首个 assistant 事件后由 AssistantTurn 内部指示器接管 */}
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="space-y-4">
+        {turns.map((t, i) => (
+          /* content-visibility:auto 让屏幕外 turn 跳过布局/绘制(原生虚拟化),不卸载 DOM */
+          <div key={t.id} style={turnContainerStyle}>
+            <div className="py-2">
+              <TurnRow
+                turn={t}
+                isLast={i === turns.length - 1}
+                streaming={streaming}
+                usage={usage}
+                onCopyLast={onCopyLast}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* 流式占位 + 错误:列表之后,nearBottom 时可见 */}
       {streaming && lastIsUser && <ThinkingIndicator />}
       {error && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs whitespace-pre-wrap">
