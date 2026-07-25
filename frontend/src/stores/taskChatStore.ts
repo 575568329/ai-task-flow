@@ -1,11 +1,11 @@
 // frontend/src/stores/taskChatStore.ts
-// 任务对话状态:按 taskId 分桶,把后端透传的 stream-json 事件归一化为渲染用的 turns/blocks。
-// - assistant.content[] → text/thinking/tool_use block
-// - user.content[] → tool_result 关联回对应 tool_use(按 tool_use_id)
-// - result → 终态:落 sessionId(供下轮续接)+ usage,流结束
+// 任务对话状态:按 taskId 分桶,消费后端透传的 stream-json 事件并编排渲染用 turns/blocks。
+// 归一化逻辑(applyEvent)抽到 ./chat/applyEvent(纯函数,可单测 + Phase 2 历史回放复用);
+// 本文件负责状态编排与 SSE 消费。终态 result → 落 sessionId(供下轮续接)+ usage,流结束。
 import { create } from 'zustand';
 import type { AgentEvent, ChatBlock, ChatTurn, ChatSessionSummary } from '@ai-task-flow/shared';
 import { streamTaskChat, listTaskChatSessions, loadTaskChatSession, renameTaskChatSession } from '@/api/taskChat';
+import { applyEvent, uid } from './chat/applyEvent';
 
 // 复用 shared 统一形态;导出别名让组件 import { Block, Turn } 不破。
 export type Block = ChatBlock;
@@ -58,120 +58,6 @@ const EMPTY: TaskChatState = { turns: [], streaming: false, side: 'windows' };
 
 /** 每任务当前的 AbortController(停止用) */
 const controllers = new Map<string, AbortController>();
-
-function uid(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-/** 从 assistant 事件里取 message.content 数组(兼容缺失情况) */
-function contentOf(ev: AgentEvent): unknown[] {
-  const msg = (ev as { message?: { content?: unknown[] } }).message;
-  return Array.isArray(msg?.content) ? (msg.content as unknown[]) : [];
-}
-
-/** 把 content 数组里的 text 拼成纯文本(tool_result 的 content 是 [{type:'text',text}] 或字符串) */
-function toolResultText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((c) => {
-        const block = c as { type?: string; text?: string };
-        if (block?.type === 'text' && typeof block.text === 'string') return block.text;
-        return '';
-      })
-      .join('\n')
-      .trim();
-  }
-  return JSON.stringify(content);
-}
-
-/**
- * 处理单个 AgentEvent,就地更新某任务的 assistant 当前轮(blocks 末尾追加/合并)。
- * 返回新的 turns 数组(不可变更新)。
- */
-function applyEvent(turns: Turn[], ev: AgentEvent): Turn[] {
-  if (ev.type === 'assistant') {
-    // 确保 assistant 轮存在(末尾是 assistant 轮则复用,否则新建)
-    let next = turns;
-    const last = turns[turns.length - 1];
-    if (!last || last.role !== 'assistant') {
-      next = [...turns, { id: uid(), role: 'assistant', blocks: [] }];
-    }
-    const assistant = next[next.length - 1];
-    let blocks = assistant.blocks ?? [];
-
-    for (const raw of contentOf(ev)) {
-      const block = raw as { type?: string; [k: string]: unknown };
-      if (block?.type === 'text' && typeof block.text === 'string') {
-        // text:合并到最后一个 text 块,避免碎片
-        const lastBlock = blocks[blocks.length - 1];
-        if (lastBlock && lastBlock.kind === 'text') {
-          blocks = [...blocks.slice(0, -1), { kind: 'text', text: lastBlock.text + block.text }];
-        } else {
-          blocks = [...blocks, { kind: 'text', text: block.text }];
-        }
-      } else if (block?.type === 'thinking' && typeof block.thinking === 'string') {
-        const lastBlock = blocks[blocks.length - 1];
-        if (lastBlock && lastBlock.kind === 'thinking') {
-          blocks = [
-            ...blocks.slice(0, -1),
-            { kind: 'thinking', thinking: lastBlock.thinking + block.thinking },
-          ];
-        } else {
-          blocks = [...blocks, { kind: 'thinking', thinking: block.thinking }];
-        }
-      } else if (block?.type === 'tool_use' && typeof block.id === 'string') {
-        // tool_use:同 id 已存在则更新 input,否则新增
-        const idx = blocks.findIndex((b) => b.kind === 'tool_use' && b.id === block.id);
-        const newBlock = {
-          kind: 'tool_use' as const,
-          id: block.id,
-          name: typeof block.name === 'string' ? block.name : 'tool',
-          input: block.input,
-        };
-        if (idx >= 0) {
-          blocks = [...blocks.slice(0, idx), newBlock, ...blocks.slice(idx + 1)];
-        } else {
-          blocks = [...blocks, newBlock];
-        }
-      }
-    }
-
-    const updated = { ...assistant, blocks };
-    return [...next.slice(0, -1), updated];
-  }
-
-  if (ev.type === 'user') {
-    // tool_result:按 tool_use_id 回填到对应 tool_use 块(就地遍历每个 turn 的 blocks)
-    const results = contentOf(ev)
-      .filter(
-        (r): r is { type: 'tool_result'; tool_use_id: string; content: unknown; is_error?: boolean } => {
-          const tr = r as { type?: string; tool_use_id?: string };
-          return tr?.type === 'tool_result' && typeof tr.tool_use_id === 'string';
-        },
-      )
-      .map((tr) => ({
-        id: tr.tool_use_id,
-        result: { content: toolResultText(tr.content), isError: tr.is_error === true },
-      }));
-    if (results.length === 0) return turns;
-    return turns.map((t) =>
-      t.blocks
-        ? {
-            ...t,
-            blocks: t.blocks.map((b) => {
-              if (b.kind !== 'tool_use') return b;
-              const r = results.find((x) => x.id === b.id);
-              return r ? { ...b, result: r.result } : b;
-            }),
-          }
-        : t,
-    );
-  }
-
-  // result/system/error 在 send() 里处理终态,这里不影响 turns
-  return turns;
-}
 
 export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
   chats: {},
@@ -287,9 +173,36 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
     const resumeSessionId = cur?.sessionId;
     const side = cur?.side ?? 'windows';
 
+    // I4 节流:thinking_delta 高频(百级/秒)逐条 set 会卡顿。累积 stream_event 到 pending,
+    // 用 requestAnimationFrame 每帧批量 applyEvent + set 一次(60fps → 60 set/秒,流畅)。
+    // assistant/user/result/error 等「非 stream_event」到达前先 flushNow,保证顺序——
+    // 终态 assistant 的 thinking 去重依赖 stream_event 已构建的末尾 thinking block。
+    let pendingStreamEvs: AgentEvent[] = [];
+    let rafId: number | null = null;
+    const flushStream = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      const evs = pendingStreamEvs;
+      pendingStreamEvs = [];
+      if (evs.length === 0) return;
+      set((state) => {
+        const prev = state.chats[taskId] ?? EMPTY;
+        let turns = prev.turns;
+        for (const e of evs) turns = applyEvent(turns, e);
+        return { chats: { ...state.chats, [taskId]: { ...prev, turns } } };
+      });
+    };
+    const scheduleFlush = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(flushStream);
+    };
+
     try {
       for await (const ev of streamTaskChat(taskId, message, controller.signal, resumeSessionId, side)) {
         if (ev.type === 'result') {
+          flushStream(); // 先冲掉残留的 thinking 增量,再落终态
           const usage = ev.usage as TurnUsage | undefined;
           set((state) => ({
             chats: {
@@ -312,6 +225,7 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
             },
           }));
         } else if (ev.type === 'error') {
+          flushStream();
           const msg = typeof ev.message === 'string' ? ev.message : '对话异常';
           set((state) => ({
             chats: {
@@ -319,8 +233,13 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
               [taskId]: { ...(state.chats[taskId] ?? EMPTY), error: msg, streaming: false },
             },
           }));
+        } else if (ev.type === 'stream_event') {
+          // 累积到帧缓冲,由 rAF 批量 flush(高频增量合批,降 set 次数)
+          pendingStreamEvs.push(ev);
+          scheduleFlush();
         } else {
-          // assistant / user:归一化进 blocks
+          // assistant / user:先冲掉残留增量,再归一化(保证去重依赖的顺序)
+          flushStream();
           set((state) => {
             const prev = state.chats[taskId] ?? EMPTY;
             return {
@@ -333,12 +252,14 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
         }
       }
       // 流正常结束但没收到 result 事件:兜底关闭 streaming
+      flushStream();
       set((state) => {
         const cur = state.chats[taskId];
         if (!cur?.streaming) return {};
         return { chats: { ...state.chats, [taskId]: { ...cur, streaming: false } } };
       });
     } catch (error) {
+      flushStream();
       // 用户主动停止(AbortError):不报错,只关闭 streaming,保留已生成的内容
       const aborted = error instanceof DOMException && error.name === 'AbortError';
       set((state) => ({
@@ -352,6 +273,11 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
         },
       }));
     } finally {
+      // 流结束:取消未触发的 rAF,避免泄漏(已 flush 过则 rafId 为 null,no-op)
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       controllers.delete(taskId);
     }
   },

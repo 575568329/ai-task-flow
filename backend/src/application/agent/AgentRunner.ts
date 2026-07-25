@@ -4,7 +4,9 @@
 // - prompt 经 stdin stream-json 写入(不经命令行/shell,无转义风险,仿 multica buildClaudeInput)
 // - 支持 Windows / WSL 两侧 claude(side 切换):
 //     · Windows:直接 spawn claude(shell:true 兼容 .cmd shim)
-//     · WSL:spawn wsl.exe --cd <mnt> -- claude <args>(claude 在 WSL PATH,直接传 argv)
+//     · WSL:spawn wsl.exe --cd <mnt> -- <claude绝对路径> <args>
+//       (appendWindowsPath=false + claude 装在 ~/.local/bin,非 login shell PATH 找不到;
+//        用绝对路径直接 exec,wsl.exe -- 后 argv 逐个传不经 shell,避开 -c 引号拼接坑)
 // - ⚠️ 两侧 prompt 都走 stdin pipe 并在 result 后才 end()。绝不能用 `< file` 重定向:
 //   文件读完立即 EOF,而 stream-json 模式下 claude 期望 stdin 是持续流(可能发 control_request
 //   待父进程回 control_response),EOF → claude 判定会话结束 → 静默 exit 0 无输出。
@@ -45,6 +47,12 @@ export interface AgentRunOptions {
 function shouldKeep(ev: AgentEvent): boolean {
   if (ev.type === 'assistant' || ev.type === 'user' || ev.type === 'result') return true;
   if (ev.type === 'system' && ev.subtype === 'init') return true;
+  if (ev.type === 'stream_event') {
+    // partial 开后只透传 thinking_delta(思考逐字增量),过滤 text_delta/signature 等噪音控 SSE 流量。
+    // text/tool_use 仍走终态 assistant 事件(text 快、非痛点);前端靠「末尾已有 thinking block」去重。
+    const e = (ev as { event?: { type?: string; delta?: { type?: string } } }).event;
+    return e?.type === 'content_block_delta' && e.delta?.type === 'thinking_delta';
+  }
   return false;
 }
 
@@ -63,6 +71,42 @@ function ensureCleanSettings(): string {
   return p;
 }
 
+let cachedWslClaudePathPromise: Promise<string> | null = null;
+
+/**
+ * 解析 WSL 侧 claude 的绝对路径(惰性:首次 WSL 调用解析一次后缓存 in-flight Promise)。
+ * 背景:appendWindowsPath=false + claude 装在 ~/.local/bin(用户级),非 login shell 的 PATH
+ * 不含 ~/.local/bin,故 `wsl.exe -- claude` 报 command not found。改用绝对路径直接 exec
+ * (wsl.exe -- 后 argv 逐个传不经 shell,无引号拼接坑)。通过 `wsl.exe -- printenv HOME`
+ * 取 home,拼 ${home}/.local/bin/claude(Claude Code 官方安装位置);取不到则回退 'claude'
+ * (全局安装场景,非 login PATH 可能含系统级 bin,但 appendWindowsPath=false 下不保证)。
+ * 缓存 Promise 而非值:多个 task 并发首调 WSL 侧时共享同一次 wsl.exe 探测(WSL 冷启 4-10s)。
+ */
+export function resolveWslClaudePath(): Promise<string> {
+  if (cachedWslClaudePathPromise) return cachedWslClaudePathPromise;
+  cachedWslClaudePathPromise = new Promise<string>((resolve) => {
+    const p = spawn('wsl.exe', ['--', 'printenv', 'HOME'], { shell: false, windowsHide: true });
+    let out = '';
+    p.stdout.on('data', (c: Buffer) => { out += c.toString('utf8'); });
+    p.on('error', (err) => {
+      logger.warn('解析 WSL home 失败(WSL 未装?),回退裸 claude', { error: err.message });
+      resolve('claude');
+    });
+    p.on('close', (code) => {
+      const home = out.trim();
+      if (code === 0 && home) {
+        const resolved = `${home}/.local/bin/claude`;
+        logger.info('解析 WSL claude 路径', { home, path: resolved });
+        resolve(resolved);
+      } else {
+        logger.warn('解析 WSL home 失败,回退裸 claude', { exitCode: code, out });
+        resolve('claude');
+      }
+    });
+  });
+  return cachedWslClaudePathPromise;
+}
+
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const STDERR_TAIL_MAX = 4096;
@@ -70,11 +114,11 @@ const STDERR_TAIL_MAX = 4096;
 /**
  * 按 side 构造 spawn 参数。两侧 prompt 都走 stdin pipe(见文件头注释)。
  * - windows:直接 spawn claude,cwd=Windows 路径,settings 用 Windows 路径
- * - wsl:spawn wsl.exe,claude 在 WSL PATH 里直接作为 argv 传(每参数无空格,
+ * - wsl:spawn wsl.exe,用 claude 绝对路径(wslClaudePath)直接 exec(每参数无空格,
  *   避开 wsl.exe `--` 后参数拼接破坏 `-c` 引号的坑,故无需 bash 脚本包装);
  *   cwd/settings 都用 toWslPath 翻译成 /mnt 形态
  */
-function buildSpawn(opts: AgentRunOptions, settingsPath: string): {
+function buildSpawn(opts: AgentRunOptions, settingsPath: string, wslClaudePath: string): {
   command: string;
   args: string[];
   spawnOpts: { cwd?: string; shell: boolean; windowsHide: boolean; stdio: ['pipe', 'pipe', 'pipe'] };
@@ -86,6 +130,9 @@ function buildSpawn(opts: AgentRunOptions, settingsPath: string): {
     '--output-format', 'stream-json',
     '--input-format', 'stream-json',
     '--verbose',
+    // 开 partial:claude 发 stream_event(content_block_delta 逐字增量),前端实时渲染思考过程。
+    // 需 claude ≥2.1.205(Windows 2.1.218 / WSL 2.1.220 均满足)
+    '--include-partial-messages',
     '--permission-mode', 'bypassPermissions',
     '--max-turns', maxTurns,
   ];
@@ -94,8 +141,8 @@ function buildSpawn(opts: AgentRunOptions, settingsPath: string): {
   if (opts.side === 'wsl') {
     return {
       command: 'wsl.exe',
-      // --cd 在 -- 前;claude 及其参数在 -- 后,逐个作为 argv 传给 WSL 内 claude
-      args: ['--cd', toWslPath(opts.cwd), '--', 'claude', ...baseArgs, '--settings', toWslPath(settingsPath)],
+      // --cd 在 -- 前;claude 绝对路径及其参数在 -- 后,逐个作为 argv 传给 WSL 内 claude
+      args: ['--cd', toWslPath(opts.cwd), '--', wslClaudePath, ...baseArgs, '--settings', toWslPath(settingsPath)],
       spawnOpts: { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
     };
   }
@@ -114,7 +161,8 @@ export class AgentRunner {
    */
   async *run(opts: AgentRunOptions): AsyncGenerator<AgentEvent> {
     const settingsPath = ensureCleanSettings();
-    const { command, args, spawnOpts } = buildSpawn(opts, settingsPath);
+    const wslClaudePath = opts.side === 'wsl' ? await resolveWslClaudePath() : 'claude';
+    const { command, args, spawnOpts } = buildSpawn(opts, settingsPath, wslClaudePath);
     const child = spawn(command, args, spawnOpts);
 
     // prompt 经 stdin 写入 stream-json user envelope(两侧统一;仿 multica buildClaudeInput)。
@@ -130,6 +178,15 @@ export class AgentRunner {
     child.stderr?.on('data', (chunk: Buffer) => {
       stderrTail += chunk.toString('utf8');
       if (stderrTail.length > STDERR_TAIL_MAX) stderrTail = stderrTail.slice(-STDERR_TAIL_MAX);
+    });
+
+    // spawn 失败(如 wsl.exe 不在 PATH / claude 二进制缺失)会发 'error' 事件,无 handler 则
+    // unhandled → 崩后端进程。捕获后存起来,由下方 close 分支降级为 yield error 事件给前端。
+    // 用对象容器而非裸 let:TS 控制流会把「仅闭包赋值的 let」窄化为初始值 null,读取处变 never。
+    const spawnState: { error: Error | null } = { error: null };
+    child.on('error', (err: Error) => {
+      spawnState.error = err;
+      logger.error('spawn 失败', { command, side: opts.side ?? 'windows', error: err.message });
     });
 
     try {
@@ -181,18 +238,29 @@ export class AgentRunner {
         }
       }
 
-      const [exitCode] = (await once(child, 'close')) as [number | null];
+      // spawn 失败(如 wsl.exe 不在 PATH)时 child 先发 'error'(上方 handler 已捕获并记 spawnState),
+      // 再让 once('close') reject——这里 catch 住走 spawnError 友好提示;否则 reject 直抛只能由 chat route 兜底 generic error
+      let exitCode: number | null = null;
+      try {
+        [exitCode] = (await once(child, 'close')) as [number | null];
+      } catch (e) {
+        // once reject 多因 spawn 失败(spawnState.error 已记录);非此情况落日志排查,禁止吞异常
+        if (!spawnState.error) {
+          logger.warn('once(close) reject 但无 spawn error', { error: e instanceof Error ? e.message : String(e) });
+        }
+      }
       if (!gotResult) {
-        // 把 stderr 末尾拼进 message:前端只读 ev.message,否则用户只看到 exit code,
-        // 分不清是 claude 没装、WSL 没起还是别的(CR4)
+        // 把 spawn 错误 / stderr 末尾拼进 message:前端只读 ev.message,否则用户只看到 exit code,
+        // 分不清是 claude 没装、WSL 没起还是别的(CR4)。spawnError 优先(二进制缺失的最直接信号)
+        const spawnError = spawnState.error;
         const stderr = stderrTail.trim();
-        yield {
-          type: 'error',
-          message: stderr
+        const hint = command === 'wsl.exe' ? '(检查 WSL 是否安装 / claude 路径)' : '(检查 claude 是否安装)';
+        const message = spawnError
+          ? `claude 启动失败: ${spawnError.message} ${hint}`
+          : stderr
             ? `claude exited (code=${exitCode ?? 'null'})\n${stderr.slice(-300)}`
-            : `claude exited (code=${exitCode ?? 'null'})`,
-          stderr,
-        };
+            : `claude exited (code=${exitCode ?? 'null'})`;
+        yield { type: 'error', message, stderr };
       }
     } finally {
       clearTimeout(timer);
