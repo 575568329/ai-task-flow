@@ -4,10 +4,11 @@
 // 脱离原列的 overflow 裁切与 stacking context,根治「拖拽时卡片被列头遮挡」。
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, MessageSquare } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { Badge } from '@/components/ui/badge';
 import { useUIStore } from '@/stores/uiStore';
+import { useFloatingChatStore } from '@/stores/floatingChatStore';
 import { relativeTime } from '@/lib/taskMeta';
 import { PRIORITY_BADGE, ENV_BADGE } from './meta';
 
@@ -17,6 +18,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task }: TaskCardProps) {
   const setSelectedTask = useUIStore((s) => s.setSelectedTask);
+  const openInFloating = useFloatingChatStore((s) => s.openTask);
   const {
     attributes,
     listeners,
@@ -33,10 +35,25 @@ export function TaskCard({ task }: TaskCardProps) {
       style={{ transform: isDragging ? undefined : CSS.Translate.toString(transform) }}
       data-dragging={isDragging}
       onClick={() => setSelectedTask(task.id)}
-      className="bg-card group data-[dragging=true]:opacity-40 flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 shadow-sm transition-shadow hover:shadow-md"
+      className="bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 shadow-sm transition-shadow hover:shadow-md"
       {...attributes}
       {...listeners}
     >
+      {/* 浮窗对话入口:hover 显示,点击直接开浮窗(不开 drawer);
+          onPointerDown/onClick stopPropagation 阻止冒泡到卡片拖拽与点击 */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          openInFloating(task.id);
+        }}
+        className="hover:bg-accent absolute right-1.5 top-1.5 z-10 inline-flex size-6 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100"
+        aria-label="在悬浮窗中对话"
+        title="在悬浮窗中对话"
+      >
+        <MessageSquare className="size-3.5" />
+      </button>
       <TaskCardBody task={task} />
     </div>
   );

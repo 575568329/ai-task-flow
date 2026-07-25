@@ -14,6 +14,7 @@ import { UsageView } from '@/components/views/UsageView';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/toaster';
 import { ImagePreviewOverlay } from '@/components/ui/image-preview';
+import { FloatingChatRoot } from '@/components/floating/FloatingChatRoot';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';
@@ -81,6 +82,8 @@ function App() {
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <Toaster />
       <ImagePreviewOverlay />
+      {/* 任务对话悬浮窗(Portal 到 body,无 tab 时不渲染) */}
+      <FloatingChatRoot />
     </div>
   );
 }

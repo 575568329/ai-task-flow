@@ -10,6 +10,7 @@ import {
   Copy,
   ChevronRight,
   ChevronLeft,
+  MessageSquare,
 } from 'lucide-react';
 import {
   Priority,
@@ -40,14 +41,13 @@ import {
 import { MessageContent } from '@/components/chat/MessageContent';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
-import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { useFloatingChatStore } from '@/stores/floatingChatStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { StepEditor } from './StepEditor';
 import { RepoPathPicker } from './RepoPathPicker';
 import { OpenClaudeDialog } from './OpenClaudeDialog';
-import { TaskConversation } from './TaskConversation';
 import { STATUS_LABELS } from '@/lib/taskMeta';
 import {
   loadShortcuts,
@@ -116,6 +116,7 @@ export function TaskDrawer() {
   const createTask = useTaskStore((s) => s.create);
   const updateTask = useTaskStore((s) => s.update);
   const removeTask = useTaskStore((s) => s.remove);
+  const openInFloating = useFloatingChatStore((s) => s.openTask);
 
   const task = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined;
   const isCreate = creatingTask || !task;
@@ -127,8 +128,6 @@ export function TaskDrawer() {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [openClaude, setOpenClaude] = useState(false);
-  // 栏3 tab:对话(Claude 实时聊)/ 预览(Markdown)。默认对话(主场景)。关抽屉不持久化。
-  const [rightTab, setRightTab] = useState<'chat' | 'preview'>('chat');
   // 标题输入 ref:新建模式打开抽屉后自动聚焦,点「新建任务」即可直接输入
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -442,7 +441,7 @@ export function TaskDrawer() {
             </div>
           </div>
 
-          {/* 栏3:对话 / 预览(tab 切换;与步骤平分剩余宽度) */}
+          {/* 栏3:预览(Markdown 实时反映草稿;对话已移至悬浮窗,详情不再内嵌对话) */}
           {showPreview && (
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l">
               <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-2 py-2">
@@ -455,46 +454,29 @@ export function TaskDrawer() {
                 >
                   <ChevronRight className="size-4" />
                 </Button>
-                <div className="flex items-center gap-0.5">
-                  {(['chat', 'preview'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setRightTab(t)}
-                      className={cn(
-                        'rounded px-2.5 py-1 text-xs transition-colors',
-                        rightTab === t
-                          ? 'bg-muted font-medium'
-                          : 'text-muted-foreground hover:bg-muted/50',
-                      )}
-                    >
-                      {t === 'chat' ? '对话' : '预览'}
-                    </button>
-                  ))}
-                </div>
+                <span className="text-sm font-semibold">预览</span>
               </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {rightTab === 'chat' ? (
-                  task ? (
-                    <TaskConversation taskId={task.id} />
-                  ) : (
-                    <div className="text-muted-foreground flex h-full items-center justify-center px-4 text-center text-sm">
-                      保存任务后即可在此与 Claude 对话
-                    </div>
-                  )
-                ) : (
-                  <div className="h-full overflow-y-auto px-3 py-3">
-                    <MessageContent content={markdown} />
-                  </div>
-                )}
+              <div className="h-full overflow-y-auto px-3 py-3">
+                <MessageContent content={markdown} />
               </div>
             </div>
           )}
         </div>
 
         {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
-            打开终端基于 draft.repoPath 可用,复制指令/删除依赖已保存任务,未保存时禁用 */}
+            对话→开悬浮窗;打开终端基于 draft.repoPath;复制指令/删除依赖已保存任务 */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
+          <Button
+            size="sm"
+            onClick={() => {
+              if (task) openInFloating(task.id);
+            }}
+            disabled={!task}
+            title={!task ? '保存后可在悬浮窗对话' : '在悬浮窗中对话'}
+          >
+            <MessageSquare className="size-4" />
+            对话
+          </Button>
           <Button
             size="sm"
             onClick={onOpenClaude}
@@ -517,10 +499,11 @@ export function TaskDrawer() {
             {saving && <Loader2 className="size-4 animate-spin" />}
             保存
           </Button>
+          {/* 删除移至最右(ml-auto),与主操作区拉开,降低误触 */}
           <Button
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="text-destructive hover:text-destructive ml-auto"
             onClick={onDelete}
             disabled={!task}
             title={!task ? '保存后可删除' : '删除任务'}
