@@ -117,20 +117,30 @@
 - **状态管理**：能用局部状态解决的不上全局状态；全局状态按领域拆分 store。
 - **组件封装**: 能够封装成组件的都封装,最好所有组件都可以随时抽出来单独放入组件库
 
-### 4.2 React 约定（如适用）
+### 4.2 React 约定
 
+本项目前端已于 2026-06-05 从 Vue 3 重构为 React（见 `docs/20260606003000_前端React重构总结.md`）。
+
+- **框架**：React 19 + TypeScript + Vite
+- **状态管理**：Zustand，按领域拆分 store（`taskStore`、`chatStore`、`uiStore` 等）
+- **UI 组件**：shadcn/ui（Radix UI 无样式原语 + Tailwind CSS v4 + `tw-animate-css`）
+- **样式**：Tailwind CSS v4 + CSS 变量双主题 token（亮/暗）+ `cn()` 工具函数
+- **图标**：lucide-react
+- **拖拽**：@dnd-kit/core
+- **HTTP**：原生 fetch 封装（`api/http.ts`），不使用 axios
+- **路由**：无 router —— 单页应用通过 `hidden` 属性切换视图，保持滚动/状态
+
+**编码规范**：
 - 函数组件 + Hooks，不使用 class 组件。
 - 自定义 Hook 抽离可复用逻辑，命名 `useXxx`。
 - `useEffect` 依赖数组必须完整声明，禁止空依赖数组执行有依赖的副作用。
 - 列表渲染必须提供稳定唯一 `key`，禁止使用数组索引。
 - 组件 Props 定义 interface，导出供外部使用。
+- 大型组件（>300 行）拆分为子组件或提取自定义 Hook。
 
-### 4.3 Vue 约定（如适用）
+### 4.3 Vue 约定（已废弃）
 
-- Vue 3 + Composition API + `<script setup>` 语法。
-- 组合式函数 (Composables) 抽离复用逻辑，命名 `useXxx`。
-- Props 使用 `defineProps<T>()` 泛型声明，带默认值用 `withDefaults`。
-- 响应式数据：基本类型用 `ref`，对象用 `reactive`，不混用。
+> ⚠️ 本项目已于 2026-06-05 从 Vue 3 迁移到 React。此节仅保留作为历史参考，不再适用于当前代码库。
 
 ### 4.4 样式与 CSS
 
@@ -463,7 +473,7 @@ Step 5: 集成收尾
 
 **技术栈**: 
 - Backend: Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git
-- Frontend: Vue 3 + TypeScript + Vite + Element Plus
+- Frontend: React 19 + TypeScript + Vite + shadcn/ui (Radix UI + Tailwind CSS) + Zustand
 - Architecture: DDD 四层 + git worktree 隔离 + EventBus
 
 **MVP 周期**: 2-3 周
