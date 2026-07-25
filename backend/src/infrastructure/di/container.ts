@@ -1,7 +1,6 @@
 // backend/src/infrastructure/di/container.ts
 import 'reflect-metadata';
 import { container } from 'tsyringe';
-import { WorktreeManager } from '../git/WorktreeManager.js';
 import { JsonTaskRepository } from '../persistence/JsonTaskRepository.js';
 import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { knowledgeDirPath } from '../../config/dataDir.js';
@@ -9,13 +8,10 @@ import { knowledgeDirPath } from '../../config/dataDir.js';
 /**
  * 依赖注入容器配置
  * 使用 tsyringe 管理依赖
+ *
+ * 注意: WorktreeManager 未在此注册——会话化改造后任务不再自动创建 worktree,
+ * WorktreeManager 降为可选工具能力,当前无调用方。如需启用,按需加回即可。
  */
-
-// 注册基础设施服务
-// WorktreeManager:设计方案 §4.2 保留的任务级 git worktree 隔离能力。会话化改造后状态机
-// 收敛为三态、打开终端不再创建 worktree,目前无 resolver 引用;但设计上仍保留为可选关联
-// (任务可挂 worktree 元数据),故注册保留,留待后续按需启用,不在此删。
-container.registerSingleton('WorktreeManager', WorktreeManager);
 
 // 注册 Repository
 // 用 useFactory 直接构造,绕过 tsyringe useClass 对 JsonTaskRepository 构造参数

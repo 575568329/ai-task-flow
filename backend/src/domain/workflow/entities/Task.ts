@@ -152,6 +152,21 @@ export class Task {
     );
   }
 
+  /**
+   * 追加备注到任务描述。
+   * 供 MCP add_note_to_task 调用,走聚合根封装 → 发布领域事件 → 驱动前端刷新。
+   *
+   * TODO(结构化): 当前将备注拼入 description Markdown,后续若需单独取备注列表(如时间线/筛选),
+   *   应新增 `notes: TaskNote[]` 字段({ content, createdAt }),toJSON 同时暴露。
+   *   Markdown 拼接仅作为展示层,数据模型不依赖换行分隔符解析。
+   */
+  addNote(note: string): void {
+    const previousStatus = this.status;
+    this.description = this.description + '\n\n---\n**备注**: ' + note;
+    this.updatedAt = new Date();
+    this._domainEvents.push(new TaskUpdated(this.id.value, previousStatus, this.status));
+  }
+
   toJSON() {
     return {
       id: this.id.value,
