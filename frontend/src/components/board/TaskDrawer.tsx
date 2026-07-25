@@ -43,7 +43,7 @@ import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
-import { useFloatingChatStore } from '@/stores/floatingChatStore';
+import { useProjectChatStore } from '@/stores/projectChatStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { StepEditor } from './StepEditor';
 import { RepoPathPicker } from './RepoPathPicker';
@@ -116,7 +116,7 @@ export function TaskDrawer() {
   const createTask = useTaskStore((s) => s.create);
   const updateTask = useTaskStore((s) => s.update);
   const removeTask = useTaskStore((s) => s.remove);
-  const openInFloating = useFloatingChatStore((s) => s.openTask);
+  const openForRepo = useProjectChatStore((s) => s.openForRepo);
 
   const task = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined;
   const isCreate = creatingTask || !task;
@@ -469,10 +469,10 @@ export function TaskDrawer() {
           <Button
             size="sm"
             onClick={() => {
-              if (task) openInFloating(task.id);
+              if (task?.repoPath) openForRepo(task.repoPath);
             }}
-            disabled={!task}
-            title={!task ? '保存后可在悬浮窗对话' : '在悬浮窗中对话'}
+            disabled={!task?.repoPath}
+            title={!task?.repoPath ? '需填写仓库路径才能在悬浮窗对话' : '在悬浮窗中对话'}
           >
             <MessageSquare className="size-4" />
             对话

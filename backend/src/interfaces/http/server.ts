@@ -29,6 +29,7 @@ import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
 import { UsageService } from '../../application/usage/UsageService.js';
 import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
+import { registerProjectChatRoutes } from './routes/projectChatRoutes.js';
 import { AgentRunner } from '../../application/agent/AgentRunner.js';
 import { TaskSessionStore } from '../../infrastructure/persistence/TaskSessionStore.js';
 import { SessionTitleStore } from '../../infrastructure/persistence/SessionTitleStore.js';
@@ -158,6 +159,7 @@ export async function createHttpServer(
   // 注册业务路由
   await registerTaskRoutes(fastify, taskRepository);
   await registerTaskChatRoutes(fastify, taskRepository, agentRunner, taskSessionStore, sessionTitleStore);
+  await registerProjectChatRoutes(fastify, taskRepository, agentRunner, sessionTitleStore);
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);

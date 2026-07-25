@@ -48,3 +48,24 @@ export interface ChatSessionSummary {
   messageCount: number;
   source?: 'windows' | 'wsl';
 }
+
+/**
+ * 项目对话列表项(悬浮窗按项目分 tab 用)。扩展自 ChatSessionSummary,加「关联任务」。
+ * 关联任务:claude 在对话中 get_task 时 jsonl 埋的 task 标记,scanner 反向扫出(一会话多任务取众数)。
+ */
+export interface ProjectSessionSummary extends ChatSessionSummary {
+  /** 该会话处理过的主任务编号;自由对话(未拉任务)为 undefined */
+  taskId?: string;
+  /** 关联任务标题(后端聚合时反查任务表填入,前端免二次查询) */
+  taskTitle?: string;
+}
+
+/** 按项目(repoPath)分组的对话视图(悬浮窗一个项目一个 tab) */
+export interface ProjectChatGroup {
+  /** 项目工作目录(对话的 cwd) */
+  repoPath: string;
+  /** 项目名(任务的 projectName,缺省取 repoPath 末段) */
+  projectName: string;
+  /** 该项目下的所有会话,按 lastActiveAt 倒序 */
+  sessions: ProjectSessionSummary[];
+}

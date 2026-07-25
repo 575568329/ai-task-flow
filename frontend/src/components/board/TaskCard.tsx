@@ -8,7 +8,7 @@ import { GripVertical, MessageSquare } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { Badge } from '@/components/ui/badge';
 import { useUIStore } from '@/stores/uiStore';
-import { useFloatingChatStore } from '@/stores/floatingChatStore';
+import { useProjectChatStore } from '@/stores/projectChatStore';
 import { relativeTime } from '@/lib/taskMeta';
 import { PRIORITY_BADGE, ENV_BADGE } from './meta';
 
@@ -18,7 +18,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task }: TaskCardProps) {
   const setSelectedTask = useUIStore((s) => s.setSelectedTask);
-  const openInFloating = useFloatingChatStore((s) => s.openTask);
+  const openForRepo = useProjectChatStore((s) => s.openForRepo);
   const {
     attributes,
     listeners,
@@ -43,14 +43,15 @@ export function TaskCard({ task }: TaskCardProps) {
           onPointerDown/onClick stopPropagation 阻止冒泡到卡片拖拽与点击 */}
       <button
         type="button"
+        disabled={!task.repoPath}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          openInFloating(task.id);
+          if (task.repoPath) openForRepo(task.repoPath);
         }}
-        className="hover:bg-accent absolute right-1.5 top-1.5 z-10 inline-flex size-6 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100"
+        className="hover:bg-accent absolute right-1.5 top-1.5 z-10 inline-flex size-6 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
         aria-label="在悬浮窗中对话"
-        title="在悬浮窗中对话"
+        title={task.repoPath ? '在悬浮窗中对话' : '该任务未填写仓库路径,无法对话'}
       >
         <MessageSquare className="size-3.5" />
       </button>
