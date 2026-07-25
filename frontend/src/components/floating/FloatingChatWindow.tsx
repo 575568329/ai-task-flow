@@ -4,11 +4,10 @@
 //  - onPointerDown 在拖拽 handle,setPointerCapture 保证指针移出元素仍可拖(不丢拖拽);
 //  - 实时只更内存 bounds,松手才落盘(避免疯狂写 localStorage);
 //  - clamp 到视口,保证标题栏始终可抓回(浏览器 resize 时也拉回)。
-// 内容:项目 tab(按 repoPath 分组)+ 对话列表/对话视图双态。
+// 内容:项目 tab(按 repoPath 分组)+ 对话视图(chat-first,无列表态;历史切换走顶栏历史按钮)。
 // bounds 持久化从原 floatingChatStore 内联到此(多任务 tab 模式已被项目 tab 取代,该 store 删除)。
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { X, Plus } from 'lucide-react';
-import type { ProjectChatGroup, ProjectSessionSummary } from '@ai-task-flow/shared';
+import { X } from 'lucide-react';
 import { ConversationPanel } from './ConversationPanel';
 import { useProjectChatStore } from '@/stores/projectChatStore';
 import { cn } from '@/lib/utils';
@@ -73,13 +72,8 @@ export function FloatingChatWindow() {
   const projects = useProjectChatStore((s) => s.projects);
   const projectsLoading = useProjectChatStore((s) => s.projectsLoading);
   const activeRepoPath = useProjectChatStore((s) => s.activeRepoPath);
-  const view = useProjectChatStore((s) => s.view);
   const selectProject = useProjectChatStore((s) => s.selectProject);
-  const openSession = useProjectChatStore((s) => s.openSession);
-  const startNew = useProjectChatStore((s) => s.startNew);
   const closeWindow = useProjectChatStore((s) => s.closeWindow);
-
-  const activeProject = projects.find((p) => p.repoPath === activeRepoPath);
 
   // bounds 用 ref + state:ref 持有最新值(拖拽/缩放 handler 读 ref,不依赖闭包过期),state 触发重渲染
   const boundsRef = useRef<Bounds>(loadBounds());
@@ -212,26 +206,9 @@ export function FloatingChatWindow() {
         </button>
       </div>
 
-      {/* 内容:列表视图 / 对话视图 */}
+      {/* 内容:对话视图(chat-first,历史切换走顶栏历史按钮) */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {view === 'chat' ? (
-          <ConversationPanel />
-        ) : (
-          <ProjectSessionList
-            project={activeProject}
-            loading={projectsLoading && projects.length === 0}
-            onOpen={(s) => {
-              if (!activeProject) return;
-              void openSession(activeProject.repoPath, s.sessionId, s.source ?? 'windows', {
-                title: s.title,
-                taskTitle: s.taskTitle,
-              });
-            }}
-            onNew={(side) => {
-              if (activeProject) startNew(activeProject.repoPath, side);
-            }}
-          />
-        )}
+        <ConversationPanel />
       </div>
 
       {/* 右下角缩放 handle:clipPath 裁成三角形,占位小但可抓 */}
@@ -243,90 +220,6 @@ export function FloatingChatWindow() {
         style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)', touchAction: 'none' }}
         aria-label="缩放"
       />
-    </div>
-  );
-}
-
-/** 项目对话列表:每个会话一行(对话名 · 关联任务 · 会话ID · 时间 · 消息数 · Win/WSL)+ 新建对话(Win/WSL) */
-function ProjectSessionList({
-  project,
-  loading,
-  onOpen,
-  onNew,
-}: {
-  project: ProjectChatGroup | undefined;
-  loading: boolean;
-  onOpen: (s: ProjectSessionSummary) => void;
-  onNew: (side: 'windows' | 'wsl') => void;
-}) {
-  if (loading) {
-    return <div className="text-muted-foreground p-4 text-center text-sm">加载中…</div>;
-  }
-  if (!project) {
-    return <div className="text-muted-foreground p-4 text-center text-sm">请选择一个项目</div>;
-  }
-  const sessions = project.sessions ?? [];
-  return (
-    <div className="flex h-full flex-col">
-      {/* 顶部:项目名 + 新建对话(Win / WSL 两个入口,直接选择侧) */}
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
-        <span className="text-muted-foreground mr-auto truncate text-[11px]" title={project.repoPath}>
-          {project.projectName || project.repoPath} · {sessions.length} 个对话
-        </span>
-        <button
-          type="button"
-          onClick={() => onNew('windows')}
-          className="bg-background hover:bg-accent inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[11px] transition-colors"
-          title="新建对话(Windows claude)"
-        >
-          <Plus className="size-3" /> Win
-        </button>
-        <button
-          type="button"
-          onClick={() => onNew('wsl')}
-          className="bg-background hover:bg-accent inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[11px] transition-colors"
-          title="新建对话(WSL claude)"
-        >
-          <Plus className="size-3" /> WSL
-        </button>
-      </div>
-      {/* 对话列表 */}
-      <div className="flex-1 overflow-y-auto p-1.5">
-        {sessions.length === 0 ? (
-          <div className="text-muted-foreground py-8 text-center text-xs">
-            该项目暂无历史对话,点上方「Win / WSL」新建。
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {sessions.map((s) => (
-              <button
-                key={s.sessionId}
-                type="button"
-                onClick={() => onOpen(s)}
-                className="hover:bg-accent flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors"
-              >
-                <div className="flex w-full items-center gap-1">
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium">{s.title || '(无标题)'}</span>
-                  {s.taskTitle && (
-                    <span
-                      className="bg-muted shrink-0 max-w-[40%] truncate rounded px-1 text-[9px]"
-                      title={`关联任务:${s.taskTitle}`}
-                    >
-                      {s.taskTitle}
-                    </span>
-                  )}
-                </div>
-                <div className="text-muted-foreground flex w-full items-center gap-1 text-[10px]">
-                  <span className="font-mono">{s.sessionId.slice(0, 8)}</span>
-                  <span>· {new Date(s.lastActiveAt).toLocaleString()}</span>
-                  <span>· {s.messageCount} 条</span>
-                  <span>· {s.source === 'wsl' ? 'WSL' : 'Win'}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

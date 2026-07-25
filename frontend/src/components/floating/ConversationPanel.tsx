@@ -1,9 +1,9 @@
 // frontend/src/components/floating/ConversationPanel.tsx
-// 项目对话视图(悬浮窗对话态):顶栏(返回 + 对话名/关联任务/会话ID)+ 消息流 + 输入框。
-// 消息流复用 MessageStream(与 TaskConversation 共用),数据源为 projectChatStore.current。
+// 项目对话视图(悬浮窗唯一视图,chat-first):顶栏(历史 + 新建 + 对话名/关联任务/会话ID + 侧切换)
+// + 消息流 + 输入框。数据源为 projectChatStore 的「当前激活项目的记忆对话」(派生 current)。
 // 与 TaskConversation 区别:不绑 taskId,对话以 repoPath(项目 cwd)为根,自由对话不注入任务上下文。
 import { useMemo, useState } from 'react';
-import { ArrowUp, Square, ArrowLeft, Copy, History } from 'lucide-react';
+import { ArrowUp, Square, Copy, History, Plus, Loader2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MessageStream } from '@/components/chat/MessageStream';
@@ -12,14 +12,18 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/toaster';
 
 export function ConversationPanel() {
-  const current = useProjectChatStore((s) => s.current);
+  // current 派生:当前激活项目的记忆对话(切项目自动落到该项目的对话)
+  const current = useProjectChatStore((s) =>
+    s.activeRepoPath ? s.conversations[s.activeRepoPath] : undefined,
+  );
+  const projectsLoading = useProjectChatStore((s) => s.projectsLoading);
   const send = useProjectChatStore((s) => s.send);
   const stop = useProjectChatStore((s) => s.stop);
   const setSide = useProjectChatStore((s) => s.setSide);
-  const backToList = useProjectChatStore((s) => s.backToList);
+  const startNew = useProjectChatStore((s) => s.startNew);
   const openSession = useProjectChatStore((s) => s.openSession);
   const projects = useProjectChatStore((s) => s.projects);
-  const [input, setInput] = useState('');
+  const setDraft = useProjectChatStore((s) => s.setDraft);
   const [historyOpen, setHistoryOpen] = useState(false);
   // 当前项目的会话列表(历史 Popover 用);projects 未加载时为空
   const repoSessions = useMemo(
@@ -27,15 +31,23 @@ export function ConversationPanel() {
     [projects, current?.repoPath],
   );
 
-  // 列表视图时 current 为 null,但本组件仅在对话视图渲染;guard 兜底
-  if (!current) return null;
+  // 无激活项目(projects 未加载/为空)时给提示,而非渲染空对话框
+  if (!current) {
+    return (
+      <div className="text-muted-foreground flex h-full items-center justify-center p-4 text-center text-sm">
+        {projectsLoading ? '加载项目…' : '暂无项目(先在某个仓库里建过任务才会有)'}
+      </div>
+    );
+  }
 
-  const { turns, streaming, error, usage, side, sessionId, title, taskTitle, repoPath } = current;
+  const { turns, streaming, error, usage, side, sessionId, title, taskTitle, repoPath, loading, draft } = current;
+  // 受控输入绑定 per-project 草稿:切项目自动切到该项目的草稿,不串项目(I1)
+  const input = draft ?? '';
 
   const onSend = () => {
     const text = input.trim();
     if (!text || streaming) return;
-    setInput('');
+    setDraft(repoPath, '');
     void send(text);
   };
 
@@ -69,24 +81,14 @@ export function ConversationPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* 顶栏:返回 + 对话标题(对话名 · 关联任务 · 会话ID)+ 侧切换 */}
+      {/* 顶栏:历史 + 新建 + 对话标题(对话名 · 关联任务 · 会话ID)+ 侧切换 */}
       <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
-        <button
-          type="button"
-          onClick={backToList}
-          disabled={streaming}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-6 items-center justify-center rounded disabled:opacity-40"
-          aria-label="返回对话列表"
-          title="返回对话列表"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
-        {/* 历史会话:在当前项目内快速切换,无需返回列表(与 TaskConversation 历史面板一致) */}
+        {/* 历史会话:当前项目内切换(弹出该项目全部会话列表) */}
         <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              disabled={streaming}
+              disabled={streaming || !!loading}
               className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-6 items-center justify-center rounded disabled:opacity-40"
               aria-label="历史会话"
               title="历史会话"
@@ -94,8 +96,13 @@ export function ConversationPanel() {
               <History className="size-4" />
             </button>
           </PopoverTrigger>
-          <PopoverContent side="bottom" align="start" className="max-h-[60vh] w-72 overflow-y-auto p-1">
-            {repoSessions.length === 0 ? (
+          {/* z-[1400]:浮窗本体 z-1300,Radix 弹层默认 z-50 会被浮窗盖住,必须高过浮窗才可见 */}
+          <PopoverContent side="bottom" align="start" className="z-[1400] max-h-[60vh] w-72 overflow-y-auto p-1">
+            {projectsLoading ? (
+              <div className="text-muted-foreground flex justify-center p-3">
+                <Loader2 className="size-4 animate-spin" />
+              </div>
+            ) : repoSessions.length === 0 ? (
               <div className="text-muted-foreground p-3 text-center text-xs">该项目暂无历史会话</div>
             ) : (
               repoSessions.map((s) => {
@@ -133,6 +140,17 @@ export function ConversationPanel() {
             )}
           </PopoverContent>
         </Popover>
+        {/* 新建对话:当前项目新建空对话(发首条消息才真正建 claude session) */}
+        <button
+          type="button"
+          disabled={streaming || !!loading}
+          onClick={() => startNew(repoPath, side)}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-6 items-center justify-center rounded disabled:opacity-40"
+          aria-label="新建对话"
+          title="新建对话"
+        >
+          <Plus className="size-4" />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium">{title || '(新对话)'}</div>
           <div className="text-muted-foreground flex items-center gap-1 text-[10px]">
@@ -160,7 +178,7 @@ export function ConversationPanel() {
             <button
               key={s}
               type="button"
-              disabled={streaming}
+              disabled={streaming || !!loading}
               onClick={() => setSide(s)}
               className={cn(
                 'rounded px-1.5 py-0.5 text-[10px] transition-colors disabled:opacity-50',
@@ -174,26 +192,32 @@ export function ConversationPanel() {
         </div>
       </div>
 
-      {/* 消息流(渲染复用 MessageStream) */}
-      <MessageStream
-        turns={turns}
-        streaming={streaming}
-        error={error}
-        usage={usage}
-        onCopyLast={onCopyLast}
-        emptyHint={
-          <div className="text-muted-foreground py-8 text-center text-sm">
-            输入消息开始对话。工作目录:
-            <span className="block font-mono text-[11px]">{repoPath}</span>
-          </div>
-        }
-      />
+      {/* 消息流:历史会话加载中显示 spinner,否则渲染复用 MessageStream */}
+      {loading ? (
+        <div className="text-muted-foreground flex min-h-0 flex-1 items-center justify-center">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+      ) : (
+        <MessageStream
+          turns={turns}
+          streaming={streaming}
+          error={error}
+          usage={usage}
+          onCopyLast={onCopyLast}
+          emptyHint={
+            <div className="text-muted-foreground py-8 text-center text-sm">
+              输入消息开始对话。工作目录:
+              <span className="block font-mono text-[11px]">{repoPath}</span>
+            </div>
+          }
+        />
+      )}
 
       {/* 输入框 */}
       <div className="border-t p-2">
         <Textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setDraft(repoPath, e.target.value)}
           onKeyDown={(e) => {
             // Enter 发送 / Shift+Enter 换行(与 TaskConversation 一致)
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -201,8 +225,14 @@ export function ConversationPanel() {
               onSend();
             }
           }}
-          placeholder={streaming ? 'Claude 正在回复…(可点停止)' : '输入消息(Enter 发送,Shift+Enter 换行)'}
-          disabled={streaming}
+          placeholder={
+            loading
+              ? '加载历史会话…'
+              : streaming
+                ? 'Claude 正在回复…(可点停止)'
+                : '输入消息(Enter 发送,Shift+Enter 换行)'
+          }
+          disabled={streaming || !!loading}
           disableAutoGrow
           className="min-h-16 max-h-32 resize-none"
         />
@@ -226,7 +256,7 @@ export function ConversationPanel() {
             <button
               type="button"
               onClick={onSend}
-              disabled={!input.trim()}
+              disabled={!input.trim() || !!loading}
               className="bg-primary hover:bg-primary/90 inline-flex size-8 items-center justify-center rounded-full text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               title="发送 (Enter)"
               aria-label="发送"
