@@ -25,6 +25,8 @@ export interface ExecuteTurnParams {
   cwd: string;
   text: string;
   onEvent: (event: AgentEvent) => void;
+  /** 中断信号:abort 时 interrupt 当前 turn(进程不死,以中断态 result 正常 resolve);客户端断开 / 前端停止用 */
+  signal?: AbortSignal;
   /** 额外 SDK options(allowedTools / mcpServers / settings 等,#4/#5 注入;resume 由本层按 sessionId 补) */
   sdkOptions?: Partial<Options>;
 }
@@ -58,6 +60,20 @@ export class AgentRuntimeManager {
   /** 执行一轮对话:acquire runtime → executeTurn → 首 turn rekey;runtime 不可用时 evict */
   async executeTurn(params: ExecuteTurnParams): Promise<ExecuteTurnResult> {
     const { runtime, key, isTemp } = await this.acquire(params.side, params.sessionId, params.cwd, params.sdkOptions);
+    // 中断:signal abort → runtime.interrupt(进程不死,当前 turn 以中断态 result 正常 resolve,
+    // runtime 仍在池中供下次复用)。覆盖客户端断开 / 前端停止(都是 abort fetch)。
+    const onAbort = () => {
+      void runtime.interrupt().catch((e) =>
+        logger.warn('signal abort 后 interrupt 失败', {
+          side: runtime.side,
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    };
+    if (params.signal) {
+      if (params.signal.aborted) onAbort();
+      else params.signal.addEventListener('abort', onAbort, { once: true });
+    }
     try {
       const { result } = await runtime.executeTurn(params.text, params.onEvent);
       const realSessionId = runtime.sessionId;
@@ -73,6 +89,8 @@ export class AgentRuntimeManager {
       // runtime 不可用(closed:crash / dispose / closed 前提前退出):evict 所有相关 key,下次 acquire 重建
       if (runtime.closed) this.evictAll(runtime, key);
       throw e;
+    } finally {
+      if (params.signal) params.signal.removeEventListener('abort', onAbort);
     }
   }
 

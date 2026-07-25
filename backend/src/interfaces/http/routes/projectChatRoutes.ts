@@ -10,7 +10,7 @@
 // 本文件用 /api/project-chat/* 前缀避让,职责分离。
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { TaskRepository } from '../../../domain/workflow/repositories/TaskRepository.js';
-import { AgentRunner } from '../../../application/agent/AgentRunner.js';
+import { AgentRuntimeManager } from '../../../application/agent/AgentRuntimeManager.js';
 import type { SessionTitleStore } from '../../../infrastructure/persistence/SessionTitleStore.js';
 import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
@@ -22,7 +22,7 @@ const logger = new FileLogger('project-chat');
 export async function registerProjectChatRoutes(
   fastify: FastifyInstance,
   taskRepository: TaskRepository,
-  agentRunner: AgentRunner,
+  agentRuntimeManager: AgentRuntimeManager,
   sessionTitleStore: SessionTitleStore,
 ) {
   // GET /api/project-chat/projects — 按项目(repoPath)聚合所有任务的会话,每条带关联任务
@@ -118,22 +118,23 @@ export async function registerProjectChatRoutes(
         'Connection': 'keep-alive',
       });
 
-      // 中断控制:客户端断开(停止/关窗)时 abort,AgentRunner kill claude 子进程
+      // 中断控制:客户端断开(停止/关窗)时 abort,manager interrupt 当前 turn(runtime 不死,下次复用)
       const abortController = new AbortController();
       const onClose = () => abortController.abort();
       request.raw.on('close', onClose);
 
       try {
-        for await (const ev of agentRunner.run({
-          prompt: message,
-          cwd: repoPath,
+        await agentRuntimeManager.executeTurn({
           side,
-          resumeSessionId,
+          sessionId: resumeSessionId,
+          cwd: repoPath,
+          text: message,
           signal: abortController.signal,
-        })) {
-          // 客户端可能已断开,写已结束的流会抛 → 卫语句兜底
-          if (!reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
-        }
+          onEvent: (ev) => {
+            // 客户端可能已断开,写已结束的流会抛 → 卫语句兜底
+            if (!reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
+          },
+        });
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         logger.error('project chat 异常', { repoPath, message: msg });

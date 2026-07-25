@@ -168,6 +168,18 @@ export class AgentRuntime implements RuntimeRecord {
           if (this.sessionId === null) this.sessionId = routed.result.session_id;
           const pending = this.pending;
           this.pending = null; // 先清再 resolve(resolve 后下一个 turn 才能占 pending)
+          // result 也透传给上层 onEvent(前端据此判断 turn 结束 + 拿 session_id / 用量),
+          // 与旧 AgentRunner yield result 一致;再 resolve 本 turn(executeTurn 返回)
+          if (pending) {
+            try {
+              pending.onEvent(routed.result as unknown as AgentEvent);
+            } catch (e) {
+              logger.warn('onEvent(result) 回调抛错,已忽略', {
+                side: this.side,
+                error: e instanceof Error ? e.message : String(e),
+              });
+            }
+          }
           pending?.resolve({ result: routed.result });
         } else if (routed.kind === 'stream' && this.pending) {
           try {

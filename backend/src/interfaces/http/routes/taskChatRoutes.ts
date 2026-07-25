@@ -4,7 +4,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { TaskRepository } from '../../../domain/workflow/repositories/TaskRepository.js';
 import { TaskId } from '../../../domain/workflow/value-objects/TaskId.js';
-import { AgentRunner } from '../../../application/agent/AgentRunner.js';
+import { AgentRuntimeManager } from '../../../application/agent/AgentRuntimeManager.js';
 import type { TaskSessionStore } from '../../../infrastructure/persistence/TaskSessionStore.js';
 import type { SessionTitleStore } from '../../../infrastructure/persistence/SessionTitleStore.js';
 import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
@@ -53,7 +53,7 @@ function buildTaskContext(dto: TaskDTO): string {
 export async function registerTaskChatRoutes(
   fastify: FastifyInstance,
   taskRepository: TaskRepository,
-  agentRunner: AgentRunner,
+  agentRuntimeManager: AgentRuntimeManager,
   sessionStore: TaskSessionStore,
   sessionTitleStore: SessionTitleStore,
 ) {
@@ -161,26 +161,25 @@ export async function registerTaskChatRoutes(
       });
 
       // 中断控制:客户端断开(用户点「停止」→ fetch abort / 关抽屉)时 abort,
-      // AgentRunner 收到信号 kill claude 子进程,避免它继续跑到 max-turns/timeout。
+      // manager 收到信号 interrupt 当前 turn(runtime 不死,下次复用)。
       const abortController = new AbortController();
       const onClose = () => abortController.abort();
       request.raw.on('close', onClose);
 
       try {
-        for await (const ev of agentRunner.run({
-          prompt,
+        const { sessionId: realSessionId } = await agentRuntimeManager.executeTurn({
+          side,
+          sessionId: resumeSessionId,
           cwd,
-          side: request.body?.side,
-          resumeSessionId,
+          text: prompt,
           signal: abortController.signal,
-        })) {
-          // 客户端可能已断开(abort/关抽屉),写已结束的流会抛 → 卫语句兜底(CR1)
-          if (!reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
-          // 终态:落盘 sessionId 供下轮续接(按侧)
-          if (ev.type === 'result' && typeof ev.session_id === 'string') {
-            await sessionStore.set(task.id.value, side, ev.session_id);
-          }
-        }
+          onEvent: (ev) => {
+            // 客户端可能已断开(abort/关抽屉),写已结束的流会抛 → 卫语句兜底(CR1)
+            if (!reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
+          },
+        });
+        // 终态:落盘 sessionId 供下轮续接(按侧);客户端已断开则跳过
+        if (!reply.raw.writableEnded) await sessionStore.set(task.id.value, side, realSessionId);
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         logger.error('task chat 异常', { taskId: task.id.value, message: msg });
