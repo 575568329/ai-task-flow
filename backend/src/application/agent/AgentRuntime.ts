@@ -66,6 +66,8 @@ export class AgentRuntime implements RuntimeRecord {
   private pending: PendingTurn | null = null;
   /** turn 串行链:前一个 turn settle 后才跑下一个 */
   private turnChain: Promise<void> = Promise.resolve();
+  /** turn 序号(诊断:关联每轮日志,排查"第几轮慢") */
+  private turnSeq = 0;
 
   constructor(opts: AgentRuntimeOptions) {
     this.side = opts.side;
@@ -147,6 +149,8 @@ export class AgentRuntime implements RuntimeRecord {
   private async runTurn(text: string, onEvent: (event: AgentEvent) => void): Promise<TurnResult> {
     if (this.closed) throw new Error('runtime already closed');
     // closed 检查在 Promise 外:避免触发 .finally 的 activeTurnCount-- 造成计数不平衡
+    const turnNo = ++this.turnSeq;
+    const startedAt = Date.now();
     return new Promise<TurnResult>((resolve, reject) => {
       this.activeTurnCount++;
       this.touch();
@@ -156,6 +160,14 @@ export class AgentRuntime implements RuntimeRecord {
       // 注意:不碰 pending(由 consumeLoop/dispose/crash 唯一清),否则会误清下一个已排队的 turn
       this.activeTurnCount--;
       this.touch();
+      // turn 计时:成功 / 中断(subtype=error_during_execution)/ crash(reject)统一在此落点,
+      // 配合 consumeLoop 的 result/crash 日志,可定位"第几轮、耗时多久、是否中断"
+      logger.info('turn 结束', {
+        side: this.side,
+        turnNo,
+        sessionId: this.sessionId,
+        ms: Date.now() - startedAt,
+      });
     });
   }
 
