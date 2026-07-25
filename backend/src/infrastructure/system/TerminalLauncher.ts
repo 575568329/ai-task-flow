@@ -17,21 +17,22 @@ const execAsync = promisify(exec);
  *   右侧内容截断 / 内容堆在左上角 / 底部大片空白(TASK-005 步骤2「布局错乱」根因)。
  *   正解:不设尺寸,让 claude 读取终端宿主的真实尺寸渲染。窗口偏小用户自行拖拽即可。
  */
-const SHELL_LAUNCHERS: Record<
+export const SHELL_LAUNCHERS: Record<
   TaskEnv,
-  (winPath: string, wslPath: string, resumeArg: string) => string
+  (winPath: string, wslPath: string, permArg: string, resumeArg: string) => string
 > = {
   // cmd: 新开 cmd 窗口, /k 保持窗口, /d 切到工作目录
-  cmd: (winPath, _wsl, resume) =>
-    `start "Claude" cmd /k "cd /d "${winPath}" && claude${resume}"`,
+  // permArg:夜间模式时为 ' --permission-mode bypassPermissions'(跳过所有权限确认),否则空串
+  cmd: (winPath, _wsl, perm, resume) =>
+    `start "Claude" cmd /k "cd /d "${winPath}" && claude${perm}${resume}"`,
   // wsl: 不能直接 `wsl.exe -- claude`——claude 退出(或 interop 启动 claude.exe 失败)时
   // wsl 进程立即结束、conhost 窗口一闪而过。用 bash -lc 包裹:登录 shell 确保 PATH/环境完整,
   // 末尾 exec bash 保证 claude 退出后窗口不关(便于看到启动失败的原因,而不是闪退)。
-  wsl: (_win, wslPath, resume) =>
-    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${resume}; exec bash"`,
+  wsl: (_win, wslPath, perm, resume) =>
+    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${perm}${resume}; exec bash"`,
   // pwsh: PowerShell 7, -NoExit 保持窗口
-  pwsh: (winPath, _wsl, resume) =>
-    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${resume}"`,
+  pwsh: (winPath, _wsl, perm, resume) =>
+    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${perm}${resume}"`,
 };
 
 export class TerminalLauncher {
@@ -77,10 +78,17 @@ export class TerminalLauncher {
     repoPath: string;
     env: TaskEnv;
     sessionId?: string;
+    /** 夜间模式:拼 --permission-mode bypassPermissions 跳过所有权限确认 */
+    bypassPermissions?: boolean;
   }): Promise<{ claudeCommand: string }> {
-    const { repoPath, env, sessionId } = params;
+    const { repoPath, env, sessionId, bypassPermissions } = params;
     const resumeArg = sessionId ? ` --resume ${sessionId}` : '';
-    const claudeCommand = `claude${resumeArg}`;
+    // 夜间模式:拼 --permission-mode bypassPermissions(与 AgentRunner 写法一致,当前推荐方式)。
+    // 仅 Windows 多环境分支(SHELL_LAUNCHERS)生效;非 Windows 回退(openAndRunClaude)不展开——
+    // 与 resumeArg 同属既有回退路径限制,保持最小改动不扩大。
+    const permArg = bypassPermissions ? ' --permission-mode bypassPermissions' : '';
+    // claudeCommand 给前端写剪贴板:让它 = 真实执行命令,用户核对/手动粘贴时所见即所得
+    const claudeCommand = `claude${permArg}${resumeArg}`;
 
     // 非 Windows 回退到默认终端(仅 cmd 形态),多环境启动是 Windows 专属能力
     if (os.platform() !== 'win32') {
@@ -90,7 +98,7 @@ export class TerminalLauncher {
 
     const winPath = repoPath.replace(/\//g, '\\');
     const wslPath = toWslPath(repoPath);
-    const command = SHELL_LAUNCHERS[env](winPath, wslPath, resumeArg);
+    const command = SHELL_LAUNCHERS[env](winPath, wslPath, permArg, resumeArg);
 
     try {
       await execAsync(command);

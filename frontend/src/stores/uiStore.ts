@@ -5,6 +5,7 @@ export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'ai-task-flow-theme';
 const GROUPS_KEY = 'ai-task-flow-collapsed-groups';
+const NIGHT_MODE_KEY = 'ai-task-flow-night-mode';
 
 function getInitialTheme(): Theme {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -23,6 +24,11 @@ function applyTheme(theme: Theme): void {
   } else {
     root.classList.remove('dark');
   }
+}
+
+/** 读夜间开发模式开关:默认关闭(安全默认),仅 'true' 才视为开启,脏数据兜底为 false */
+function getInitialNightMode(): boolean {
+  return localStorage.getItem(NIGHT_MODE_KEY) === 'true';
 }
 
 /** 读看板项目分组折叠态:key=projectName(或 UNGROUPED_KEY), true=收起。 */
@@ -55,6 +61,9 @@ interface UIState {
   localAccess: boolean;
   /** 存储占用是否超阈值(单项或总计),用于侧边栏设置按钮红点提示 */
   storageWarn: boolean;
+  /** 夜间开发模式:开启后「打开终端」启动的 claude 跳过所有权限确认(--permission-mode bypassPermissions)。
+   *  仅本机可信隔离环境使用。localStorage 持久化,默认关闭。 */
+  nightMode: boolean;
   /** 看板列内项目分组折叠态:key=projectName(或 UNGROUPED_KEY), true=收起。localStorage 持久化。 */
   collapsedGroups: Record<string, boolean>;
 
@@ -66,6 +75,8 @@ interface UIState {
   setSearchQuery: (query: string) => void;
   setLocalAccess: (v: boolean) => void;
   setStorageWarn: (v: boolean) => void;
+  /** 设置夜间开发模式(同时持久化到 localStorage)。 */
+  setNightMode: (v: boolean) => void;
   /** 切换某个项目分组的展开/收起。 */
   toggleGroup: (key: string) => void;
   /** 收起全部给定分组。 */
@@ -86,6 +97,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   // 默认 true:fetch /health 前不误屏蔽本机用户的敏感页面
   localAccess: true,
   storageWarn: false,
+  nightMode: getInitialNightMode(),
   collapsedGroups: loadCollapsedGroups(),
 
   toggleTheme: () => {
@@ -102,6 +114,10 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   setLocalAccess: (v) => set({ localAccess: v }),
   setStorageWarn: (v) => set({ storageWarn: v }),
+  setNightMode: (v) => {
+    localStorage.setItem(NIGHT_MODE_KEY, String(v));
+    set({ nightMode: v });
+  },
 
   toggleGroup: (key) =>
     set((s) => {

@@ -127,12 +127,22 @@ export async function registerSystemRoutes(
   fastify.post<{ Body: OpenClaudeRequest }>(
     '/api/system/claude-sessions/open',
     async (request, reply) => {
-      const { repoPath, env, sessionId } = request.body ?? {};
+      const { repoPath, env, sessionId, bypassPermissions } = request.body ?? {};
       if (!repoPath || !env) {
         return reply.status(400).send({ error: 'repoPath 与 env 必填' });
       }
       try {
-        const { claudeCommand } = await TerminalLauncher.openClaude({ repoPath, env, sessionId });
+        // 夜间模式(bypass)是危险能力,留痕便于事后排查"为什么我的终端没弹权限"
+        fastify.log.info(
+          { repoPath, env, bypass: !!bypassPermissions },
+          'Open claude terminal',
+        );
+        const { claudeCommand } = await TerminalLauncher.openClaude({
+          repoPath,
+          env,
+          sessionId,
+          bypassPermissions,
+        });
         return { ok: true, claudeCommand };
       } catch (error) {
         fastify.log.error(error, 'Failed to open claude terminal');

@@ -3,7 +3,7 @@
 // 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Plug, Keyboard } from 'lucide-react';
+import { Database, SlidersHorizontal, Plug, Keyboard, Moon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -19,8 +19,9 @@ import { LlmConfigPanel } from './LlmConfigPanel';
 import { StoragePanel } from './StoragePanel';
 import { McpHelpPanel } from './McpHelpPanel';
 import { ShortcutsPanel } from './ShortcutsPanel';
+import { NightModePanel } from './NightModePanel';
 
-type SettingsTab = 'llm' | 'storage' | 'mcp' | 'shortcuts';
+type SettingsTab = 'llm' | 'storage' | 'mcp' | 'shortcuts' | 'night';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ const TABS: TabDef[] = [
   { key: 'storage', label: '存储管理', icon: Database },
   { key: 'mcp', label: 'MCP 挂载', icon: Plug },
   { key: 'shortcuts', label: '快捷键', icon: Keyboard },
+  { key: 'night', label: '夜间开发', icon: Moon },
 ];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -49,7 +51,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
           <DialogDescription>
-            配置 LLM 模型、管理本地存储、查看 MCP 挂载方式、自定义快捷键。
+            配置 LLM 模型、管理本地存储、查看 MCP 挂载方式、自定义快捷键、开关夜间开发模式。
           </DialogDescription>
         </DialogHeader>
 
@@ -89,6 +91,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <StoragePanel />
               ) : tab === 'mcp' ? (
                 <McpHelpPanel />
+              ) : tab === 'night' ? (
+                <NightModePanel />
               ) : (
                 <ShortcutsPanel />
               )}
