@@ -3,6 +3,14 @@
 // 松类型:Claude CLI 决定事件结构,前端按 type 分发渲染(assistant/user/result/init/error)。
 // ChatTurn/ChatBlock 是前后端统一的对账形态:实时流归一化 与 历史会话回放 都产出它。
 
+/** 图片附件(base64 数据 + MIME 类型),前后端复用 */
+export interface ImageAttachment {
+  /** base64 编码后的图片数据(不含 data:xxx;base64, 前缀) */
+  data: string;
+  /** MIME 类型,如 image/png */
+  mediaType: string;
+}
+
 /** AgentRunner 透传的单个 stream-json 事件 */
 export interface AgentEvent {
   /** 事件类型:assistant | user | result | system | error */

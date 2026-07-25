@@ -14,7 +14,7 @@ import { AgentRuntimeManager } from '../../../application/agent/AgentRuntimeMana
 import type { SessionTitleStore } from '../../../infrastructure/persistence/SessionTitleStore.js';
 import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
-import type { AgentEvent, ClaudeSessionMeta, ProjectChatGroup, ProjectSessionSummary, TaskDTO } from '@ai-task-flow/shared';
+import type { AgentEvent, ClaudeSessionMeta, ImageAttachment, ProjectChatGroup, ProjectSessionSummary, TaskDTO } from '@ai-task-flow/shared';
 import { collectKnownRepos, normalizeRepoKey } from './projectChatHelpers.js';
 
 const logger = new FileLogger('project-chat');
@@ -111,7 +111,7 @@ export async function registerProjectChatRoutes(
 
       const side = request.body?.side === 'wsl' ? 'wsl' : 'windows';
       const resumeSessionId = request.body?.sessionId?.trim() || undefined;
-      const images = request.body?.images ?? undefined;
+      const images: ImageAttachment[] | undefined = request.body?.images ?? undefined;
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',

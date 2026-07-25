@@ -6,7 +6,7 @@
 //   - 悬浮窗 chat-first:无"列表视图"入口,进入即对话;关窗不清 conversations(再开仍记得)。
 // 事件归一化复用 lib/chatEvents(applyChatEvent),SSE 复用 api/projectChat。
 import { create } from 'zustand';
-import type { ChatTurn, ProjectChatGroup } from '@ai-task-flow/shared';
+import type { ChatTurn, ImageAttachment, ProjectChatGroup } from '@ai-task-flow/shared';
 import { applyChatEvent, chatEventUid } from '@/lib/chatEvents';
 import { fetchProjectChats, loadProjectSession, streamProjectChat } from '@/api/projectChat';
 
@@ -73,8 +73,8 @@ interface ProjectChatStore {
   startNew: (repoPath: string, side?: 'windows' | 'wsl') => void;
   /** 更新某项目输入框草稿(per-project 记忆,切项目不串) */
   setDraft: (repoPath: string, text: string) => void;
-  /** 发送一轮对话;images 为粘贴图片的 data URL(不含前缀的纯 base64 + mediaType) */
-  send: (message: string, images?: { data: string; mediaType: string }[]) => Promise<void>;
+  /** 发送一轮对话;images 为粘贴图片(复用 shared ImageAttachment) */
+  send: (message: string, images?: ImageAttachment[]) => Promise<void>;
   /** 中断当前轮 */
   stop: () => void;
   /** 切换 claude 侧(清空当前项目对话,不同侧 session 池不同) */
@@ -270,7 +270,7 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
       if (activeRepoPath) controllers[activeRepoPath]?.abort();
     },
 
-    send: async (message, images) => {
+    send: async (message: string, images?: ImageAttachment[]) => {
       const { activeRepoPath, conversations } = get();
       if (!activeRepoPath) return;
       const cur = conversations[activeRepoPath];
@@ -303,9 +303,20 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
       const signal = controllers[repoPath]!.signal;
 
       try {
-        for await (const ev of streamProjectChat(repoPath, message, signal, sessionId, side, images)) {
-          // 用户已切到其他对话/新建?跳过 store 写入,流继续在后台跑
-          if (streamOwners[repoPath] !== myStreamId) continue;
+        for await (const ev of streamProjectChat({ repoPath, message, signal, sessionId, side, images })) {
+          // 即使不是当前 owner,也从 result 事件提取 sessionId 写入 conversation 元数据,
+          // 避免快速连续 send 时旧 owner 的 sessionId 永久丢失(前端不知道孤立的会话)。
+          if (streamOwners[repoPath] !== myStreamId) {
+            if (ev.type === 'result') {
+              const orphanSessionId = typeof ev.session_id === 'string' ? (ev.session_id as string) : undefined;
+              if (orphanSessionId && !get().conversations[repoPath]?.sessionId) {
+                updateConv(repoPath, (c) => ({ ...c, sessionId: orphanSessionId }));
+                // 刷新项目聚合,让新会话进左栏历史列表(用户可手动 openSession 加载)
+                void get().loadProjects();
+              }
+            }
+            continue;
+          }
 
           if (ev.type === 'result') {
             const usage = ev.usage as ProjectTurnUsage | undefined;

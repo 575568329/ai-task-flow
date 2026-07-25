@@ -181,10 +181,11 @@ const TurnRow = memo(function TurnRow({
     );
   }
   // 提取本 turn 所有 text 块的纯文本(供复制按钮用)
+  const isTextBlock = (b: ChatBlock): b is { kind: 'text'; text: string } => b.kind === 'text';
   const turnText =
     turn.blocks
-      ?.filter((b) => b.kind === 'text')
-      .map((b) => (b as { text: string }).text)
+      ?.filter(isTextBlock)
+      .map((b) => b.text)
       .join('\n') ?? '';
   return (
     <div className="space-y-1.5">

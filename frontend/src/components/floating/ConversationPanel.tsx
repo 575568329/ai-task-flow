@@ -76,10 +76,20 @@ export function ConversationPanel() {
         const dataUrl = reader.result as string;
         // dataUrl 格式: "data:image/png;base64,xxxxx"
         const base64 = dataUrl.split(',')[1] ?? '';
+        // 防御:base64 为空(浏览器异常)时拒绝,避免发送空数据到后端
+        if (!base64) {
+          console.debug('[ConversationPanel] FileReader 读取图片 base64 为空,跳过', file.name);
+          return;
+        }
         setPastedImages((prev) => [
           ...prev,
           { dataUrl, base64, mediaType: file.type, name: file.name || 'image' },
         ]);
+      };
+      reader.onerror = () => {
+        // 文件损坏或读取失败时给予反馈(极罕见,但防御式编程)
+        console.debug('[ConversationPanel] FileReader 读取图片失败', file.name);
+        toast.error(`图片读取失败:${file.name}`);
       };
       reader.readAsDataURL(file);
     }
@@ -89,7 +99,8 @@ export function ConversationPanel() {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      // 剪贴板写入失败静默忽略(隐私模式等)
+      // 剪贴板写入失败静默忽略(隐私模式等),但留 debug 日志便于排查
+      console.debug('[ConversationPanel] clipboard.writeText 失败(隐私模式/权限不足)');
     }
   };
 
@@ -224,7 +235,7 @@ export function ConversationPanel() {
             <button
               type="button"
               onClick={onSend}
-              disabled={!input.trim() || !!loading}
+              disabled={(!input.trim() && pastedImages.length === 0) || !!loading}
               className="bg-primary hover:bg-primary/90 inline-flex size-8 items-center justify-center rounded-full text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               title="发送 (Enter)"
               aria-label="发送"

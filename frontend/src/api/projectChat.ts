@@ -1,7 +1,7 @@
 // frontend/src/api/projectChat.ts
 // 项目对话(悬浮窗)客户端:聚合项目视图 + 加载历史 + 流式发消息(SSE)。
 // 后端 POST /api/project-chat → SSE 透传 Claude stream-json 事件,前端按 type 分发。
-import type { AgentEvent, ChatTurn, ProjectChatGroup } from '@ai-task-flow/shared';
+import type { AgentEvent, ChatTurn, ImageAttachment, ProjectChatGroup } from '@ai-task-flow/shared';
 import { http } from './http';
 import { streamAgentEvents } from './sse-utils';
 
@@ -17,21 +17,26 @@ export function loadProjectSession(repoPath: string, sessionId: string) {
   return http.get<{ turns: ChatTurn[] }>(`/project-chat/sessions/${sessionId}${qs}`);
 }
 
+export interface StreamProjectChatOptions {
+  repoPath: string;
+  message: string;
+  signal?: AbortSignal;
+  /** 续接的历史会话 id;不传则后端新建会话 */
+  sessionId?: string;
+  /** 跑哪一侧的 claude:windows(默认)/ wsl */
+  side?: 'windows' | 'wsl';
+  /** 粘贴的图片(base64 数据 + MIME 类型) */
+  images?: ImageAttachment[];
+}
+
 /**
  * 流式发起一轮项目对话(自由对话,不注入任务上下文)。
  * @returns async iterable,逐个产出 AgentEvent(后端 SSE data 行 parse 后的对象)
  */
 export async function* streamProjectChat(
-  repoPath: string,
-  message: string,
-  signal?: AbortSignal,
-  /** 续接的历史会话 id;不传则后端新建会话 */
-  sessionId?: string,
-  /** 跑哪一侧的 claude:windows(默认)/ wsl */
-  side?: 'windows' | 'wsl',
-  /** 粘贴的图片(base64 数据 + MIME 类型) */
-  images?: { data: string; mediaType: string }[],
+  options: StreamProjectChatOptions,
 ): AsyncIterable<AgentEvent> {
+  const { repoPath, message, signal, sessionId, side, images } = options;
   const response = await fetch('/api/project-chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

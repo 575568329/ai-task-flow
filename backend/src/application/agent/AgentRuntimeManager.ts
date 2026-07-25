@@ -10,7 +10,7 @@
 // 不负责同会话串行(由 #5 路由层 taskId mutex 保证);Manager 只管 runtime 池。
 // 同 sessionId 并发 executeTurn 由 AgentRuntime 内部 turnChain 串行。
 import type { Options, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent } from '@ai-task-flow/shared';
+import type { AgentEvent, ImageAttachment } from '@ai-task-flow/shared';
 import { AgentRuntime } from './AgentRuntime.js';
 import { RuntimeRegistry } from './RuntimeRegistry.js';
 import { buildSdkSpawnOptions, type AgentSide } from '../../utils/sdk-loader.js';
@@ -25,7 +25,7 @@ export interface ExecuteTurnParams {
   cwd: string;
   text: string;
   /** 粘贴的图片(base64 数据 + MIME 类型) */
-  images?: { data: string; mediaType: string }[];
+  images?: ImageAttachment[];
   onEvent: (event: AgentEvent) => void;
   /** 中断信号:abort 时 interrupt 当前 turn(进程不死,以中断态 result 正常 resolve);客户端断开 / 前端停止用 */
   signal?: AbortSignal;
@@ -53,6 +53,8 @@ interface Acquired {
 export class AgentRuntimeManager {
   private readonly registry = new RuntimeRegistry();
   private tempSeq = 0;
+  /** 并发 acquire 锁:同 key 的创建请求排队,防重复创建 runtime 进程泄漏 */
+  private readonly pendingAcquires = new Map<string, Promise<AgentRuntime>>();
 
   constructor() {
     // 启动后台 GC sweeper(unref,进程退出不阻塞);常驻 runtime 池必须有回收机制防泄漏
@@ -88,23 +90,30 @@ export class AgentRuntimeManager {
       }
       return { sessionId: realSessionId, result };
     } catch (e) {
-      // runtime 不可用(closed:crash / dispose / closed 前提前退出):evict 所有相关 key,下次 acquire 重建
-      if (runtime.closed) this.evictAll(runtime, key);
+      // runtime 不可用(closed / sessionId 异常为 null):evict 所有相关 key,下次 acquire 重建
+      if (runtime.closed || !runtime.sessionId) this.evictAll(runtime, key);
       throw e;
     } finally {
       if (params.signal) params.signal.removeEventListener('abort', onAbort);
     }
   }
 
+  /** 类型安全地从注册表获取 AgentRuntime(封装 as 断言,单点维护) */
+  private getRuntime(side: AgentSide, sessionId: string): AgentRuntime | undefined {
+    const record = this.registry.get(side, sessionId);
+    // 本 Manager 只往注册表存 AgentRuntime,故 record 必为 AgentRuntime 或 undefined
+    return record as AgentRuntime | undefined;
+  }
+
   /** 中断指定 runtime 的当前 turn(进程不死) */
   async interrupt(side: AgentSide, sessionId: string): Promise<void> {
-    const runtime = this.registry.get(side, sessionId) as AgentRuntime | undefined;
+    const runtime = this.getRuntime(side, sessionId);
     await runtime?.interrupt();
   }
 
   /** 显式释放指定 runtime(杀进程);从注册表移除 */
   async dispose(side: AgentSide, sessionId: string): Promise<void> {
-    const runtime = this.registry.get(side, sessionId) as AgentRuntime | undefined;
+    const runtime = this.getRuntime(side, sessionId);
     if (!runtime) return;
     await runtime.dispose();
     this.registry.delete(side, sessionId);
@@ -132,10 +141,15 @@ export class AgentRuntimeManager {
     sdkOptions: Partial<Options> | undefined,
   ): Promise<Acquired> {
     if (sessionId) {
-      const existing = this.registry.get(side, sessionId) as AgentRuntime | undefined;
+      const existing = this.getRuntime(side, sessionId);
       if (existing) return { runtime: existing, key: { side, id: sessionId }, isTemp: false };
       // 未命中:新建并 resume 续接该 session(runtime 被 GC 过 / 进程重启后的恢复路径)
-      const runtime = await this.create(side, cwd, { ...sdkOptions, resume: sessionId });
+      // Promise-based 锁:同 key 并发 acquire 排队,防重复创建 runtime(孤儿进程泄漏)
+      const lockKey = `resume:${side}:${sessionId}`;
+      const runtime = await this.lockedCreate(lockKey, side, cwd, { ...sdkOptions, resume: sessionId });
+      // 二次检查:等锁期间可能已有其他请求创建并注册(极罕见但防御)
+      const recheck = this.getRuntime(side, sessionId);
+      if (recheck) return { runtime: recheck, key: { side, id: sessionId }, isTemp: false };
       this.registry.set(side, sessionId, runtime);
       return { runtime, key: { side, id: sessionId }, isTemp: false };
     }
@@ -144,6 +158,24 @@ export class AgentRuntimeManager {
     const runtime = await this.create(side, cwd, sdkOptions);
     this.registry.set(side, tempId, runtime);
     return { runtime, key: { side, id: tempId }, isTemp: true };
+  }
+
+  /** 带锁的 create:同 lockKey 并发调用排队,后续调用等第一个完成并复用其 runtime */
+  private async lockedCreate(
+    lockKey: string,
+    side: AgentSide,
+    cwd: string,
+    sdkOptions: Partial<Options> | undefined,
+  ): Promise<AgentRuntime> {
+    const inflight = this.pendingAcquires.get(lockKey);
+    if (inflight) return inflight;
+    const promise = this.create(side, cwd, sdkOptions);
+    this.pendingAcquires.set(lockKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.pendingAcquires.delete(lockKey);
+    }
   }
 
   private async create(side: AgentSide, cwd: string, sdkOptions: Partial<Options> | undefined): Promise<AgentRuntime> {

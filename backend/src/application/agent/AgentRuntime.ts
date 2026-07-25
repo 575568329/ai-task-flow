@@ -12,7 +12,7 @@
 // runTurn 的 .finally 只调 activeTurnCount-- / touch,绝不碰 pending(否则误清下一个 turn)。
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, Query, SDKResultMessage, SDKUserMessage, Settings } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent } from '@ai-task-flow/shared';
+import type { AgentEvent, ImageAttachment } from '@ai-task-flow/shared';
 import { PushableInputStream } from './PushableInputStream.js';
 import { routeMessage } from './routeMessage.js';
 import { withCleanSettings } from './cleanSettings.js';
@@ -21,13 +21,6 @@ import type { RuntimeRecord } from './RuntimeRegistry.js';
 import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
 
 const logger = new FileLogger('agent-runtime');
-
-interface ImageAttachment {
-  /** base64 编码后的图片数据(不含 data:xxx;base64, 前缀) */
-  data: string;
-  /** MIME 类型,如 image/png */
-  mediaType: string;
-}
 
 const userMsg = (text: string, images?: ImageAttachment[]): SDKUserMessage => {
   if (!images || images.length === 0) {
@@ -133,7 +126,7 @@ export class AgentRuntime implements RuntimeRecord {
   async executeTurn(
     text: string,
     onEvent: (event: AgentEvent) => void,
-    images?: { data: string; mediaType: string }[],
+    images?: ImageAttachment[],
   ): Promise<TurnResult> {
     const run = this.turnChain.then(() => this.runTurn(text, onEvent, images));
     // 无论本 turn 成败都放行下一个,不把错误串进链(单个 turn 失败不应阻塞后续 turn)
@@ -179,7 +172,7 @@ export class AgentRuntime implements RuntimeRecord {
   private async runTurn(
     text: string,
     onEvent: (event: AgentEvent) => void,
-    images?: { data: string; mediaType: string }[],
+    images?: ImageAttachment[],
   ): Promise<TurnResult> {
     if (this.closed) throw new Error('runtime already closed');
     // closed 检查在 Promise 外:避免触发 .finally 的 activeTurnCount-- 造成计数不平衡
@@ -189,7 +182,13 @@ export class AgentRuntime implements RuntimeRecord {
       this.activeTurnCount++;
       this.touch();
       this.pending = { onEvent, resolve, reject };
-      this.inputStream.push(userMsg(text, images));
+      try {
+        this.inputStream.push(userMsg(text, images));
+      } catch (e) {
+        // push 同步抛错(极端情况:内部 buffer 异常)→ 清理 pending,避免悬空泄漏
+        this.pending = null;
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     }).finally(() => {
       // 注意:不碰 pending(由 consumeLoop/dispose/crash 唯一清),否则会误清下一个已排队的 turn
       this.activeTurnCount--;
@@ -218,7 +217,9 @@ export class AgentRuntime implements RuntimeRecord {
           // 与旧 AgentRunner yield result 一致;再 resolve 本 turn(executeTurn 返回)
           if (pending) {
             try {
-              pending.onEvent(routed.result as unknown as AgentEvent);
+              // 构造明确的 AgentEvent 而非强转 SDKResultMessage(避免类型断言掩盖结构差异)
+              const resultEvent: AgentEvent = { ...routed.result };
+              pending.onEvent(resultEvent);
             } catch (e) {
               logger.warn('onEvent(result) 回调抛错,已忽略', {
                 side: this.side,
