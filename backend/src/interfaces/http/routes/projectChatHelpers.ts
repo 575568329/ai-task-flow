@@ -48,8 +48,17 @@ export function repoRootFromWorktree(worktreePath: string): string | undefined {
 }
 
 /**
+ * 判断 repoPath 是否像合法的仓库绝对路径:Windows 盘符(X:\ 或 X:/)或 Unix 绝对路径(/...)。
+ * 过滤误填进 repoPath 字段的非路径文本(如把缺陷描述当仓库路径),
+ * 避免脏数据被 collectKnownRepos 当成「项目」污染项目列表(回归:悬浮窗凭空多出假项目)。
+ */
+function isValidRepoPath(p: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('/');
+}
+
+/**
  * 从任务列表归纳「已知项目」(按仓库根去重)。
- * 规则:repoPath 优先;repoPath 缺失则从 worktree.path 反推根;都没有则跳过。
+ * 规则:repoPath 优先;repoPath 缺失则从 worktree.path 反推根;都没有或非合法路径则跳过。
  * 同一物理项目的多种路径写法(盘符大小写/正反斜杠/尾斜杠)经 normalizeRepoKey 合并。
  */
 export function collectKnownRepos(dtos: RepoSource[]): KnownRepo[] {
@@ -60,7 +69,7 @@ export function collectKnownRepos(dtos: RepoSource[]): KnownRepo[] {
       const root = repoRootFromWorktree(dto.worktree.path);
       repoPath = root;
     }
-    if (!repoPath) continue;
+    if (!repoPath || !isValidRepoPath(repoPath)) continue;
     const key = normalizeRepoKey(repoPath);
     if (!byKey.has(key)) {
       byKey.set(key, { repoPath, projectName: dto.projectName || projectNameOf(repoPath) });

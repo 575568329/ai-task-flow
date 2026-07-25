@@ -84,4 +84,20 @@ describe('collectKnownRepos', () => {
     const dtos: RepoSource[] = [{ repoPath: 'D:/p', projectName: '自定义名' }];
     expect(collectKnownRepos(dtos)[0].projectName).toBe('自定义名');
   });
+
+  it('跳过非合法路径的 repoPath(误填的描述文本不变成假项目)', () => {
+    const dtos: RepoSource[] = [
+      { repoPath: '使用者手机号 label 繁体下不要换行' },
+      { repoPath: 'just some text' },
+    ];
+    expect(collectKnownRepos(dtos)).toHaveLength(0);
+  });
+
+  it('接受 Windows 盘符路径与 Unix 绝对路径', () => {
+    const dtos: RepoSource[] = [
+      { repoPath: 'D:/Study/proj' },
+      { repoPath: '/home/user/proj' },
+    ];
+    expect(collectKnownRepos(dtos)).toHaveLength(2);
+  });
 });
