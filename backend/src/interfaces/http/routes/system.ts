@@ -8,6 +8,7 @@ import askdialog from 'node-file-dialog';
 import { StorageService } from '../../../application/system/StorageService.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
 import { TerminalLauncher } from '../../../infrastructure/system/TerminalLauncher.js';
+import { AgentRuntimeManager } from '../../../application/agent/AgentRuntimeManager.js';
 import type {
   StorageClearRequest,
   OpenClaudeRequest,
@@ -65,6 +66,7 @@ async function selectDirectoryFallback(): Promise<string | null> {
 
 export async function registerSystemRoutes(
   fastify: FastifyInstance,
+  agentRuntimeManager: AgentRuntimeManager,
 ) {
   // 选择文件夹
   fastify.post('/api/system/select-directory', async (req, reply) => {
@@ -173,5 +175,10 @@ export async function registerSystemRoutes(
         output: `${e.stdout || ''}${e.stderr || ''}${e.message || ''}`,
       };
     }
+  });
+
+  // GET /api/system/agent-runtime/snapshot — 常驻 runtime 池状态(诊断:windows/wsl/total 在池数)
+  fastify.get('/api/system/agent-runtime/snapshot', async () => {
+    return agentRuntimeManager.getSnapshot();
   });
 }

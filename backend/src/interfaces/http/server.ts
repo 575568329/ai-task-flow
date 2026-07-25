@@ -31,6 +31,7 @@ import { UsageService } from '../../application/usage/UsageService.js';
 import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
 import { registerProjectChatRoutes } from './routes/projectChatRoutes.js';
 import { AgentRunner } from '../../application/agent/AgentRunner.js';
+import { AgentRuntimeManager } from '../../application/agent/AgentRuntimeManager.js';
 import { TaskSessionStore } from '../../infrastructure/persistence/TaskSessionStore.js';
 import { SessionTitleStore } from '../../infrastructure/persistence/SessionTitleStore.js';
 
@@ -39,6 +40,11 @@ const usageService = new UsageService();
 
 /** 任务对话 Agent + sessionId 存储(模块级单例:无请求级状态,跨请求复用) */
 const agentRunner = new AgentRunner();
+/**
+ * 常驻 runtime 池(Phase 2):同 (side, sessionId) 连发复用同一 claude 进程,turn2 无冷启。
+ * 模块级单例:跨请求复用 runtime;与 agentRunner 并存,#5 路由逐步切换。
+ */
+const agentRuntimeManager = new AgentRuntimeManager();
 const taskSessionStore = new TaskSessionStore();
 const sessionTitleStore = new SessionTitleStore();
 
@@ -169,8 +175,12 @@ export async function createHttpServer(
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
-  await registerSystemRoutes(fastify);
+  await registerSystemRoutes(fastify, agentRuntimeManager);
   await registerUsageRoutes(fastify, usageService);
+  // graceful 关闭:dispose 所有常驻 runtime(杀 claude 子进程);sweeper 已 unref,SIGINT 直退靠 OS 清理
+  fastify.addHook('onClose', async () => {
+    await agentRuntimeManager.shutdown();
+  });
 
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
