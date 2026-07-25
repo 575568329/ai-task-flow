@@ -26,21 +26,22 @@ const turnContainerStyle: CSSProperties = {
   contain: 'layout style paint',
 };
 
-function splitBlocks(blocks: ChatBlock[]): { preface: ChatBlock[]; middle: ChatBlock[]; final: ChatBlock[] } {
-  const firstNonText = blocks.findIndex((b) => b.kind !== 'text');
-  if (firstNonText === -1) return { preface: blocks, middle: [], final: [] };
-  let lastNonText = firstNonText;
-  for (let i = blocks.length - 1; i > firstNonText; i--) {
-    if (blocks[i].kind !== 'text') {
-      lastNonText = i;
-      break;
+/** 将 blocks 按 text/process 分组:text 块独立一组,连续的 thinking+tool_use 归为一组。
+ *  text 永远不折叠——用户关心的解释性文本不应该和过程步骤一起被收起来。
+ *  渲染侧(AssistantTurn)会将所有 process 组合并到单个折叠,避免一 turn 多折叠占满屏幕。 */
+function groupBlocks(blocks: ChatBlock[]): { kind: 'text' | 'process'; items: ChatBlock[] }[] {
+  const groups: { kind: 'text' | 'process'; items: ChatBlock[] }[] = [];
+  for (const b of blocks) {
+    const isText = b.kind === 'text';
+    const targetKind = isText ? 'text' : 'process';
+    const last = groups[groups.length - 1];
+    if (last && last.kind === targetKind) {
+      last.items.push(b);
+    } else {
+      groups.push({ kind: targetKind, items: [b] });
     }
   }
-  return {
-    preface: blocks.slice(0, firstNonText),
-    middle: blocks.slice(firstNonText, lastNonText + 1),
-    final: blocks.slice(lastNonText + 1),
-  };
+  return groups;
 }
 
 function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: boolean }) {
@@ -63,7 +64,7 @@ function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: bo
         <span>{streaming ? `进行中 · ${stepCount} 步` : `${stepCount} 个步骤`}</span>
       </button>
       <Collapse open={open}>
-        <div className="space-y-1.5 border-t px-2 py-2">
+        <div className="space-y-1 border-t px-2 py-1.5">
           {blocks.map((b, i) => {
             const key = b.kind === 'tool_use' ? b.id : `${b.kind}-${i}`;
             if (b.kind === 'text') {
@@ -84,16 +85,28 @@ function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: bo
 
 function AssistantTurn({ turn, streaming }: { turn: ChatTurn; streaming: boolean }) {
   const blocks = turn.blocks ?? [];
-  const { preface, middle, final } = splitBlocks(blocks);
+  const groups = groupBlocks(blocks);
+
+  // 收集所有 process 块(text 除外)到一个折叠,避免 text 夹在步骤之间时拆成多个折叠
+  const allProcessBlocks = groups
+    .filter((g) => g.kind === 'process')
+    .flatMap((g) => g.items);
+  const firstProcessIdx = groups.findIndex((g) => g.kind === 'process');
+
   return (
-    <div className="max-w-full space-y-2">
-      {preface.map((b, i) =>
-        b.kind === 'text' ? <MessageContent key={`text-${i}`} content={b.text} /> : null,
-      )}
-      {middle.length > 0 && <ProcessFold blocks={middle} streaming={streaming} />}
-      {final.map((b, i) =>
-        b.kind === 'text' ? <MessageContent key={`text-${i}`} content={b.text} /> : null,
-      )}
+    <div className="max-w-full space-y-1.5">
+      {groups.map((g, gi) => {
+        if (g.kind === 'text') {
+          return g.items.map((b, i) =>
+            b.kind === 'text' ? <MessageContent key={`text-${gi}-${i}`} content={b.text} /> : null,
+          );
+        }
+        // 只在第一个 process 组的位置渲染折叠(内含所有步骤),后续 process 组跳过
+        if (gi === firstProcessIdx && allProcessBlocks.length > 0) {
+          return <ProcessFold key="fold" blocks={allProcessBlocks} streaming={streaming} />;
+        }
+        return null;
+      })}
       {blocks.length === 0 && streaming && <ThinkingIndicator />}
     </div>
   );
@@ -129,7 +142,7 @@ interface MessageStreamProps {
   error?: string;
   usage?: MessageStreamUsage;
   emptyHint?: ReactNode;
-  onCopyLast?: () => void;
+  onCopyTurn?: (text: string) => void;
 }
 
 /** 单 turn 渲染(memo):applyChatEvent 对未变 turn 保持引用,流式时仅末尾 turn 重渲 */
@@ -138,23 +151,41 @@ const TurnRow = memo(function TurnRow({
   isLast,
   streaming,
   usage,
-  onCopyLast,
+  onCopyTurn,
 }: {
   turn: ChatTurn;
   isLast: boolean;
   streaming: boolean;
   usage?: MessageStreamUsage;
-  onCopyLast?: () => void;
+  onCopyTurn?: (text: string) => void;
 }) {
   if (turn.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1.5">
         <div className="bg-primary text-primary-foreground max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm">
           {turn.text}
         </div>
+        {turn.images && turn.images.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-end">
+            {turn.images.map((dataUrl, i) => (
+              <img
+                key={i}
+                src={dataUrl}
+                alt={`附件 ${i + 1}`}
+                className="size-12 rounded border object-cover"
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
+  // 提取本 turn 所有 text 块的纯文本(供复制按钮用)
+  const turnText =
+    turn.blocks
+      ?.filter((b) => b.kind === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join('\n') ?? '';
   return (
     <div className="space-y-1.5">
       <AssistantTurn turn={turn} streaming={streaming && isLast} />
@@ -163,12 +194,12 @@ const TurnRow = memo(function TurnRow({
           {usage && typeof usage.duration_ms === 'number' && (
             <span>用时 {(usage.duration_ms / 1000).toFixed(1)}s</span>
           )}
-          {onCopyLast && (
+          {onCopyTurn && turnText && (
             <button
               type="button"
-              onClick={onCopyLast}
+              onClick={() => onCopyTurn(turnText)}
               className="hover:text-foreground inline-flex items-center gap-0.5 transition-colors"
-              title="复制回复"
+              title="复制此条回复"
             >
               <Copy className="size-3" />
               复制
@@ -180,7 +211,7 @@ const TurnRow = memo(function TurnRow({
   );
 });
 
-export function MessageStream({ turns, streaming, error, usage, emptyHint, onCopyLast }: MessageStreamProps) {
+export function MessageStream({ turns, streaming, error, usage, emptyHint, onCopyTurn }: MessageStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
 
@@ -239,7 +270,7 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
                 isLast={i === turns.length - 1}
                 streaming={streaming}
                 usage={usage}
-                onCopyLast={onCopyLast}
+                onCopyTurn={onCopyTurn}
               />
             </div>
           </div>

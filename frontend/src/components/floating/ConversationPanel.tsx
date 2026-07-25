@@ -2,7 +2,8 @@
 // 项目对话视图(悬浮窗右栏):顶栏(对话名/关联任务/会话ID/侧切换)+ 消息流 + 输入框。
 // 历史切换与新建已移至左栏 SessionList,本组件不再持有历史 Popover / 顶栏新建入口。
 // 数据源为 projectChatStore 的「当前激活项目的记忆对话」(派生 current)。
-import { ArrowUp, Square, Copy } from 'lucide-react';
+import { useState, type ClipboardEvent } from 'react';
+import { ArrowUp, Square, Copy, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { MessageStream } from '@/components/chat/MessageStream';
 import { useProjectChatStore } from '@/stores/projectChatStore';
@@ -16,8 +17,14 @@ export function ConversationPanel() {
   const projectsLoading = useProjectChatStore((s) => s.projectsLoading);
   const send = useProjectChatStore((s) => s.send);
   const stop = useProjectChatStore((s) => s.stop);
-  const setSide = useProjectChatStore((s) => s.setSide);
   const setDraft = useProjectChatStore((s) => s.setDraft);
+
+  // 粘贴图片:存储 data URL(预览用) + 对应的纯 base64 数据(发送用)
+  /** Anthropic SDK 支持的图片 MIME 类型 */
+  const ALLOWED_IMAGE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const [pastedImages, setPastedImages] = useState<
+    { dataUrl: string; base64: string; mediaType: string; name: string }[]
+  >([]);
 
   // 无激活项目(projects 未加载/为空)时给提示,而非渲染空对话框
   if (!current) {
@@ -33,26 +40,56 @@ export function ConversationPanel() {
   const input = draft ?? '';
 
   const onSend = () => {
-    const text = input.trim();
-    if (!text || streaming) return;
+    const hasText = input.trim();
+    const hasImages = pastedImages.length > 0;
+    if ((!hasText && !hasImages) || streaming) return;
+    const images = hasImages
+      ? pastedImages.map((img) => ({ data: img.base64, mediaType: img.mediaType }))
+      : undefined;
     setDraft(repoPath, '');
-    void send(text);
+    setPastedImages([]);
+    void send(hasText || '请看以下图片', images);
   };
 
-  const onCopyLast = async () => {
-    // 复制最后一条 assistant 的纯文本(footer 复制按钮)
-    for (let i = turns.length - 1; i >= 0; i--) {
-      const t = turns[i];
-      if (t.role === 'assistant' && t.blocks) {
-        const text = t.blocks
-          .filter((b) => b.kind === 'text')
-          .map((b) => (b as { text: string }).text)
-          .join('\n');
-        if (text) {
-          await navigator.clipboard.writeText(text);
-          return;
+  /** 粘贴图片:从剪贴板提取 File → FileReader 读 base64 → 存本地 state */
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        if (!ALLOWED_IMAGE_TYPES.includes(item.type)) {
+          toast.error(`不支持的图片格式:${item.type},请使用 JPEG/PNG/GIF/WebP`);
+          continue;
         }
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
       }
+    }
+    if (imageFiles.length === 0) return;
+
+    e.preventDefault(); // 不把图片 base64 插入到 textarea 文本中
+    for (const file of imageFiles) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        // dataUrl 格式: "data:image/png;base64,xxxxx"
+        const base64 = dataUrl.split(',')[1] ?? '';
+        setPastedImages((prev) => [
+          ...prev,
+          { dataUrl, base64, mediaType: file.type, name: file.name || 'image' },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const onCopyTurn = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // 剪贴板写入失败静默忽略(隐私模式等)
     }
   };
 
@@ -115,7 +152,7 @@ export function ConversationPanel() {
           streaming={streaming}
           error={error}
           usage={usage}
-          onCopyLast={onCopyLast}
+          onCopyTurn={onCopyTurn}
           emptyHint={
             <div className="text-muted-foreground py-8 text-center text-sm">
               输入消息开始对话。工作目录:
@@ -127,9 +164,28 @@ export function ConversationPanel() {
 
       {/* 输入框 */}
       <div className="border-t p-2">
+        {/* 粘贴图片预览:缩略图 + 文件名 + 删除按钮 */}
+        {pastedImages.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {pastedImages.map((img, i) => (
+              <div key={i} className="group relative size-14 shrink-0 overflow-hidden rounded border">
+                <img src={img.dataUrl} alt={img.name} className="size-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPastedImages((prev) => prev.filter((_, j) => j !== i))}
+                  className="bg-background/80 absolute -top-0.5 -right-0.5 rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-label={`移除 ${img.name}`}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <Textarea
           value={input}
           onChange={(e) => setDraft(repoPath, e.target.value)}
+          onPaste={onPaste}
           onKeyDown={(e) => {
             // Enter 发送 / Shift+Enter 换行(与 TaskConversation 一致)
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -142,7 +198,7 @@ export function ConversationPanel() {
               ? '加载历史会话…'
               : streaming
                 ? 'Claude 正在回复…(可点停止)'
-                : '输入消息(Enter 发送,Shift+Enter 换行)'
+                : '输入消息(Enter 发送,Shift+Enter 换行,可直接粘贴图片)'
           }
           disabled={streaming || !!loading}
           disableAutoGrow

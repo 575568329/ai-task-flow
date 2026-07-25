@@ -2,7 +2,7 @@
 // 悬浮窗左侧常驻对话列表:当前项目的所有会话(由父组件按 lastActiveAt 倒序传入)。
 // 每项:来源色标(Win/WSL)+ 标题 + 关联任务 + 时间 + 条数;当前会话高亮;点击切换。
 // 顶部「+ 新建对话」。来源色标补齐问题①(历史项无 Win/WSL 标签),常驻列表解决②(多对话不直观)。
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProjectSessionSummary } from '@ai-task-flow/shared';
 
@@ -10,6 +10,7 @@ interface SessionListProps {
   sessions: ProjectSessionSummary[];
   activeSessionId?: string;
   loading?: boolean;
+  onRefresh: () => void;
   onSelect: (sessionId: string, source: 'windows' | 'wsl') => void;
   onNew: (side: 'windows' | 'wsl') => void;
 }
@@ -34,7 +35,7 @@ function SourceBadge({ source }: { source?: 'windows' | 'wsl' }) {
   );
 }
 
-export function SessionList({ sessions, activeSessionId, loading, onSelect, onNew }: SessionListProps) {
+export function SessionList({ sessions, activeSessionId, loading, onSelect, onNew, onRefresh }: SessionListProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
@@ -50,7 +51,7 @@ export function SessionList({ sessions, activeSessionId, loading, onSelect, onNe
               'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] transition-colors',
               s === 'wsl'
                 ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                : 'bg-muted text-muted-foreground hover:bg-accent',
+                : 'bg-muted text-muted-foreground hover:bg-muted-foreground/12 hover:text-foreground',
             )}
             aria-label={`新建 ${s === 'wsl' ? 'WSL' : 'Windows'} 侧对话`}
             title={`新建 ${s === 'wsl' ? 'WSL' : 'Windows'} 侧对话`}
@@ -59,6 +60,17 @@ export function SessionList({ sessions, activeSessionId, loading, onSelect, onNe
             {s === 'wsl' ? 'WSL' : 'Win'}
           </button>
         ))}
+        {/* 刷新:复用 loadProjects 拉取本项目最新历史会话列表 */}
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="text-muted-foreground hover:text-foreground inline-flex size-5 shrink-0 items-center justify-center rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="刷新对话列表"
+          title="刷新对话列表"
+        >
+          <RefreshCw className={cn('size-3', loading && 'animate-spin')} />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {loading ? (

@@ -50,20 +50,11 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
 
   const onStop = () => stop(taskId);
 
-  const onCopyLast = async () => {
-    // 复制最后一条 assistant 的纯文本
-    for (let i = turns.length - 1; i >= 0; i--) {
-      const t = turns[i];
-      if (t.role === 'assistant' && t.blocks) {
-        const text = t.blocks
-          .filter((b) => b.kind === 'text')
-          .map((b) => (b as { text: string }).text)
-          .join('\n');
-        if (text) {
-          await navigator.clipboard.writeText(text);
-          return;
-        }
-      }
+  const onCopyTurn = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // 剪贴板写入失败静默忽略
     }
   };
 
@@ -198,7 +189,7 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
         streaming={streaming}
         error={error}
         usage={usage}
-        onCopyLast={onCopyLast}
+        onCopyTurn={onCopyTurn}
         emptyHint={
           <div className="text-muted-foreground py-8 text-center text-sm">
             在这里和 Claude 聊这个任务。它会以任务的仓库为工作目录,可读写文件、跑命令。

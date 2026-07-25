@@ -80,6 +80,7 @@ export function FloatingChatWindow() {
   const closeWindow = useProjectChatStore((s) => s.closeWindow);
   const openSession = useProjectChatStore((s) => s.openSession);
   const startNew = useProjectChatStore((s) => s.startNew);
+  const loadProjects = useProjectChatStore((s) => s.loadProjects);
   // 当前会话 id(左栏高亮用);当前项目的会话列表(左栏数据源)。side 由左栏新建入口传入,不在此读取。
   const currentSessionId = useProjectChatStore((s) =>
     activeRepoPath ? s.conversations[activeRepoPath]?.sessionId : undefined,
@@ -295,12 +296,13 @@ export function FloatingChatWindow() {
               sessions={currentSessions}
               activeSessionId={currentSessionId}
               loading={projectsLoading}
+              onRefresh={() => { void loadProjects(); }}
               onSelect={(id, source) => {
                 if (!activeRepoPath) return;
                 const s = currentSessions.find((x) => x.sessionId === id);
                 void openSession(activeRepoPath, id, source, { title: s?.title, taskTitle: s?.taskTitle });
               }}
-              onNew={() => activeRepoPath && startNew(activeRepoPath)}
+              onNew={(side) => activeRepoPath && startNew(activeRepoPath, side)}
             />
           </ResizablePanel>
           <ResizableHandle />

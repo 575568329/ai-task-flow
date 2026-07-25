@@ -39,16 +39,16 @@ describe('MessageStream', () => {
   // TODO(测试环境): vitest + monorepo hoist 双 React 实例 —— lucide-react(Copy 图标)被 hoist 到
   // 根 → 解析到根 react 18,footer 含 Copy 图标触发 "older version of React"。vitest.config.ts 的
   // react alias 对 externalize 包不完全生效。产品构建 vite dedupe 生效不受影响,待专项治理后启用。
-  it.skip('非流式时点击复制触发 onCopyLast', () => {
-    const onCopyLast = vi.fn();
+  it.skip('非流式时点击复制触发 onCopyTurn', () => {
+    const onCopyTurn = vi.fn();
     render(
       <MessageStream
         turns={[userTurn('问'), assistantTurn('答')]}
         streaming={false}
-        onCopyLast={onCopyLast}
+        onCopyTurn={onCopyTurn}
       />,
     );
     fireEvent.click(screen.getByText('复制'));
-    expect(onCopyLast).toHaveBeenCalledOnce();
+    expect(onCopyTurn).toHaveBeenCalledOnce();
   });
 });

@@ -69,20 +69,35 @@ interface ProjectChatStore {
     side: 'windows' | 'wsl',
     meta?: { title?: string; taskTitle?: string },
   ) => Promise<void>;
-  /** 在指定项目新建空对话(发首条消息才建会话);side 读当前项目对话记忆,默认 windows */
-  startNew: (repoPath: string) => void;
+  /** 在指定项目新建空对话(发首条消息才建会话);side 由 SessionList 新建按钮传入,未传则兜底当前项目或 windows */
+  startNew: (repoPath: string, side?: 'windows' | 'wsl') => void;
   /** 更新某项目输入框草稿(per-project 记忆,切项目不串) */
   setDraft: (repoPath: string, text: string) => void;
-  /** 发送一轮对话 */
-  send: (message: string) => Promise<void>;
+  /** 发送一轮对话;images 为粘贴图片的 data URL(不含前缀的纯 base64 + mediaType) */
+  send: (message: string, images?: { data: string; mediaType: string }[]) => Promise<void>;
   /** 中断当前轮 */
   stop: () => void;
   /** 切换 claude 侧(清空当前项目对话,不同侧 session 池不同) */
   setSide: (side: 'windows' | 'wsl') => void;
 }
 
-/** 悬浮窗同一时刻只跑一个对话(切项目前先 stop),abort controller 用单例 */
-let controller: AbortController | null = null;
+/** per-repoPath 的 AbortController:stop() 只中止当前项目可见的流,后台流不受影响 */
+const controllers: Record<string, AbortController | null> = {};
+
+/** 流所有权:send() 分配自增 id,stream 回调验证自己仍是当前 owner 才写 store。
+ *  openSession/startNew 不改变 owner(它们不再 stop 流),只有新的 send() 才会接管。
+ *  旧流 owner 不匹配 → 跳过写入 → 流在后台继续跑,结果由后端持久化,用户切回该会话时可见。 */
+let nextStreamId = 0;
+const streamOwners: Record<string, number> = {};
+
+/** 按 repoPath 跟踪 openSession 异步加载版本:startNew / 再次 openSession 时 +1,
+ *  加载完成时校验——版本不匹配说明 stale,丢弃结果避免幽灵内容(#9c2269c0)。 */
+const loadVersions: Record<string, number> = {};
+function bumpLoadVersion(repoPath: string): number {
+  const next = (loadVersions[repoPath] ?? 0) + 1;
+  loadVersions[repoPath] = next;
+  return next;
+}
 
 /** 构造一个空对话(新建 / 切侧 / ensureActive 用) */
 function emptyConv(repoPath: string, side: 'windows' | 'wsl' = 'windows'): CurrentConversation {
@@ -174,16 +189,19 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
       }
     },
 
-    // 切项目 tab = 看另一个项目当前那一个对话(恢复记忆;无记忆则建空)。不再回列表。
+    // 切项目 tab = 看另一个项目当前那一个对话(恢复记忆;无记忆则建空)。
+    // 不 stop 上一个项目的流:send() 用闭包锁了旧 repoPath,updateConv 写回旧项目,
+    // 切项目后旧流继续在后台跑,互不污染。用户要求:切换对话不影响后台任务。
     selectProject: (repoPath) => {
-      if (activeStreaming()) get().stop();
       set({ activeRepoPath: repoPath });
       ensureActive(repoPath);
     },
 
+    // openSession 异步加载历史会话期间,startNew 可能已被调用;用 version 检测 stale 写入避免幽灵内容。
+    // 不 stop 当前流:send() 用 streamOwners 跟踪所有权,旧流检测到 owner 不匹配时跳过 store 写入,
+    // 流仍在后台继续跑,结果由后端持久化,用户切回该会话时 openSession 重新加载即可看到。
     openSession: async (repoPath, sessionId, side, meta) => {
-      // 进入(切换)历史会话前先中断当前流,避免旧流结果污染新会话
-      if (activeStreaming()) get().stop();
+      const version = bumpLoadVersion(repoPath);
       // 先置 loading,顶栏/消息流显示加载态
       setConv(repoPath, {
         repoPath,
@@ -197,6 +215,8 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
       });
       try {
         const { turns } = await loadProjectSession(repoPath, sessionId);
+        // startNew / 再次 openSession 已触发,丢弃过期结果(否则旧会话 turns 写进新空对话)
+        if (loadVersions[repoPath] !== version) return;
         setConv(repoPath, {
           repoPath,
           sessionId,
@@ -208,6 +228,7 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
           loading: false,
         });
       } catch (error) {
+        if (loadVersions[repoPath] !== version) return;
         const msg = error instanceof Error ? error.message : String(error);
         setConv(repoPath, {
           repoPath,
@@ -224,13 +245,13 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
     },
 
     // 指定项目新建空对话(发首条消息才真正建 claude session,延迟创建)。
-    // side 不由调用方传:统一读当前项目对话的 side(由 ConversationPanel 输入区 setSide 设置),
-    // 默认 windows。side 选择权集中在输入区,符合"切侧仅新建对话时用"的交互(步骤 4),
-    // 也避免 SessionList onNew 漏传 side 导致新会话进错池子(/resume 找不到)。
-    startNew: (repoPath) => {
-      if (activeStreaming()) get().stop();
-      const side = get().conversations[repoPath]?.side ?? 'windows';
-      setConv(repoPath, emptyConv(repoPath, side));
+    // side 优先取 SessionList 新建按钮传入的 side(用户明确选了 Win/WSL),
+    // 否则兜底当前项目对话记忆,默认 windows。
+    startNew: (repoPath, side) => {
+      bumpLoadVersion(repoPath); // 废弃任何进行中的 openSession 异步加载
+      // 不 stop 当前流:理由同 openSession——streamOwners 机制保证旧流不污染新对话
+      const resolvedSide = side ?? get().conversations[repoPath]?.side ?? 'windows';
+      setConv(repoPath, emptyConv(repoPath, resolvedSide));
     },
 
     // 更新某项目输入框草稿(per-project 记忆)
@@ -245,10 +266,11 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
     },
 
     stop: () => {
-      controller?.abort();
+      const { activeRepoPath } = get();
+      if (activeRepoPath) controllers[activeRepoPath]?.abort();
     },
 
-    send: async (message) => {
+    send: async (message, images) => {
       const { activeRepoPath, conversations } = get();
       if (!activeRepoPath) return;
       const cur = conversations[activeRepoPath];
@@ -257,8 +279,18 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
       // 闭包锁定本次发送所属项目:切项目后旧流仍写该项目,不污染新激活项目
       const { repoPath, sessionId, side } = cur;
 
-      // 推入用户消息 + 开启流式
-      const userTurn: ChatTurn = { id: chatEventUid(), role: 'user', text: message };
+      // 流所有权:openSession/startNew 不 stop 流,仅 send() 接管所有权。
+      // 旧流回调检测 owner 不匹配 → 跳过 store 写入 → 流在后台继续跑。
+      const myStreamId = ++nextStreamId;
+      streamOwners[repoPath] = myStreamId;
+
+      // 推入用户消息 + 开启流式;图片缩略图用 data URL 存储以便消息流渲染
+      const userTurn: ChatTurn = {
+        id: chatEventUid(),
+        role: 'user',
+        text: message,
+        images: images?.map((img) => `data:${img.mediaType};base64,${img.data}`),
+      };
       updateConv(repoPath, (c) => ({
         ...c,
         turns: [...c.turns, userTurn],
@@ -267,10 +299,14 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
         usage: undefined,
       }));
 
-      controller = new AbortController();
+      controllers[repoPath] = new AbortController();
+      const signal = controllers[repoPath]!.signal;
 
       try {
-        for await (const ev of streamProjectChat(repoPath, message, controller.signal, sessionId, side)) {
+        for await (const ev of streamProjectChat(repoPath, message, signal, sessionId, side, images)) {
+          // 用户已切到其他对话/新建?跳过 store 写入,流继续在后台跑
+          if (streamOwners[repoPath] !== myStreamId) continue;
+
           if (ev.type === 'result') {
             const usage = ev.usage as ProjectTurnUsage | undefined;
             const prevSessionId = get().conversations[repoPath]?.sessionId;
@@ -300,10 +336,14 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
             updateConv(repoPath, (c) => ({ ...c, turns: applyChatEvent(c.turns, ev) }));
           }
         }
-        // 流正常结束但没收到 result:兜底关闭 streaming
-        const after = get().conversations[repoPath];
-        if (after?.streaming) updateConv(repoPath, (c) => ({ ...c, streaming: false }));
+        // 流正常结束但没收到 result:兜底关闭 streaming(仅当仍是 owner)
+        if (streamOwners[repoPath] === myStreamId) {
+          const after = get().conversations[repoPath];
+          if (after?.streaming) updateConv(repoPath, (c) => ({ ...c, streaming: false }));
+        }
       } catch (error) {
+        // 仅当仍是 owner 时才写错误状态
+        if (streamOwners[repoPath] !== myStreamId) return;
         const aborted = error instanceof DOMException && error.name === 'AbortError';
         updateConv(repoPath, (c) => ({
           ...c,
@@ -311,7 +351,7 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
           error: aborted ? undefined : error instanceof Error ? error.message : String(error),
         }));
       } finally {
-        controller = null;
+        controllers[repoPath] = null;
       }
     },
   };
