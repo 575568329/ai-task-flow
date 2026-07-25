@@ -11,10 +11,11 @@
 // pending 生命周期由 consumeLoop(resolve)/dispose(reject)/crash(reject)唯一管理;
 // runTurn 的 .finally 只调 activeTurnCount-- / touch,绝不碰 pending(否则误清下一个 turn)。
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, Query, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, Query, SDKResultMessage, SDKUserMessage, Settings } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@ai-task-flow/shared';
 import { PushableInputStream } from './PushableInputStream.js';
 import { routeMessage } from './routeMessage.js';
+import { withCleanSettings } from './cleanSettings.js';
 import type { SdkSpawnOptions, AgentSide } from '../../utils/sdk-loader.js';
 import type { RuntimeRecord } from './RuntimeRegistry.js';
 import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
@@ -74,6 +75,11 @@ export class AgentRuntime implements RuntimeRecord {
     this.lastUsedAt = now;
 
     this.inputStream = new PushableInputStream();
+    // clean settings(SDK flag 层)覆盖 superpowers hooks/permissions,隔离 SessionStart 注入;
+    // 保留 settingSources 默认(全读,含 CLAUDE.md)。调用方 sdkOptions.settings 经 withCleanSettings 合并。
+    const userSettings = opts.sdkOptions?.settings;
+    const settings: string | Settings =
+      typeof userSettings === 'string' ? userSettings : withCleanSettings(userSettings);
     const options: Options = {
       includePartialMessages: true,
       cwd: opts.spawnOpts.cwd,
@@ -81,6 +87,7 @@ export class AgentRuntime implements RuntimeRecord {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       ...opts.sdkOptions,
+      settings,
     };
     this.queryHandle = query({ prompt: this.inputStream, options });
     this.consumePromise = this.runConsumeLoop();
