@@ -5,7 +5,7 @@
 //   配合 TurnRow memo(applyChatEvent 对未变 turn 保持引用),流式仅末尾 turn 重渲。
 // 保留交互:自动滚底(nearBottom 判断)、流式占位、过程折叠、终态 footer、复制、错误、空态。
 // taskChat(TaskConversation)与 projectChat(ConversationPanel)共用。
-import { memo, useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { memo, useEffect, useRef, useState, startTransition, type ReactNode, type CSSProperties } from 'react';
 import { Copy } from 'lucide-react';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { Collapse } from '@/components/ui/collapse';
@@ -44,7 +44,26 @@ function groupBlocks(blocks: ChatBlock[]): { kind: 'text' | 'process'; items: Ch
   return groups;
 }
 
+/** 过滤无意义的 AI 文本块:纯省略号、系统元数据、图片引用等。
+ *  历史对话中常见的整条无内容回复不应占用屏幕空间。 */
+function isMeaninglessText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  // 纯标点/省略号(1-10 个点/句号/省略号字符)
+  if (/^[.。…]{1,10}$/.test(trimmed)) return true;
+  // Claude Code 系统级元数据(内部消息泄露到文本流)
+  if (trimmed === 'Continue from where you left off.') return true;
+  if (trimmed === 'No response requested.') return true;
+  if (trimmed.startsWith('Async agent launched successfully.')) return true;
+  // 系统中断消息
+  if (trimmed === '[Request interrupted by user for tool use]') return true;
+  // 图片引用被当作文本(如 [Image: source: C:\...] / [Image #1] ...)
+  if (/^\[Image[:\s#]/.test(trimmed)) return true;
+  return false;
+}
+
 function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: boolean }) {
+  // 流式进行中默认展开;历史/非流式默认收起(避免大量步骤首次展开卡死)
   const [open, setOpen] = useState(streaming);
   const wasStreaming = useRef(streaming);
   useEffect(() => {
@@ -53,61 +72,125 @@ function ProcessFold({ blocks, streaming }: { blocks: ChatBlock[]; streaming: bo
   }, [streaming]);
 
   const stepCount = blocks.filter((b) => b.kind !== 'text').length;
+  // 大量步骤(>10):grid-template-rows 过渡前需计算全部卡片完整高度 → 同步 layout 卡死主线程。
+  // 跳过 Collapse 动画,直接 show/hide;content-visibility:auto 让屏幕外卡片免布局,仅首屏项有开销。
+  const heavyFold = stepCount > 10;
+
+  const toggle = () => startTransition(() => setOpen((v) => !v));
+
+  const inner = (
+    <div className="space-y-0.5 border-t px-2 py-1">
+      {blocks.map((b, i) => {
+        const key = b.kind === 'tool_use' ? b.id : `${b.kind}-${i}`;
+        if (b.kind === 'text') {
+          return (
+            <div key={key} className="text-muted-foreground text-xs">
+              <MessageContent content={b.text} />
+            </div>
+          );
+        }
+        if (b.kind === 'thinking') return <ThinkingCard key={key} thinking={b.thinking} />;
+        return <ToolUseCard key={key} id={b.id} name={b.name} input={b.input} result={b.result} />;
+      })}
+    </div>
+  );
+
   return (
     <div className="border-border bg-muted/20 rounded-md border">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="hover:bg-muted/40 flex w-full items-center gap-1 px-2 py-1 text-left text-xs text-muted-foreground"
+        onClick={toggle}
+        className="hover:bg-muted/40 flex w-full items-center gap-1 px-2 py-0.5 text-left text-[11px] text-muted-foreground"
       >
         <span className={cn('inline-block transition-transform', open ? 'rotate-90' : '')}>▸</span>
         <span>{streaming ? `进行中 · ${stepCount} 步` : `${stepCount} 个步骤`}</span>
       </button>
-      <Collapse open={open}>
-        <div className="space-y-1 border-t px-2 py-1.5">
-          {blocks.map((b, i) => {
-            const key = b.kind === 'tool_use' ? b.id : `${b.kind}-${i}`;
-            if (b.kind === 'text') {
-              return (
-                <div key={key} className="text-muted-foreground text-xs">
-                  <MessageContent content={b.text} />
-                </div>
-              );
-            }
-            if (b.kind === 'thinking') return <ThinkingCard key={key} thinking={b.thinking} />;
-            return <ToolUseCard key={key} id={b.id} name={b.name} input={b.input} result={b.result} />;
-          })}
-        </div>
-      </Collapse>
+      {heavyFold
+        ? (open && inner)
+        : (<Collapse open={open}>{inner}</Collapse>)}
     </div>
   );
 }
 
-function AssistantTurn({ turn, streaming }: { turn: ChatTurn; streaming: boolean }) {
+/** 判断 assistant turn 是否有可见内容:有意义的文本 或 (流式中)有步骤/思考 */
+function isAssistantTurnEmpty(turn: ChatTurn, streaming: boolean): boolean {
+  // 仅 assistant turn 可能为空;user turn 始终可见
+  if (turn.role !== 'assistant') return false;
+  const blocks = turn.blocks ?? [];
+  // 有非 meaningless 的 text 块 → 可见
+  if (blocks.some((b) => b.kind === 'text' && !isMeaninglessText(b.text))) return false;
+  // 流式中且有 process 块 → 可见(ProcessFold 展示步骤)
+  if (streaming && blocks.some((b) => b.kind !== 'text')) return false;
+  // 什么都没有 → 空 turn,不渲染 DOM
+  return true;
+}
+
+function AssistantTurn({ turn, streaming, onCopyAll }: { turn: ChatTurn; streaming: boolean; onCopyAll?: (text: string) => void }) {
   const blocks = turn.blocks ?? [];
   const groups = groupBlocks(blocks);
 
-  // 收集所有 process 块(text 除外)到一个折叠,避免 text 夹在步骤之间时拆成多个折叠
+  // 收集所有 process 块到一个折叠,text 块保持原位不折叠
+  const processOnly = (b: ChatBlock) => b.kind !== 'text';
   const allProcessBlocks = groups
     .filter((g) => g.kind === 'process')
-    .flatMap((g) => g.items);
+    .flatMap((g) => g.items)
+    .filter(processOnly);
+  const hasTextOnlyBlocks = blocks.some((b) => b.kind === 'text');
   const firstProcessIdx = groups.findIndex((g) => g.kind === 'process');
 
+  // 构建渲染列表:text 块各自渲染,所有步骤合并到一个折叠放在第一个 process 组位置
+  const children: ReactNode[] = [];
+  const textNodes: ReactNode[] = [];
+  let textSeq = 0;
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    if (g.kind === 'text') {
+      for (const b of g.items) {
+        if (b.kind === 'text') {
+          if (!isMeaninglessText(b.text)) {
+            textNodes.push(<MessageContent key={`text-${textSeq++}`} content={b.text} />);
+          }
+        }
+      }
+    } else if (gi === firstProcessIdx && allProcessBlocks.length > 0 && streaming) {
+      // 历史对话（非流式）不展示步骤/思考折叠——用户回看历史只需要文本
+      children.push(<ProcessFold key="fold" blocks={allProcessBlocks} streaming={streaming} />);
+    }
+    // 后续 process 组跳过(已合并到上面的折叠)
+  }
+  // 收集本轮 AI 回复文本(供复制),过滤无意义块
+  const turnText = blocks
+    .filter((b): b is { kind: 'text'; text: string } => b.kind === 'text')
+    .filter((b) => !isMeaninglessText(b.text))
+    .map((b) => b.text)
+    .join('\n');
+
+  // 所有 text 块包裹在一个卡片容器中,提供本轮 AI 回复的统一视觉背景 + 复制按钮
+  if (textNodes.length > 0) {
+    children.unshift(
+      <div key="text-wrap" className="bg-muted/30 rounded-lg px-3 py-2">
+        <div className="space-y-1">{textNodes}</div>
+        {!streaming && onCopyAll && turnText && (
+          <div className="mt-1.5 flex justify-end border-t pt-1">
+            <button
+              type="button"
+              onClick={() => onCopyAll(turnText)}
+              className="hover:text-foreground text-muted-foreground/60 inline-flex items-center gap-1 text-[10px] transition-colors"
+              title="复制本轮 AI 回复"
+            >
+              <Copy className="size-3" />
+              复制
+            </button>
+          </div>
+        )}
+      </div>,
+    );
+  }
+
   return (
-    <div className="max-w-full space-y-1.5">
-      {groups.map((g, gi) => {
-        if (g.kind === 'text') {
-          return g.items.map((b, i) =>
-            b.kind === 'text' ? <MessageContent key={`text-${gi}-${i}`} content={b.text} /> : null,
-          );
-        }
-        // 只在第一个 process 组的位置渲染折叠(内含所有步骤),后续 process 组跳过
-        if (gi === firstProcessIdx && allProcessBlocks.length > 0) {
-          return <ProcessFold key="fold" blocks={allProcessBlocks} streaming={streaming} />;
-        }
-        return null;
-      })}
-      {blocks.length === 0 && streaming && <ThinkingIndicator />}
+    <div className="max-w-full space-y-1">
+      {children}
+      {!hasTextOnlyBlocks && blocks.length === 0 && streaming && <ThinkingIndicator />}
     </div>
   );
 }
@@ -142,7 +225,7 @@ interface MessageStreamProps {
   error?: string;
   usage?: MessageStreamUsage;
   emptyHint?: ReactNode;
-  onCopyTurn?: (text: string) => void;
+  onCopyAll?: (text: string) => void;
 }
 
 /** 单 turn 渲染(memo):applyChatEvent 对未变 turn 保持引用,流式时仅末尾 turn 重渲 */
@@ -151,13 +234,13 @@ const TurnRow = memo(function TurnRow({
   isLast,
   streaming,
   usage,
-  onCopyTurn,
+  onCopyAll,
 }: {
   turn: ChatTurn;
   isLast: boolean;
   streaming: boolean;
   usage?: MessageStreamUsage;
-  onCopyTurn?: (text: string) => void;
+  onCopyAll?: (text: string) => void;
 }) {
   if (turn.role === 'user') {
     return (
@@ -180,39 +263,22 @@ const TurnRow = memo(function TurnRow({
       </div>
     );
   }
-  // 提取本 turn 所有 text 块的纯文本(供复制按钮用)
-  const isTextBlock = (b: ChatBlock): b is { kind: 'text'; text: string } => b.kind === 'text';
-  const turnText =
-    turn.blocks
-      ?.filter(isTextBlock)
-      .map((b) => b.text)
-      .join('\n') ?? '';
+  // 空 assistant turn:无可见文本 + (历史模式无步骤/思考) → 不渲染
+  if (isAssistantTurnEmpty(turn, streaming && isLast)) return null;
+
   return (
-    <div className="space-y-1.5">
-      <AssistantTurn turn={turn} streaming={streaming && isLast} />
-      {!streaming && (
+    <div className="space-y-1">
+      <AssistantTurn turn={turn} streaming={streaming && isLast} onCopyAll={onCopyAll} />
+      {!streaming && usage && typeof usage.duration_ms === 'number' && (
         <div className="text-muted-foreground/70 flex items-center gap-2 text-[11px]">
-          {usage && typeof usage.duration_ms === 'number' && (
-            <span>用时 {(usage.duration_ms / 1000).toFixed(1)}s</span>
-          )}
-          {onCopyTurn && turnText && (
-            <button
-              type="button"
-              onClick={() => onCopyTurn(turnText)}
-              className="hover:text-foreground inline-flex items-center gap-0.5 transition-colors"
-              title="复制此条回复"
-            >
-              <Copy className="size-3" />
-              复制
-            </button>
-          )}
+          <span>用时 {(usage.duration_ms / 1000).toFixed(1)}s</span>
         </div>
       )}
     </div>
   );
 });
 
-export function MessageStream({ turns, streaming, error, usage, emptyHint, onCopyTurn }: MessageStreamProps) {
+export function MessageStream({ turns, streaming, error, usage, emptyHint, onCopyAll }: MessageStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
 
@@ -261,21 +327,25 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
 
   return (
     <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 py-3">
-      <div className="space-y-4">
-        {turns.map((t, i) => (
-          /* content-visibility:auto 让屏幕外 turn 跳过布局/绘制(原生虚拟化),不卸载 DOM */
-          <div key={t.id} style={turnContainerStyle}>
-            <div className="py-2">
-              <TurnRow
-                turn={t}
-                isLast={i === turns.length - 1}
-                streaming={streaming}
-                usage={usage}
-                onCopyTurn={onCopyTurn}
-              />
+      <div className="space-y-2">
+        {turns.map((t, i) => {
+          // 空 assistant turn 不渲染任何 DOM(外壳也不占位)
+          if (isAssistantTurnEmpty(t, streaming && i === turns.length - 1)) return null;
+          return (
+            /* content-visibility:auto 让屏幕外 turn 跳过布局/绘制(原生虚拟化),不卸载 DOM */
+            <div key={t.id} style={turnContainerStyle}>
+              <div className="py-1">
+                <TurnRow
+                  turn={t}
+                  isLast={i === turns.length - 1}
+                  streaming={streaming}
+                  usage={usage}
+                  onCopyAll={onCopyAll}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {/* 流式占位 + 错误:列表之后,nearBottom 时可见 */}
       {streaming && lastIsUser && <ThinkingIndicator />}

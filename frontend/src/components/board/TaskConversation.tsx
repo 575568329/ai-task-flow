@@ -50,7 +50,7 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
 
   const onStop = () => stop(taskId);
 
-  const onCopyTurn = async (text: string) => {
+  const onCopyAll = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -189,7 +189,7 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
         streaming={streaming}
         error={error}
         usage={usage}
-        onCopyTurn={onCopyTurn}
+        onCopyAll={onCopyAll}
         emptyHint={
           <div className="text-muted-foreground py-8 text-center text-sm">
             在这里和 Claude 聊这个任务。它会以任务的仓库为工作目录,可读写文件、跑命令。

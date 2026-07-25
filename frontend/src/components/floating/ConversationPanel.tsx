@@ -95,7 +95,7 @@ export function ConversationPanel() {
     }
   };
 
-  const onCopyTurn = async (text: string) => {
+  const onCopyAll = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -163,7 +163,7 @@ export function ConversationPanel() {
           streaming={streaming}
           error={error}
           usage={usage}
-          onCopyTurn={onCopyTurn}
+          onCopyAll={onCopyAll}
           emptyHint={
             <div className="text-muted-foreground py-8 text-center text-sm">
               输入消息开始对话。工作目录:
