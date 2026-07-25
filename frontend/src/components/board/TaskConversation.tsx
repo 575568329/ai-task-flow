@@ -7,7 +7,7 @@
 // - 自动滚动:仅当用户靠近底部时跟随(上翻看历史不被拉回)
 // - assistant 过程(thinking/tool_use)折叠成「N steps」,完成自动收,最终答案突出
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Square, Copy, History } from 'lucide-react';
+import { ArrowUp, Square, Copy, History, Pencil } from 'lucide-react';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapse } from '@/components/ui/collapse';
@@ -16,6 +16,7 @@ import { useTaskChatStore, type Block, type Turn } from '@/stores/taskChatStore'
 import { ThinkingCard } from './ThinkingCard';
 import { ToolUseCard } from './ToolUseCard';
 import { cn } from '@/lib/utils';
+import { toast } from '@/components/ui/toaster';
 
 interface TaskConversationProps {
   taskId: string;
@@ -103,8 +104,18 @@ function AssistantTurn({ turn, streaming }: { turn: Turn; streaming: boolean }) 
   );
 }
 
-/** 「思考中…」内联指示(三个点呼吸动画),不压在发送按钮上 */
+/** 「思考中…」内联指示(三个点呼吸动画 + 已用时长),不压在发送按钮上 */
 function ThinkingIndicator() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    // 显示已思考时长:即便 claude stream-json 在思考阶段不发中间事件(message 粒度),
+    // 用户也能看到"还在工作、已 N 秒",而不是一片空白(步骤③反馈增强)
+    const start = Date.now();
+    const timer = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - start) / 1000));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
   return (
     <div className="text-muted-foreground flex items-center gap-1.5 py-1 text-sm">
       <span>思考中</span>
@@ -113,6 +124,7 @@ function ThinkingIndicator() {
         <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
         <span className="size-1.5 animate-bounce rounded-full bg-current" />
       </span>
+      {seconds > 0 && <span className="text-[10px] tabular-nums">已 {seconds}s</span>}
     </div>
   );
 }
@@ -124,15 +136,20 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
   const setSide = useTaskChatStore((s) => s.setSide);
   const loadSessions = useTaskChatStore((s) => s.loadSessions);
   const loadHistory = useTaskChatStore((s) => s.loadHistory);
+  const renameSession = useTaskChatStore((s) => s.renameSession);
   const turns = chat?.turns ?? [];
   const sessions = chat?.sessions ?? [];
   const streaming = chat?.streaming ?? false;
   const side = chat?.side ?? 'windows';
   const error = chat?.error;
   const usage = chat?.usage;
+  const currentSessionId = chat?.sessionId;
 
   const [input, setInput] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
+  // 历史会话重命名:editingSessionId 标记当前编辑项,draftSessionTitle 是输入框临时值
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [draftSessionTitle, setDraftSessionTitle] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   // 用户是否靠近底部:只在靠近底部时自动跟随滚动(上翻看历史不被拉回)
   const nearBottomRef = useRef(true);
@@ -187,8 +204,130 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
     }
   };
 
+  // 复制当前会话的终端恢复指令(步骤⑤:方便在终端 claude --resume <id> 接着聊)
+  const onCopySessionId = async () => {
+    if (!currentSessionId) return;
+    try {
+      await navigator.clipboard.writeText(`claude --resume ${currentSessionId}`);
+      toast.success('已复制恢复指令');
+    } catch {
+      toast.error('复制失败');
+    }
+  };
+
+  // 历史会话重命名(步骤⑤):空标题或未改动不发请求
+  const startRenameSession = (sessionId: string, title: string) => {
+    setEditingSessionId(sessionId);
+    setDraftSessionTitle(title);
+  };
+  const commitRenameSession = async (sessionId: string, fallback: string) => {
+    const next = draftSessionTitle.trim();
+    setEditingSessionId(null);
+    if (!next || next === fallback) return;
+    await renameSession(taskId, sessionId, next);
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
+      {/* 右上角:当前会话 ID(可复制,便于终端 claude --resume)+ 历史会话入口 */}
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+        {currentSessionId && (
+          <button
+            type="button"
+            onClick={onCopySessionId}
+            className="bg-background/80 hover:bg-background inline-flex items-center gap-1 rounded-md border px-1.5 py-1 font-mono text-[10px] backdrop-blur transition-colors"
+            title={`会话 ID:${currentSessionId}\n点击复制恢复指令`}
+          >
+            <span className="text-muted-foreground">{currentSessionId.slice(0, 8)}</span>
+            <Copy className="text-muted-foreground size-3" />
+          </button>
+        )}
+        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={streaming}
+              className={cn(
+                'bg-background/80 text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] backdrop-blur transition-colors data-[state=open]:text-foreground disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+              title="历史会话"
+            >
+              <History className="size-3.5" />
+              历史
+            </button>
+          </PopoverTrigger>
+        <PopoverContent side="bottom" align="end" className="max-h-[60vh] w-72 overflow-y-auto p-1">
+          {sessions.length === 0 ? (
+            <div className="text-muted-foreground p-3 text-center text-xs">该仓库下暂无历史会话</div>
+          ) : (
+            sessions.map((s) => {
+              const isActive = s.sessionId === currentSessionId;
+              const isEditing = editingSessionId === s.sessionId;
+              return (
+                <div
+                  key={s.sessionId}
+                  className={cn(
+                    'hover:bg-accent flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left',
+                    isActive && 'bg-accent ring-primary/40 ring-1',
+                  )}
+                >
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      value={draftSessionTitle}
+                      onChange={(e) => setDraftSessionTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void commitRenameSession(s.sessionId, s.title);
+                        } else if (e.key === 'Escape') {
+                          setEditingSessionId(null);
+                        }
+                      }}
+                      onBlur={() => void commitRenameSession(s.sessionId, s.title)}
+                      className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 w-full rounded border px-1 py-0.5 text-xs outline-none focus-visible:ring-[3px]"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void loadHistory(taskId, s.sessionId, s.source ?? 'windows');
+                        setHistoryOpen(false);
+                      }}
+                      className="flex w-full items-center gap-1"
+                      title={isActive ? '当前会话' : undefined}
+                    >
+                      <span className="w-full truncate text-xs font-medium">{s.title || '(无标题)'}</span>
+                      {isActive && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
+                    </button>
+                  )}
+                  <div className="flex w-full items-center justify-between gap-1">
+                    <span className="text-muted-foreground text-[10px]">
+                      {new Date(s.lastActiveAt).toLocaleString()} · {s.messageCount} 条 ·{' '}
+                      {s.source === 'wsl' ? 'WSL' : 'Windows'}
+                    </span>
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRenameSession(s.sessionId, s.title || '');
+                        }}
+                        className="text-muted-foreground hover:text-foreground shrink-0"
+                        title="重命名"
+                        aria-label="重命名"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </PopoverContent>
+        </Popover>
+      </div>
       {/* 消息流 */}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
         {turns.length === 0 && (
@@ -230,6 +369,11 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
             </div>
           );
         })}
+        {/* 发送后→首个 assistant 事件前的空白期:streaming 且末尾仍是用户消息时,
+            立即补「思考中」占位,不等任何事件(步骤③:消除空白感)。收到首个 assistant
+            事件后末尾变为 assistant 轮,由 AssistantTurn 内部的指示器接管,两者互斥不重复 */}
+        {streaming &&
+          (turns.length === 0 || turns[turns.length - 1]?.role === 'user') && <ThinkingIndicator />}
         {error && (
           <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs whitespace-pre-wrap">
             {error}
@@ -274,44 +418,7 @@ export function TaskConversation({ taskId }: TaskConversationProps) {
                 </button>
               ))}
             </div>
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={streaming}
-                  className={cn(
-                    'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[11px] transition-colors data-[state=open]:text-foreground disabled:opacity-50',
-                  )}
-                  title="历史会话"
-                >
-                  <History className="size-3.5" />
-                  历史
-                </button>
-              </PopoverTrigger>
-              <PopoverContent side="top" align="start" className="w-72 p-1">
-                {sessions.length === 0 ? (
-                  <div className="text-muted-foreground p-3 text-center text-xs">该仓库下暂无历史会话</div>
-                ) : (
-                  sessions.map((s) => (
-                    <button
-                      key={s.sessionId}
-                      type="button"
-                      onClick={() => {
-                        void loadHistory(taskId, s.sessionId, s.source ?? 'windows');
-                        setHistoryOpen(false);
-                      }}
-                      className="hover:bg-accent focus:bg-accent flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left outline-none"
-                    >
-                      <span className="w-full truncate text-xs font-medium">{s.title || '(无标题)'}</span>
-                      <span className="text-muted-foreground text-[10px]">
-                        {new Date(s.lastActiveAt).toLocaleString()} · {s.messageCount} 条 ·{' '}
-                        {s.source === 'wsl' ? 'WSL' : 'Windows'}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </PopoverContent>
-            </Popover>
+            {/* 历史会话入口已移至消息区右上角(步骤①) */}
             <span className="text-muted-foreground/60 text-[11px]">
               {usage ? `· 输入 ${usage.input_tokens.toLocaleString()} / 输出 ${usage.output_tokens.toLocaleString()}` : ''}
             </span>

@@ -14,6 +14,14 @@ export function loadTaskChatSession(taskId: string, sessionId: string) {
   return http.get<{ turns: ChatTurn[] }>(`/tasks/${taskId}/chat/sessions/${sessionId}`);
 }
 
+/** 重命名会话(看板侧自定义标题,仅影响看板显示;不碰 Claude jsonl) */
+export function renameTaskChatSession(taskId: string, sessionId: string, title: string) {
+  return http.put<{ sessionId: string; title: string }>(
+    `/tasks/${taskId}/chat/sessions/${sessionId}/title`,
+    { title },
+  );
+}
+
 /**
  * 流式发起一轮任务对话。
  * @returns async iterable,逐个产出 AgentEvent(后端 SSE data 行 parse 后的对象)

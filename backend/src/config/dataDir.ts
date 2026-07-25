@@ -162,6 +162,11 @@ export function taskSessionsFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'task-sessions.json');
 }
 
+/** 会话自定义标题存储( sessionId → 用户命名,看板历史列表显示用;不碰 Claude jsonl) */
+export function sessionTitlesFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'session-titles.json');
+}
+
 /** 日志目录(后端运行日志,如聊天链路全量日志) */
 export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');

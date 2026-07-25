@@ -5,7 +5,7 @@
 // - result → 终态:落 sessionId(供下轮续接)+ usage,流结束
 import { create } from 'zustand';
 import type { AgentEvent, ChatBlock, ChatTurn, ChatSessionSummary } from '@ai-task-flow/shared';
-import { streamTaskChat, listTaskChatSessions, loadTaskChatSession } from '@/api/taskChat';
+import { streamTaskChat, listTaskChatSessions, loadTaskChatSession, renameTaskChatSession } from '@/api/taskChat';
 
 // 复用 shared 统一形态;导出别名让组件 import { Block, Turn } 不破。
 export type Block = ChatBlock;
@@ -46,6 +46,8 @@ interface TaskChatStore {
   loadSessions: (taskId: string) => Promise<void>;
   /** 加载某历史会话的消息时间线,并把它设为续接 sessionId(接着聊) */
   loadHistory: (taskId: string, sessionId: string, side: 'windows' | 'wsl') => Promise<void>;
+  /** 重命名会话(看板侧自定义标题),更新本地 sessions 列表 */
+  renameSession: (taskId: string, sessionId: string, title: string) => Promise<void>;
   /** 取某任务的对话状态(无则返回空态) */
   getState: (taskId: string) => TaskChatState;
   /** 清空某任务的对话(不含 sessionId,sessionId 留着以便续接) */
@@ -231,6 +233,30 @@ export const useTaskChatStore = create<TaskChatStore>((set, get) => ({
       set((state) => ({
         chats: { ...state.chats, [taskId]: { ...(state.chats[taskId] ?? EMPTY), error: msg } },
       }));
+    }
+  },
+
+  renameSession: async (taskId, sessionId, title) => {
+    try {
+      await renameTaskChatSession(taskId, sessionId, title);
+      set((state) => {
+        const cur = state.chats[taskId];
+        if (!cur?.sessions) return {};
+        return {
+          chats: {
+            ...state.chats,
+            [taskId]: {
+              ...cur,
+              sessions: cur.sessions.map((s) =>
+                s.sessionId === sessionId ? { ...s, title } : s,
+              ),
+            },
+          },
+        };
+      });
+    } catch (error) {
+      // 重命名失败不阻断,留痕排查(CLAUDE.md 禁止空 catch)
+      console.warn('[taskChatStore] renameSession 失败', error);
     }
   },
 
