@@ -11,7 +11,7 @@ interface SessionListProps {
   activeSessionId?: string;
   loading?: boolean;
   onSelect: (sessionId: string, source: 'windows' | 'wsl') => void;
-  onNew: () => void;
+  onNew: (side: 'windows' | 'wsl') => void;
 }
 
 /** 来源色标:语义 token,不硬编码颜色。Win 灰、WSL 主色调,呼应顶栏 side 切换观感 */
@@ -37,17 +37,28 @@ function SourceBadge({ source }: { source?: 'windows' | 'wsl' }) {
 export function SessionList({ sessions, activeSessionId, loading, onSelect, onNew }: SessionListProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b px-2 py-1.5">
-        <span className="text-muted-foreground text-xs font-medium">对话</span>
-        <button
-          type="button"
-          onClick={onNew}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-6 items-center justify-center rounded"
-          aria-label="新建对话"
-          title="新建对话"
-        >
-          <Plus className="size-4" />
-        </button>
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+        <span className="text-muted-foreground mr-auto text-xs font-medium">对话</span>
+        {/* 新建对话:Win/WSL 是两套独立 claude session 池,新建时直接选侧。
+            切换侧会清空进行中的对话,故只在「新建」入口暴露切换,避免对话中误触(步骤 4)。 */}
+        {(['windows', 'wsl'] as const).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onNew(s)}
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+              s === 'wsl'
+                ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                : 'bg-muted text-muted-foreground hover:bg-accent',
+            )}
+            aria-label={`新建 ${s === 'wsl' ? 'WSL' : 'Windows'} 侧对话`}
+            title={`新建 ${s === 'wsl' ? 'WSL' : 'Windows'} 侧对话`}
+          >
+            <Plus className="size-3" />
+            {s === 'wsl' ? 'WSL' : 'Win'}
+          </button>
+        ))}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {loading ? (

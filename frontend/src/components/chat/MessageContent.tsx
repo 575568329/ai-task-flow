@@ -1,7 +1,7 @@
 // frontend/src/components/chat/MessageContent.tsx
 // Markdown 渲染:代码块→CodeBlock,mermaid→MermaidBlock,其余标签自覆盖样式(不依赖 typography 插件)。
 // 图片点击触发全局预览蒙版(previewStore)。
-import { Children, isValidElement, type ReactNode } from 'react';
+import { Children, isValidElement, memo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 // 渲染文档内嵌的 HTML(如翻译文案里的 <br>);本工具内容来自本地任务/文档/AI,风险可接受
@@ -89,7 +89,8 @@ const components: Components = {
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
 };
 
-export function MessageContent({ content }: MessageContentProps) {
+// memo:content 不变跳过 ReactMarkdown 重新解析(滚动/父级重渲时不重复解析 markdown,显著降 CPU)
+export const MessageContent = memo(function MessageContent({ content }: MessageContentProps) {
   return (
     <div className="text-sm break-words">
       <ReactMarkdown
@@ -102,4 +103,4 @@ export function MessageContent({ content }: MessageContentProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});

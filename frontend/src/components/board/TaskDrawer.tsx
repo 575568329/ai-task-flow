@@ -317,7 +317,12 @@ export function TaskDrawer() {
         // 会被 Radix 误判为"操作抽屉外部"而连带关闭抽屉(只关了抽屉、预览没关)。
         // 预览打开期间吞掉这两个事件,交由 YARL 自行关闭;预览关闭后抽屉恢复正常行为。
         onInteractOutside={(e) => {
-          if (previewOpen) e.preventDefault();
+          // 图片预览(YARL)打开时吞掉外部点击;
+          // 点击悬浮球/悬浮窗也不应关闭抽屉——它们 portal 到 body,不在抽屉 content 树内,
+          // Radix 会误判为"操作抽屉外部"而连带关闭(用户感知"点悬浮按钮,详情没了")。
+          // 命中 [data-floating-chat] 的点击交给悬浮窗自己处理,抽屉保持打开。
+          const target = e.target as HTMLElement | null;
+          if (previewOpen || target?.closest('[data-floating-chat]')) e.preventDefault();
         }}
         onEscapeKeyDown={(e) => {
           if (previewOpen) e.preventDefault();

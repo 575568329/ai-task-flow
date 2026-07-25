@@ -82,6 +82,7 @@ export function FloatingChatBall() {
   return (
     <button
       type="button"
+      data-floating-chat="ball"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

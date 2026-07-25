@@ -19,8 +19,11 @@ const NEAR_BOTTOM_THRESHOLD = 120;
 const TURN_INTRINSIC_SIZE = 'auto 120px';
 // 屏幕外 turn 的容器样式:content-visibility:auto 跳过渲染,containIntrinsicSize 提供占位尺寸
 const turnContainerStyle: CSSProperties = {
+  // content-visibility:auto 跳过屏幕外 turn 的布局/绘制;contain 限制每条 turn 的重排重绘
+  // 不波及兄弟(进入视口时的高计算局限在自身,减少连锁 layout),两者配合是滚动优化推荐组合
   contentVisibility: 'auto',
   containIntrinsicSize: TURN_INTRINSIC_SIZE,
+  contain: 'layout style paint',
 };
 
 function splitBlocks(blocks: ChatBlock[]): { preface: ChatBlock[]; middle: ChatBlock[]; final: ChatBlock[] } {
@@ -195,11 +198,17 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
     }
   }, [turns, streaming]);
 
+  const scrollRafRef = useRef<number | null>(null);
   const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    nearBottomRef.current = distance < NEAR_BOTTOM_THRESHOLD;
+    // 滚动事件高频,rAF 合并到下一帧只算一次 nearBottom,避免每个 scroll 回调都强制读 layout
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      nearBottomRef.current = distance < NEAR_BOTTOM_THRESHOLD;
+    });
   };
 
   const lastIsUser = turns.length === 0 || turns[turns.length - 1]?.role === 'user';

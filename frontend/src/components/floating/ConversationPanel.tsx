@@ -92,24 +92,16 @@ export function ConversationPanel() {
             )}
           </div>
         </div>
-        {/* 侧切换:Windows / WSL claude(两套独立 session 池) */}
-        <div className="bg-muted inline-flex shrink-0 rounded-md p-0.5">
-          {(['windows', 'wsl'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              disabled={streaming || !!loading}
-              onClick={() => setSide(s)}
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[10px] transition-colors disabled:opacity-50',
-                side === s ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-              )}
-              title={s === 'wsl' ? '用 WSL 里的 claude' : '用 Windows 的 claude'}
-            >
-              {s === 'wsl' ? 'WSL' : 'Win'}
-            </button>
-          ))}
-        </div>
+        {/* 当前对话侧(只读标记):切侧会清空对话,仅新建对话时可改,故切换移至输入区 */}
+        <span
+          className={cn(
+            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+            side === 'wsl' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}
+          title={side === 'wsl' ? 'WSL 侧 claude' : 'Windows 侧 claude'}
+        >
+          {side === 'wsl' ? 'WSL' : 'Win'}
+        </span>
       </div>
 
       {/* 消息流:历史会话加载中显示提示,否则渲染复用 MessageStream */}

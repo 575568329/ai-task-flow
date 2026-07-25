@@ -69,8 +69,8 @@ interface ProjectChatStore {
     side: 'windows' | 'wsl',
     meta?: { title?: string; taskTitle?: string },
   ) => Promise<void>;
-  /** 在指定项目新建空对话(发首条消息才建会话) */
-  startNew: (repoPath: string, side: 'windows' | 'wsl') => void;
+  /** 在指定项目新建空对话(发首条消息才建会话);side 读当前项目对话记忆,默认 windows */
+  startNew: (repoPath: string) => void;
   /** 更新某项目输入框草稿(per-project 记忆,切项目不串) */
   setDraft: (repoPath: string, text: string) => void;
   /** 发送一轮对话 */
@@ -129,7 +129,7 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
     // 展开=进对话视图。已有 projects 则 ensureActive 当前/首个项目;无则 loadProjects
     // (load 完内部 ensureActive 首个项目)。不先进列表。
     openWindow: () => {
-      if (activeStreaming()) get().stop();
+      // 不中断正在跑的流(与 closeWindow 一致):再开窗时进行中的对话继续可见
       set({ open: true });
       const { projects, activeRepoPath, projectsLoading } = get();
       if (projects.length === 0 && !projectsLoading) {
@@ -145,15 +145,14 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
 
     // 任务卡片/详情入口:定位到该项目 tab + 进对话视图(恢复记忆或建空)
     openForRepo: (repoPath) => {
-      if (activeStreaming()) get().stop();
+      // 不中断正在跑的流(与 closeWindow 一致):旧流闭包锁旧项目,不污染新定位项目
       set({ open: true, activeRepoPath: repoPath });
       ensureActive(repoPath);
       if (get().projects.length === 0 && !get().projectsLoading) void get().loadProjects();
     },
 
-    // 关窗=收起:中断可能正在跑的流。不清 conversations(关窗再开仍记得各项目对话)
+    // 关窗=收起:不中断正在跑的流(用户要求)。流闭包锁项目,结果写入该项目对话记忆,再开窗仍可见
     closeWindow: () => {
-      if (activeStreaming()) get().stop();
       set({ open: false });
     },
 
@@ -225,9 +224,12 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
     },
 
     // 指定项目新建空对话(发首条消息才真正建 claude session,延迟创建)。
-    // 防御性 stop:即便 UI 在 streaming 时已禁用,程序化调用也先 abort 旧流,避免覆盖 streaming 留孤儿 fetch(M1)
-    startNew: (repoPath, side) => {
+    // side 不由调用方传:统一读当前项目对话的 side(由 ConversationPanel 输入区 setSide 设置),
+    // 默认 windows。side 选择权集中在输入区,符合"切侧仅新建对话时用"的交互(步骤 4),
+    // 也避免 SessionList onNew 漏传 side 导致新会话进错池子(/resume 找不到)。
+    startNew: (repoPath) => {
       if (activeStreaming()) get().stop();
+      const side = get().conversations[repoPath]?.side ?? 'windows';
       setConv(repoPath, emptyConv(repoPath, side));
     },
 
@@ -271,10 +273,12 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
         for await (const ev of streamProjectChat(repoPath, message, controller.signal, sessionId, side)) {
           if (ev.type === 'result') {
             const usage = ev.usage as ProjectTurnUsage | undefined;
+            const prevSessionId = get().conversations[repoPath]?.sessionId;
+            const newSessionId =
+              typeof ev.session_id === 'string' ? (ev.session_id as string) : undefined;
             updateConv(repoPath, (c) => ({
               ...c,
-              sessionId:
-                typeof ev.session_id === 'string' ? (ev.session_id as string) : c.sessionId,
+              sessionId: newSessionId ?? c.sessionId,
               usage,
               error:
                 ev.subtype === 'error' || ev.is_error === true
@@ -284,6 +288,10 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
                   : undefined,
               streaming: false,
             }));
+            // 新建会话(首次拿到 sessionId):刷新项目聚合,让新会话进左栏历史列表(步骤 7a)
+            if (!prevSessionId && newSessionId) {
+              void get().loadProjects();
+            }
           } else if (ev.type === 'error') {
             const msg = typeof ev.message === 'string' ? ev.message : '对话异常';
             updateConv(repoPath, (c) => ({ ...c, error: msg, streaming: false }));

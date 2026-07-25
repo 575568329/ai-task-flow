@@ -80,12 +80,9 @@ export function FloatingChatWindow() {
   const closeWindow = useProjectChatStore((s) => s.closeWindow);
   const openSession = useProjectChatStore((s) => s.openSession);
   const startNew = useProjectChatStore((s) => s.startNew);
-  // 当前会话 id/side(左栏高亮 + 收起新建用);当前项目的会话列表(左栏数据源)
+  // 当前会话 id(左栏高亮用);当前项目的会话列表(左栏数据源)。side 由左栏新建入口传入,不在此读取。
   const currentSessionId = useProjectChatStore((s) =>
     activeRepoPath ? s.conversations[activeRepoPath]?.sessionId : undefined,
-  );
-  const currentSide = useProjectChatStore((s) =>
-    activeRepoPath ? s.conversations[activeRepoPath]?.side : undefined,
   );
   const currentSessions = activeRepoPath
     ? projects.find((p) => p.repoPath === activeRepoPath)?.sessions ?? []
@@ -93,6 +90,8 @@ export function FloatingChatWindow() {
 
   // bounds 用 ref + state:ref 持有最新值(拖拽/缩放 handler 读 ref,不依赖闭包过期),state 触发重渲染
   const boundsRef = useRef<Bounds>(loadBounds());
+  // 根元素 ref:拖拽/缩放中直操 DOM style 定位,跳过 React 重渲染(否则整棵窗含消息流每帧重渲 → 闪跳)
+  const rootRef = useRef<HTMLDivElement>(null);
   const [bounds, setBoundsState] = useState<Bounds>(boundsRef.current);
   const updateBounds = (next: Bounds) => {
     boundsRef.current = next;
@@ -151,12 +150,19 @@ export function FloatingChatWindow() {
     // clamp:允许部分出视口但留 120px 可抓回;标题栏不被顶出/底出(至少留 48px)
     const x = clamp(dragStart.current.x + dx, -b.width + 120, window.innerWidth - 120);
     const y = clamp(dragStart.current.y + dy, 0, window.innerHeight - 48);
-    updateBounds({ ...b, x, y });
+    // 拖拽中用 ref 直操 DOM style,跳过 React 重渲染(避免整棵窗含消息流每帧重渲 → 闪跳)
+    boundsRef.current = { ...b, x, y };
+    if (rootRef.current) {
+      rootRef.current.style.left = `${x}px`;
+      rootRef.current.style.top = `${y}px`;
+    }
   };
   const onHeaderPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragging.current) return;
     dragging.current = false;
     e.currentTarget.releasePointerCapture(e.pointerId);
+    // 松手才 setState 同步:让 React state 与 DOM 一致,避免下次重渲染闪回拖拽前位置
+    setBoundsState(boundsRef.current);
     saveBounds(boundsRef.current);
   };
 
@@ -175,12 +181,18 @@ export function FloatingChatWindow() {
     // clamp:不小于最小尺寸,不超出视口右下
     const width = clamp(resizeStart.current.w + dw, MIN_WIDTH, window.innerWidth - b.x);
     const height = clamp(resizeStart.current.h + dh, MIN_HEIGHT, window.innerHeight - b.y);
-    updateBounds({ ...b, width, height });
+    // 缩放同样直操 DOM,跳过重渲染
+    boundsRef.current = { ...b, width, height };
+    if (rootRef.current) {
+      rootRef.current.style.width = `${width}px`;
+      rootRef.current.style.height = `${height}px`;
+    }
   };
   const onResizePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!resizing.current) return;
     resizing.current = false;
     e.currentTarget.releasePointerCapture(e.pointerId);
+    setBoundsState(boundsRef.current);
     saveBounds(boundsRef.current);
   };
 
@@ -200,6 +212,8 @@ export function FloatingChatWindow() {
 
   return (
     <div
+      ref={rootRef}
+      data-floating-chat="window"
       className="bg-card pointer-events-auto fixed z-[1300] flex flex-col overflow-hidden rounded-lg border shadow-2xl"
       style={{ left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height }}
     >
@@ -286,7 +300,7 @@ export function FloatingChatWindow() {
                 const s = currentSessions.find((x) => x.sessionId === id);
                 void openSession(activeRepoPath, id, source, { title: s?.title, taskTitle: s?.taskTitle });
               }}
-              onNew={() => activeRepoPath && startNew(activeRepoPath, currentSide ?? 'windows')}
+              onNew={() => activeRepoPath && startNew(activeRepoPath)}
             />
           </ResizablePanel>
           <ResizableHandle />
