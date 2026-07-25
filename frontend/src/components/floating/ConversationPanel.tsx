@@ -2,9 +2,10 @@
 // 项目对话视图(悬浮窗对话态):顶栏(返回 + 对话名/关联任务/会话ID)+ 消息流 + 输入框。
 // 消息流复用 MessageStream(与 TaskConversation 共用),数据源为 projectChatStore.current。
 // 与 TaskConversation 区别:不绑 taskId,对话以 repoPath(项目 cwd)为根,自由对话不注入任务上下文。
-import { useState } from 'react';
-import { ArrowUp, Square, ArrowLeft, Copy } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowUp, Square, ArrowLeft, Copy, History } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MessageStream } from '@/components/chat/MessageStream';
 import { useProjectChatStore } from '@/stores/projectChatStore';
 import { cn } from '@/lib/utils';
@@ -16,7 +17,15 @@ export function ConversationPanel() {
   const stop = useProjectChatStore((s) => s.stop);
   const setSide = useProjectChatStore((s) => s.setSide);
   const backToList = useProjectChatStore((s) => s.backToList);
+  const openSession = useProjectChatStore((s) => s.openSession);
+  const projects = useProjectChatStore((s) => s.projects);
   const [input, setInput] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // 当前项目的会话列表(历史 Popover 用);projects 未加载时为空
+  const repoSessions = useMemo(
+    () => projects.find((p) => p.repoPath === current?.repoPath)?.sessions ?? [],
+    [projects, current?.repoPath],
+  );
 
   // 列表视图时 current 为 null,但本组件仅在对话视图渲染;guard 兜底
   if (!current) return null;
@@ -72,6 +81,58 @@ export function ConversationPanel() {
         >
           <ArrowLeft className="size-4" />
         </button>
+        {/* 历史会话:在当前项目内快速切换,无需返回列表(与 TaskConversation 历史面板一致) */}
+        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={streaming}
+              className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex size-6 items-center justify-center rounded disabled:opacity-40"
+              aria-label="历史会话"
+              title="历史会话"
+            >
+              <History className="size-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="bottom" align="start" className="max-h-[60vh] w-72 overflow-y-auto p-1">
+            {repoSessions.length === 0 ? (
+              <div className="text-muted-foreground p-3 text-center text-xs">该项目暂无历史会话</div>
+            ) : (
+              repoSessions.map((s) => {
+                const isActive = s.sessionId === sessionId;
+                return (
+                  <button
+                    key={s.sessionId}
+                    type="button"
+                    onClick={() => {
+                      void openSession(repoPath, s.sessionId, s.source ?? side, {
+                        title: s.title,
+                        taskTitle: s.taskTitle,
+                      });
+                      setHistoryOpen(false);
+                    }}
+                    className={cn(
+                      'hover:bg-accent flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left',
+                      isActive && 'bg-accent',
+                    )}
+                  >
+                    <div className="flex w-full items-center gap-1">
+                      <span className="truncate text-xs font-medium">{s.title || '(无标题)'}</span>
+                      {isActive && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
+                    </div>
+                    <div className="text-muted-foreground flex w-full items-center gap-1 text-[10px]">
+                      {s.taskTitle && (
+                        <span className="bg-muted max-w-[50%] truncate rounded px-1">{s.taskTitle}</span>
+                      )}
+                      <span>· {new Date(s.lastActiveAt).toLocaleString()}</span>
+                      <span>· {s.messageCount} 条</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </PopoverContent>
+        </Popover>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium">{title || '(新对话)'}</div>
           <div className="text-muted-foreground flex items-center gap-1 text-[10px]">

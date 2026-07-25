@@ -88,8 +88,9 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => ({
   open: false,
 
   openWindow: () => {
-    set({ open: true });
-    // 首次展开拉一次项目列表(后续 backToList 也会刷新)
+    // 展开=回到项目总览(列表),不继承上次未结束的对话态
+    if (get().current?.streaming) get().stop();
+    set({ open: true, view: 'list', current: null });
     if (get().projects.length === 0 && !get().projectsLoading) {
       void get().loadProjects();
     }
@@ -99,11 +100,17 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => ({
   // 先设 activeRepoPath 再触发 loadProjects;loadProjects 内部仅「无激活时」才默认第一个,
   // 已设的 activeRepoPath 不会被覆盖,加载完成后直接落在目标项目 tab。
   openForRepo: (repoPath) => {
-    set({ open: true, activeRepoPath: repoPath });
+    // 任务入口:定位到该项目 tab + 回到该项目列表(不带入别项目的对话态)
+    if (get().current?.streaming) get().stop();
+    set({ open: true, activeRepoPath: repoPath, view: 'list', current: null });
     if (get().projects.length === 0 && !get().projectsLoading) void get().loadProjects();
   },
 
-  closeWindow: () => set({ open: false }),
+  // 关窗=完全收起:中断可能正在跑的流,重置到列表态(再开从总览开始)
+  closeWindow: () => {
+    if (get().current?.streaming) get().stop();
+    set({ open: false, view: 'list', current: null });
+  },
 
   loadProjects: async () => {
     set({ projectsLoading: true });
@@ -121,7 +128,12 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => ({
     }
   },
 
-  selectProject: (repoPath) => set({ activeRepoPath: repoPath }),
+  // 切项目 tab = 看另一个项目,回到该项目列表(不继承上一项目的新建/对话态)。
+  // 若正在流式,先中断(避免悬空流的结果无处落)。
+  selectProject: (repoPath) => {
+    if (get().current?.streaming) get().stop();
+    set({ activeRepoPath: repoPath, view: 'list', current: null });
+  },
 
   openSession: async (repoPath, sessionId, side, meta) => {
     try {

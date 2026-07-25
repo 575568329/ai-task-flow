@@ -24,6 +24,12 @@ function projectNameOf(repoPath: string): string {
   return seg || repoPath;
 }
 
+/** 归一化仓库路径为分组 key:统一正斜杠 + 去尾斜杠 + 小写(Windows 盘符大小写不敏感)。
+ *  避免 D:\foo / D:/foo / d:\foo 被当成不同项目。key 仅用于分组去重,展示与扫描仍用原始 repoPath。 */
+function normalizeRepoKey(repoPath: string): string {
+  return repoPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
 export async function registerProjectChatRoutes(
   fastify: FastifyInstance,
   taskRepository: TaskRepository,
@@ -34,15 +40,17 @@ export async function registerProjectChatRoutes(
   fastify.get('/api/project-chat/projects', async () => {
     const tasks = await taskRepository.findAll();
     const dtoById = new Map<string, TaskDTO>();
-    // 按 repoPath 分组(worktree 优先),记录项目名(同 repo 多任务共享项目名)
+    // 按项目分组:以 repoPath(仓库根)为 key,而非 worktree.path(任务级隔离目录),
+    // 否则每个派发过的任务会被拆成一个独立「项目」。key 归一化避免同盘不同写法重复。
     const byRepo = new Map<string, { repoPath: string; projectName: string }>();
     for (const task of tasks) {
       const dto = task.toJSON();
       dtoById.set(dto.id, dto);
-      const repoPath = dto.worktree?.path || dto.repoPath;
+      const repoPath = dto.repoPath || dto.worktree?.path;
       if (!repoPath) continue;
-      if (!byRepo.has(repoPath)) {
-        byRepo.set(repoPath, {
+      const key = normalizeRepoKey(repoPath);
+      if (!byRepo.has(key)) {
+        byRepo.set(key, {
           repoPath,
           projectName: dto.projectName || projectNameOf(repoPath),
         });
