@@ -87,11 +87,11 @@ export async function registerProjectChatRoutes(
 
   // POST /api/project-chat — cwd-based 对话(新建 / resume)。
   // 自由对话:不注入任务上下文(prompt = 用户原话);关联任务靠 claude 后续 get_task 自然产生。
-  fastify.post<{ Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl' } }>(
+  fastify.post<{ Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[] } }>(
     '/api/project-chat',
     async (
       request: FastifyRequest<{
-        Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl' };
+        Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[] };
       }>,
       reply: FastifyReply,
     ) => {
@@ -111,6 +111,7 @@ export async function registerProjectChatRoutes(
 
       const side = request.body?.side === 'wsl' ? 'wsl' : 'windows';
       const resumeSessionId = request.body?.sessionId?.trim() || undefined;
+      const images = request.body?.images ?? undefined;
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -129,6 +130,7 @@ export async function registerProjectChatRoutes(
           sessionId: resumeSessionId,
           cwd: repoPath,
           text: message,
+          images,
           signal: abortController.signal,
           onEvent: (ev) => {
             // 客户端可能已断开,写已结束的流会抛 → 卫语句兜底

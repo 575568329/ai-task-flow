@@ -22,11 +22,37 @@ import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
 
 const logger = new FileLogger('agent-runtime');
 
-const userMsg = (text: string): SDKUserMessage => ({
-  type: 'user',
-  message: { role: 'user', content: text },
-  parent_tool_use_id: null,
-});
+interface ImageAttachment {
+  /** base64 编码后的图片数据(不含 data:xxx;base64, 前缀) */
+  data: string;
+  /** MIME 类型,如 image/png */
+  mediaType: string;
+}
+
+const userMsg = (text: string, images?: ImageAttachment[]): SDKUserMessage => {
+  if (!images || images.length === 0) {
+    return {
+      type: 'user',
+      message: { role: 'user', content: text },
+      parent_tool_use_id: null,
+    };
+  }
+  // 多图片:content 数组,[text, image1, image2, ...]
+  // media_type 强制转为 SDK 要求的字面量联合类型(上游已校验 MIME)
+  type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  const content = [
+    { type: 'text' as const, text },
+    ...images.map((img) => ({
+      type: 'image' as const,
+      source: { type: 'base64' as const, media_type: img.mediaType as ImageMediaType, data: img.data },
+    })),
+  ];
+  return {
+    type: 'user',
+    message: { role: 'user', content },
+    parent_tool_use_id: null,
+  };
+};
 
 export interface AgentRuntimeOptions {
   side: AgentSide;
@@ -104,8 +130,12 @@ export class AgentRuntime implements RuntimeRecord {
    * 发送一轮对话,流式回调 onEvent,result 到达时 resolve。
    * 同一 runtime 串行:并发调用按 turnChain 排队,不会重叠(防 pending 单槽被覆盖)。
    */
-  async executeTurn(text: string, onEvent: (event: AgentEvent) => void): Promise<TurnResult> {
-    const run = this.turnChain.then(() => this.runTurn(text, onEvent));
+  async executeTurn(
+    text: string,
+    onEvent: (event: AgentEvent) => void,
+    images?: { data: string; mediaType: string }[],
+  ): Promise<TurnResult> {
+    const run = this.turnChain.then(() => this.runTurn(text, onEvent, images));
     // 无论本 turn 成败都放行下一个,不把错误串进链(单个 turn 失败不应阻塞后续 turn)
     this.turnChain = run.then(
       () => undefined,
@@ -146,7 +176,11 @@ export class AgentRuntime implements RuntimeRecord {
     logger.info('runtime 关闭', { side: this.side, sessionId: this.sessionId });
   }
 
-  private async runTurn(text: string, onEvent: (event: AgentEvent) => void): Promise<TurnResult> {
+  private async runTurn(
+    text: string,
+    onEvent: (event: AgentEvent) => void,
+    images?: { data: string; mediaType: string }[],
+  ): Promise<TurnResult> {
     if (this.closed) throw new Error('runtime already closed');
     // closed 检查在 Promise 外:避免触发 .finally 的 activeTurnCount-- 造成计数不平衡
     const turnNo = ++this.turnSeq;
@@ -155,7 +189,7 @@ export class AgentRuntime implements RuntimeRecord {
       this.activeTurnCount++;
       this.touch();
       this.pending = { onEvent, resolve, reject };
-      this.inputStream.push(userMsg(text));
+      this.inputStream.push(userMsg(text, images));
     }).finally(() => {
       // 注意:不碰 pending(由 consumeLoop/dispose/crash 唯一清),否则会误清下一个已排队的 turn
       this.activeTurnCount--;

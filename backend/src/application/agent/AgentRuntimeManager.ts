@@ -24,6 +24,8 @@ export interface ExecuteTurnParams {
   sessionId?: string;
   cwd: string;
   text: string;
+  /** 粘贴的图片(base64 数据 + MIME 类型) */
+  images?: { data: string; mediaType: string }[];
   onEvent: (event: AgentEvent) => void;
   /** 中断信号:abort 时 interrupt 当前 turn(进程不死,以中断态 result 正常 resolve);客户端断开 / 前端停止用 */
   signal?: AbortSignal;
@@ -75,7 +77,7 @@ export class AgentRuntimeManager {
       else params.signal.addEventListener('abort', onAbort, { once: true });
     }
     try {
-      const { result } = await runtime.executeTurn(params.text, params.onEvent);
+      const { result } = await runtime.executeTurn(params.text, params.onEvent, params.images);
       const realSessionId = runtime.sessionId;
       if (!realSessionId) throw new Error('turn 完成但 runtime 未拿到 sessionId(不应发生)');
       // rekey:临时 key 或 resume 传入 id 与 claude 实际 sessionId 不符 → 迁移到真实 sessionId

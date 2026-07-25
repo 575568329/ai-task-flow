@@ -36,6 +36,8 @@ export interface ChatTurn {
   role: 'user' | 'assistant';
   /** user 轮的文本 */
   text?: string;
+  /** user 轮粘贴的图片(data URL 缩略图,仅用户消息) */
+  images?: string[];
   /** assistant 轮的内容块序列(渲染顺序 = 到达顺序) */
   blocks?: ChatBlock[];
 }
