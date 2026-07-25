@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/toaster';
 import { systemApi } from '@/api/task';
+import { useTaskStore } from '@/stores/taskStore';
 import { RepoPathPicker } from './RepoPathPicker';
 import { relativeTime } from '@/lib/taskMeta';
 import { cn } from '@/lib/utils';
@@ -79,6 +80,15 @@ export function OpenClaudeDialog({
       setSelectedId(null);
     }
   }, [open]);
+
+  // 关联任务标题反查:session.usage.taskId(scanner 从 jsonl 埋点扫出)→ 任务标题,
+  // 让历史列表标注每个会话处理过哪个任务(与项目悬浮窗对话列表一致)
+  const tasks = useTaskStore((s) => s.tasks);
+  const taskTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tasks) m.set(t.id, t.title);
+    return m;
+  }, [tasks]);
 
   // 按 selectedEnv 过滤会话:wsl↔Windows 两个 home 来源(cmd/pwsh 同属 Windows home)
   const filteredSessions = useMemo(
@@ -231,6 +241,9 @@ export function OpenClaudeDialog({
               <div className="flex flex-col gap-1">
                 {filteredSessions.map((s) => {
                   const active = s.sessionId === selectedId;
+                  const taskTitle = s.usage?.taskId
+                    ? taskTitleById.get(s.usage.taskId)
+                    : undefined;
                   return (
                     <button
                       key={s.sessionId}
@@ -246,6 +259,14 @@ export function OpenClaudeDialog({
                         <span className="flex-1 truncate text-sm font-medium">
                           {s.title || '(无标题)'}
                         </span>
+                        {taskTitle && (
+                          <span
+                            className="bg-primary/10 text-primary max-w-[35%] shrink-0 truncate rounded px-1 text-[10px]"
+                            title={`关联任务:${taskTitle}`}
+                          >
+                            {taskTitle}
+                          </span>
+                        )}
                         <span
                           className={cn(
                             'shrink-0 rounded px-1 py-0 text-[10px]',
