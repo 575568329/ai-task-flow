@@ -136,6 +136,9 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => ({
   },
 
   openSession: async (repoPath, sessionId, side, meta) => {
+    // 与其他入口一致:进入新对话视图前先中断可能正在跑的流,
+    // 否则旧流的后续 set 会把结果覆盖到新会话的 turns 上(状态污染)
+    if (get().current?.streaming) get().stop();
     try {
       const { turns } = await loadProjectSession(repoPath, sessionId);
       set({

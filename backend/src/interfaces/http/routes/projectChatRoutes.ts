@@ -15,20 +15,9 @@ import type { SessionTitleStore } from '../../../infrastructure/persistence/Sess
 import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
 import type { AgentEvent, ClaudeSessionMeta, ProjectChatGroup, ProjectSessionSummary, TaskDTO } from '@ai-task-flow/shared';
+import { collectKnownRepos, normalizeRepoKey } from './projectChatHelpers.js';
 
 const logger = new FileLogger('project-chat');
-
-/** 从仓库路径推断项目名(取末段目录名;Windows/Unix 分隔符皆可) */
-function projectNameOf(repoPath: string): string {
-  const seg = repoPath.split(/[\\/]/).filter(Boolean).pop();
-  return seg || repoPath;
-}
-
-/** 归一化仓库路径为分组 key:统一正斜杠 + 去尾斜杠 + 小写(Windows 盘符大小写不敏感)。
- *  避免 D:\foo / D:/foo / d:\foo 被当成不同项目。key 仅用于分组去重,展示与扫描仍用原始 repoPath。 */
-function normalizeRepoKey(repoPath: string): string {
-  return repoPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-}
 
 export async function registerProjectChatRoutes(
   fastify: FastifyInstance,
@@ -40,26 +29,17 @@ export async function registerProjectChatRoutes(
   fastify.get('/api/project-chat/projects', async () => {
     const tasks = await taskRepository.findAll();
     const dtoById = new Map<string, TaskDTO>();
-    // 按项目分组:以 repoPath(仓库根)为 key,而非 worktree.path(任务级隔离目录),
-    // 否则每个派发过的任务会被拆成一个独立「项目」。key 归一化避免同盘不同写法重复。
-    const byRepo = new Map<string, { repoPath: string; projectName: string }>();
     for (const task of tasks) {
       const dto = task.toJSON();
       dtoById.set(dto.id, dto);
-      const repoPath = dto.repoPath || dto.worktree?.path;
-      if (!repoPath) continue;
-      const key = normalizeRepoKey(repoPath);
-      if (!byRepo.has(key)) {
-        byRepo.set(key, {
-          repoPath,
-          projectName: dto.projectName || projectNameOf(repoPath),
-        });
-      }
     }
+    // 已知项目(repoPath 优先,缺失从 worktree.path 反推根;归一化去重)——
+    // 逻辑抽到 projectChatHelpers.collectKnownRepos,与 POST 白名单共用、可单测
+    const knownRepos = collectKnownRepos([...dtoById.values()]);
 
     const titles = await sessionTitleStore.getAll();
     const projects: ProjectChatGroup[] = [];
-    for (const [, info] of byRepo) {
+    for (const info of knownRepos) {
       let metas: ClaudeSessionMeta[];
       try {
         metas = await ClaudeSessionScanner.scan(info.repoPath);
@@ -117,6 +97,15 @@ export async function registerProjectChatRoutes(
     ) => {
       const repoPath = request.body?.repoPath?.trim();
       if (!repoPath) return reply.status(400).send({ error: 'repoPath 不能为空' });
+
+      // 安全校验:cwd 必须是 tasks 已登记的项目路径(白名单),防止任意目录 spawn claude。
+      // 本服务监听 localhost,但浏览器扩展/其他页面仍可打,不能让前端自由指定任意 cwd。
+      const knownRepos = collectKnownRepos((await taskRepository.findAll()).map((t) => t.toJSON()));
+      const knownKeys = new Set(knownRepos.map((r) => normalizeRepoKey(r.repoPath)));
+      if (!knownKeys.has(normalizeRepoKey(repoPath))) {
+        return reply.status(403).send({ error: '该路径未登记为项目,无法在此对话' });
+      }
+
       const message = request.body?.message?.trim();
       if (!message) return reply.status(400).send({ error: 'message 不能为空' });
 
