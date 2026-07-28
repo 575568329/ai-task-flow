@@ -147,6 +147,16 @@ export function uploadsDirWindowsPath(): string | null {
   return cachedWinUploads;
 }
 
+/** Claude Code settings.json 多套配置(profile)存储,与 llm-config.json 同级 */
+export function claudeProfilesFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'claude-profiles.json');
+}
+
+/** 切换 profile 前的 settings.json 备份目录(覆盖不可逆,必须留退路) */
+export function claudeSettingsBackupDirPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'claude-settings-backups');
+}
+
 /** 任务 markdown 存档目录(派发时落盘,供 Claude Code 读取 + 用户存档) */
 export function taskDocsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'tasks');

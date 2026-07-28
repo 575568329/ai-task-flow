@@ -85,8 +85,11 @@ let cachedWslDistros: string[] | null = null;
  * 优先用 UNC 路径 readdir(快、无进程开销);若 UNC 不可读——部分 Windows 版本在 Node 里
  * readdir '\\wsl.localhost' 会返回空或抛错(本机"WSL 选项无历史会话"即由此导致),回退到
  * wsl.exe -l -q(可靠但慢,首次后缓存)。
+ *
+ * 导出供 ClaudeSettingsTargetResolver 复用:定位各 distro 的 ~/.claude/settings.json
+ * 与定位 ~/.claude/projects 是同一套枚举 + 同一份缓存,不重复实现。
  */
-function listWslDistros(): string[] {
+export function listWslDistros(): string[] {
   if (cachedWslDistros) return cachedWslDistros;
 
   const distros = new Set<string>();

@@ -27,6 +27,9 @@ import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
+import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
+import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
+import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 import { UsageService } from '../../application/usage/UsageService.js';
 import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
 import { registerProjectChatRoutes } from './routes/projectChatRoutes.js';
@@ -41,6 +44,9 @@ const usageService = new UsageService();
 const agentRuntimeManager = new AgentRuntimeManager();
 const taskSessionStore = new TaskSessionStore();
 const sessionTitleStore = new SessionTitleStore();
+
+/** Claude Code settings.json 多套配置切换(无外部依赖,模块级单例即可) */
+const claudeProfileService = new ClaudeProfileService(new JsonClaudeProfileRepository());
 
 /** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
  *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
@@ -171,6 +177,7 @@ export async function createHttpServer(
   await registerVocabRoutes(fastify, vocabService);
   await registerSystemRoutes(fastify, agentRuntimeManager);
   await registerUsageRoutes(fastify, usageService);
+  await registerClaudeProfileRoutes(fastify, claudeProfileService);
   // graceful 关闭:dispose 所有常驻 runtime(杀 claude 子进程);sweeper 已 unref,SIGINT 直退靠 OS 清理
   fastify.addHook('onClose', async () => {
     await agentRuntimeManager.shutdown();

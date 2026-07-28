@@ -8,5 +8,6 @@ export * from './types/knowledge.js';
 export * from './types/vocab.js';
 export * from './types/usage.js';
 export * from './types/agent.js';
+export * from './types/claude-profile.js';
 export * from './utils/steps.js';
 export * from './utils/prompt.js';
