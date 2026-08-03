@@ -43,8 +43,8 @@ function ProfileEditDialog({
     if (!open) return;
     if (editing) {
       setName(editing.name);
-      // 编辑时不回填 settings (原文不下发前端),用户可粘贴新 JSON 或留空(仅改名)
-      setJsonText('');
+      // 回填完整 settings JSON,方便用户精细调整模型/key 等字段
+      setJsonText(JSON.stringify(editing.settings, null, 2));
     } else {
       setName('');
       setJsonText('');
@@ -95,7 +95,7 @@ function ProfileEditDialog({
           <DialogTitle>{editing ? '编辑配置' : '新建配置'}</DialogTitle>
           <DialogDescription>
             {editing
-              ? '修改名称,或粘贴新的 settings.json 内容覆盖快照(留空仅改名)。'
+              ? '修改名称或直接编辑下方 JSON 内容,保存后覆盖原有快照。'
               : '粘贴完整的 settings.json 内容保存为快照。推荐用下方的「从目标导入」替代手动粘贴。'}
           </DialogDescription>
         </DialogHeader>

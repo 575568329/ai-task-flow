@@ -307,8 +307,10 @@ export function TaskDrawer() {
     }
   };
 
+  // modal=false: 编辑器是工作面板,不需要 focus trap。
+  // modal=true 的 overflow:hidden 滚动锁会阻塞 portal 到 body 的悬浮窗滚轮/点击。
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && close()}>
+    <Sheet open={open} modal={false} onOpenChange={(isOpen) => !isOpen && close()}>
       <SheetContent
         side="right"
         className="flex w-[80vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"

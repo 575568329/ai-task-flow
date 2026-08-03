@@ -283,7 +283,7 @@ export function FloatingChatWindow() {
 
       {/* 内容:左右分栏(左 SessionList 常驻对话列表 + 右 ConversationPanel)。左栏可收起。 */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <ResizablePanelGroup orientation="horizontal">
+        <ResizablePanelGroup orientation="horizontal" className="h-full">
           <ResizablePanel
             defaultSize={22}
             minSize={15}

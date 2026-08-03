@@ -313,7 +313,7 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
 
   if (turns.length === 0) {
     return (
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
         {emptyHint ?? <div className="text-muted-foreground py-8 text-center text-sm">在这里和 Claude 对话。</div>}
         {streaming && lastIsUser && <ThinkingIndicator />}
         {error && (
@@ -326,7 +326,7 @@ export function MessageStream({ turns, streaming, error, usage, emptyHint, onCop
   }
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 py-3">
+    <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
       <div className="space-y-2">
         {turns.map((t, i) => {
           // 空 assistant turn 不渲染任何 DOM(外壳也不占位)

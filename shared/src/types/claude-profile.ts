@@ -17,7 +17,7 @@ export interface ClaudeSettingsTarget {
   exists: boolean;
 }
 
-/** profile 脱敏视图。含密钥的 settings 原文永不下发前端 */
+/** profile 视图(含完整 settings 供前端编辑回显) */
 export interface ClaudeProfileSummary {
   id: string;
   name: string;
@@ -29,6 +29,8 @@ export interface ClaudeProfileSummary {
   authTokenMasked: string;
   /** settings 顶层字段名(让用户知道这份快照包含什么,如 env/model/hooks) */
   topLevelKeys: string[];
+  /** 完整 settings JSON(编辑时回显用) */
+  settings: Record<string, unknown>;
   updatedAt: string;
 }
 

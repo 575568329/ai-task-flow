@@ -52,7 +52,12 @@ function SheetContent({
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {/* 纯 div 蒙版: SheetPrimitive.Overlay 在 modal=false 时不渲染(内部检查 context)。
+          用 plain div 保证 modal 两种模式都有半透明蒙版，animate-in fade-in 补上打开动画。 */}
+      <div
+        data-slot="sheet-overlay"
+        className="animate-in fade-in-0 duration-200 fixed inset-0 z-50 bg-black/50"
+      />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

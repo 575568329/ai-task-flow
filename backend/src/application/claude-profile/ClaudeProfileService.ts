@@ -225,6 +225,7 @@ export class ClaudeProfileService {
       name: profile.name,
       updatedAt: profile.updatedAt,
       ...summarizeSettings(profile.settings),
+      settings: profile.settings,
     };
   }
 
