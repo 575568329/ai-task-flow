@@ -15,6 +15,16 @@ if (!(Test-Path $LOGS_DIR)) {
     New-Item -ItemType Directory -Path $LOGS_DIR | Out-Null
 }
 
+# 失败时打印 backend.log 末尾,即时反馈,不甩文件路径给用户去翻。
+function Print-BackendLogTail {
+    if (Test-Path "$LOGS_DIR/backend.log") {
+        Write-Host "---- backend.log 末尾 ----" -ForegroundColor DarkGray
+        Get-Content "$LOGS_DIR/backend.log" -Tail 30 | ForEach-Object { Write-Host "  $_" }
+    } else {
+        Write-Host "  (backend.log 不存在,后端进程可能根本没拉起)" -ForegroundColor DarkGray
+    }
+}
+
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Starting AI Task Flow Dev Environment" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
@@ -66,18 +76,44 @@ $backendProc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c", "cd backend && npm run dev > ../$LOGS_DIR/backend.log 2>&1" `
     -PassThru -WindowStyle Hidden
 
-# 等 backend 监听就绪再起 frontend:端口文件由 backend 在 listen 成功后写出,
-# 出现即代表 3000 已在监听。先删旧文件,避免上一次 dev 的残留立即满足条件而误判。
+# 等 backend 真正就绪再起 frontend。
+# 就绪判定不能用「端口文件是否存在」:文件存在 ≠ 后端此刻可连。
+# tsx watch 被 shared/dist 变化触发重启时,端口文件可能是上一实例写的旧端口,
+# 或写在了重启间隙 → vite 代理落到错误端口、前端 API 全 404。
+# 正确做法:读端口 → HTTP 实际探测可连,以「HTTP 可达」作为唯一就绪真相。
+# 失败时打印 backend.log 末尾(即时反馈)+ exit 1,绝不静默用错误端口起前端。
 $portFile = "$LOGS_DIR/backend-port.txt"
 Remove-Item $portFile -Force -ErrorAction SilentlyContinue
-$maxWaitBackend = 30
-$waitedBackend = 0
-while ($waitedBackend -lt $maxWaitBackend) {
+
+# 阶段 1:等端口文件出现(拿到 backend 实际端口,可能因 3000 被占而顺延)
+$maxWaitPort = 30
+$waitedPort = 0
+while ($waitedPort -lt $maxWaitPort) {
     if (Test-Path $portFile) { break }
     Start-Sleep -Seconds 1
-    $waitedBackend++
+    $waitedPort++
 }
-Write-Host "Backend listening (waited ${waitedBackend}s)." -ForegroundColor DarkGray
+if (!(Test-Path $portFile)) {
+    Write-Host "✗ 后端 ${maxWaitPort}s 内未写出端口文件,启动失败" -ForegroundColor Red
+    Print-BackendLogTail
+    exit 1
+}
+$backendPort = (Get-Content $portFile).Trim()
+
+# 阶段 2:HTTP 实际探测后端可连(消除「端口文件在但后端正 tsx watch 重启」的竞态)
+$healthOk = $false
+for ($i = 0; $i -lt 15; $i++) {
+    try {
+        $r = Invoke-WebRequest "http://127.0.0.1:$backendPort/api/tasks" -UseBasicParsing -TimeoutSec 2
+        if ($r.StatusCode -eq 200) { $healthOk = $true; break }
+    } catch { Start-Sleep -Seconds 1 }
+}
+if (-not $healthOk) {
+    Write-Host "✗ 后端端口 $backendPort 探测不可达,启动失败" -ForegroundColor Red
+    Print-BackendLogTail
+    exit 1
+}
+Write-Host "Backend listening on :$backendPort (waited ${waitedPort}s)." -ForegroundColor DarkGray
 
 Write-Host "Starting frontend..." -ForegroundColor Magenta
 $frontendProc = Start-Process -FilePath "cmd.exe" `
@@ -94,7 +130,7 @@ Write-Host "=========================================" -ForegroundColor Green
 Write-Host "All services started" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host "  Shared:   PID $($sharedProc.Id)"
-Write-Host "  Backend:  PID $($backendProc.Id)  -> 端口见下方 [backend] 日志(默认 3000,被占自动顺延)" -ForegroundColor Cyan
+Write-Host "  Backend:  PID $($backendProc.Id)  -> http://localhost:$backendPort (/api 经 vite 代理到此)" -ForegroundColor Cyan
 Write-Host "  Frontend: PID $($frontendProc.Id) -> http://localhost:5678 (访问这个; /api 自动代理到 backend 实际端口)" -ForegroundColor Magenta
 Write-Host ""
 Write-Host "Logs: tail -f .logs/backend.log  or  .logs/frontend.log"
