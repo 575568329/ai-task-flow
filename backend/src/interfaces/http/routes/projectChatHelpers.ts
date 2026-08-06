@@ -19,7 +19,7 @@ export interface KnownRepo {
 }
 
 /** 从仓库路径推断项目名(取末段目录名;Windows/Unix 分隔符皆可) */
-function projectNameOf(repoPath: string): string {
+export function projectNameOf(repoPath: string): string {
   const seg = repoPath.split(/[\\/]/).filter(Boolean).pop();
   return seg || repoPath;
 }
@@ -52,7 +52,7 @@ export function repoRootFromWorktree(worktreePath: string): string | undefined {
  * 过滤误填进 repoPath 字段的非路径文本(如把缺陷描述当仓库路径),
  * 避免脏数据被 collectKnownRepos 当成「项目」污染项目列表(回归:悬浮窗凭空多出假项目)。
  */
-function isValidRepoPath(p: string): boolean {
+export function isValidRepoPath(p: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('/');
 }
 

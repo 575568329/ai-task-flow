@@ -22,6 +22,7 @@ import {
 import {
   isPlainSettingsObject,
   materializeForSide,
+  settingsIdentity,
   stableStringify,
   summarizeSettings,
   type ClaudeSettings,
@@ -73,6 +74,7 @@ export class ClaudeProfileService {
       id: randomUUID(),
       name: this.validateName(name),
       settings: this.validateSettings(settings),
+      apiPresets: [],
       updatedAt: new Date().toISOString(),
     };
     await this.repository.save(profile);
@@ -102,6 +104,7 @@ export class ClaudeProfileService {
       id: randomUUID(),
       name: this.validateName(name),
       settings: this.validateSettings(settings),
+      apiPresets: [],
       updatedAt: new Date().toISOString(),
     };
     await this.repository.save(profile);
@@ -113,10 +116,10 @@ export class ClaudeProfileService {
     return this.toSummary(profile);
   }
 
-  /** 改名 / 换内容(settings 省略表示只改名) */
+  /** 改名 / 换内容 / 更新 API 预设(apiPresets 省略表示不改动) */
   async update(
     id: string,
-    changes: { name?: string; settings?: unknown },
+    changes: { name?: string; settings?: unknown; apiPresets?: unknown },
   ): Promise<ClaudeProfileSummary> {
     const existing = await this.requireProfile(id);
     const updated: StoredClaudeProfile = {
@@ -124,6 +127,7 @@ export class ClaudeProfileService {
       name: changes.name === undefined ? existing.name : this.validateName(changes.name),
       settings:
         changes.settings === undefined ? existing.settings : this.validateSettings(changes.settings),
+      apiPresets: Array.isArray(changes.apiPresets) ? changes.apiPresets : existing.apiPresets,
       updatedAt: new Date().toISOString(),
     };
     await this.repository.save(updated);
@@ -194,9 +198,12 @@ export class ClaudeProfileService {
   }
 
   /**
-   * 判定哪个 profile 与目标文件内容一致。
-   * 比对用 materializeForSide + stableStringify:与实际写入算同一份内容、忽略键序/缩进差异,
-   * 保证「切完立刻显示为生效」,且用户手工格式化过文件也不误判。
+   * 判定哪个 profile 是当前生效的。两级匹配:
+   *  1) 整份内容精确比对(materializeForSide + stableStringify):与实际写入算同一份内容、
+   *     忽略键序/缩进差异,切完立刻命中;
+   *  2) 兜底按「API 身份」(model+baseURL+token)比对:Claude Code 常自行往 settings.json
+   *     加 hooks/权限/格式化字段,整份比对会失配,但用户关心的「用的是哪套 API 配置」
+   *     由这三项决定,据此仍能认出当前配置。
    */
   private async detectActiveProfile(
     target: ClaudeSettingsTarget,
@@ -211,10 +218,18 @@ export class ClaudeProfileService {
     }
     if (!isPlainSettingsObject(current)) return null;
 
+    // 1) 整份内容精确匹配(最严谨)
     const currentKey = stableStringify(current);
     for (const profile of profiles) {
       const { settings } = materializeForSide(profile.settings, target.side);
       if (stableStringify(settings) === currentKey) return profile.id;
+    }
+
+    // 2) 兜底:API 身份匹配(容忍 Claude Code 对无关字段的重写)
+    const currentIdentity = settingsIdentity(current);
+    if (!currentIdentity) return null; // 当前文件无 API 身份,无法辨识
+    for (const profile of profiles) {
+      if (settingsIdentity(profile.settings) === currentIdentity) return profile.id;
     }
     return null;
   }
@@ -226,6 +241,7 @@ export class ClaudeProfileService {
       updatedAt: profile.updatedAt,
       ...summarizeSettings(profile.settings),
       settings: profile.settings,
+      apiPresets: profile.apiPresets,
     };
   }
 

@@ -122,6 +122,27 @@ export function summarizeSettings(settings: ClaudeSettings): {
   };
 }
 
+/**
+ * 提取 settings 的「API 身份」签名:ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN(即 API 凭证)。
+ *
+ * 用于生效判定的兜底:Claude Code 会自行往 settings.json 写 hooks / 权限 / 格式化等字段,
+ * 导致「整份内容精确比对」经常失配——但用户关心的「当前用的是哪套 API 配置」只由凭证
+ * (baseURL + token)决定,按身份比对即可在文件被重写后仍认出当前配置。
+ *
+ * ⚠️ 刻意排除 model:Claude Code 在 /model 切换时会把顶层 model 在别名(sonnet/opus/haiku)
+ * 与具体名(GLM-5.2 等)之间来回改写,且同一套凭证下用户会频繁切模型——model 不属于
+ * 「用的是哪套 API 配置」的范畴,纳入身份会让生效判定随 /model 抖动(别名态永远匹配不上
+ * 快照里的具体名)。身份只认凭证,不认模型。
+ *
+ * 两项全空返回 null(无 API 身份,无法辨识,不参与匹配)。
+ */
+export function settingsIdentity(settings: ClaudeSettings): string | null {
+  const baseURL = readString(settings, 'env', 'ANTHROPIC_BASE_URL');
+  const token = readString(settings, 'env', 'ANTHROPIC_AUTH_TOKEN');
+  if (!baseURL && !token) return null;
+  return stableStringify({ baseURL, token });
+}
+
 /** 校验解析出的 JSON 是否可作为 settings(必须是普通对象,不能是数组/标量) */
 export function isPlainSettingsObject(value: unknown): value is ClaudeSettings {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

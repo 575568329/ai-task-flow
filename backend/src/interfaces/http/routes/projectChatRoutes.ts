@@ -15,7 +15,7 @@ import type { SessionTitleStore } from '../../../infrastructure/persistence/Sess
 import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
 import type { AgentEvent, ClaudeSessionMeta, ImageAttachment, ProjectChatGroup, ProjectSessionSummary, TaskDTO } from '@ai-task-flow/shared';
-import { collectKnownRepos, normalizeRepoKey } from './projectChatHelpers.js';
+import { collectKnownRepos, isValidRepoPath, normalizeRepoKey, projectNameOf } from './projectChatHelpers.js';
 
 const logger = new FileLogger('project-chat');
 
@@ -26,48 +26,62 @@ export async function registerProjectChatRoutes(
   sessionTitleStore: SessionTitleStore,
 ) {
   // GET /api/project-chat/projects — 按项目(repoPath)聚合所有任务的会话,每条带关联任务
-  fastify.get('/api/project-chat/projects', async () => {
-    const tasks = await taskRepository.findAll();
-    const dtoById = new Map<string, TaskDTO>();
-    for (const task of tasks) {
-      const dto = task.toJSON();
-      dtoById.set(dto.id, dto);
-    }
-    // 已知项目(repoPath 优先,缺失从 worktree.path 反推根;归一化去重)——
-    // 逻辑抽到 projectChatHelpers.collectKnownRepos,与 POST 白名单共用、可单测
-    const knownRepos = collectKnownRepos([...dtoById.values()]);
-
-    const titles = await sessionTitleStore.getAll();
-    const projects: ProjectChatGroup[] = [];
-    for (const info of knownRepos) {
-      let metas: ClaudeSessionMeta[];
-      try {
-        metas = await ClaudeSessionScanner.scan(info.repoPath);
-      } catch (error: unknown) {
-        // 单个项目扫描失败不阻断其余项目:记日志 + 该项目空列表
-        logger.error('scan projects 异常', {
-          repoPath: info.repoPath,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        metas = [];
+  // ?extra=path1,path2 — 前端 repoHistory 额外传入的项目路径,合并扫描
+  fastify.get<{ Querystring: { extra?: string } }>(
+    '/api/project-chat/projects',
+    async (request) => {
+      const tasks = await taskRepository.findAll();
+      const dtoById = new Map<string, TaskDTO>();
+      for (const task of tasks) {
+        const dto = task.toJSON();
+        dtoById.set(dto.id, dto);
       }
-      const sessions: ProjectSessionSummary[] = metas.map((m) => {
-        const taskId = m.usage?.taskId;
-        const taskTitle = taskId ? dtoById.get(taskId)?.title : undefined;
-        return {
-          sessionId: m.sessionId,
-          title: titles.get(m.sessionId) ?? m.title,
-          lastActiveAt: m.lastActiveAt,
-          messageCount: m.messageCount,
-          source: m.source,
-          taskId,
-          taskTitle,
-        };
-      });
-      projects.push({ repoPath: info.repoPath, projectName: info.projectName, sessions });
-    }
-    return { projects };
-  });
+      // 已知项目(repoPath 优先,缺失从 worktree.path 反推根;归一化去重)——
+      // 逻辑抽到 projectChatHelpers.collectKnownRepos,与 POST 白名单共用、可单测
+      const knownRepos = collectKnownRepos([...dtoById.values()]);
+      // 合并前端传入的额外路径(repoHistory 里的项目,无需 tasks.json 登记)
+      const extraPaths = request.query.extra
+        ?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
+      for (const p of extraPaths) {
+        if (!isValidRepoPath(p)) continue;
+        const key = normalizeRepoKey(p);
+        if (!knownRepos.some((r) => normalizeRepoKey(r.repoPath) === key)) {
+          knownRepos.push({ repoPath: p, projectName: projectNameOf(p) });
+        }
+      }
+
+      const titles = await sessionTitleStore.getAll();
+      const projects: ProjectChatGroup[] = [];
+      for (const info of knownRepos) {
+        let metas: ClaudeSessionMeta[];
+        try {
+          metas = await ClaudeSessionScanner.scan(info.repoPath);
+        } catch (error: unknown) {
+          // 单个项目扫描失败不阻断其余项目:记日志 + 该项目空列表
+          logger.error('scan projects 异常', {
+            repoPath: info.repoPath,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          metas = [];
+        }
+        const sessions: ProjectSessionSummary[] = metas.map((m) => {
+          const taskId = m.usage?.taskId;
+          const taskTitle = taskId ? dtoById.get(taskId)?.title : undefined;
+          return {
+            sessionId: m.sessionId,
+            title: titles.get(m.sessionId) ?? m.title,
+            lastActiveAt: m.lastActiveAt,
+            messageCount: m.messageCount,
+            source: m.source,
+            taskId,
+            taskTitle,
+          };
+        });
+        projects.push({ repoPath: info.repoPath, projectName: info.projectName, sessions });
+      }
+      return { projects };
+    },
+  );
 
   // GET /api/project-chat/sessions/:sessionId?repoPath=... — 加载某历史会话时间线(cwd-based)
   // sessionId 校验:防路径穿越(仅 UUID 形态),同 findSessionFile
@@ -87,20 +101,27 @@ export async function registerProjectChatRoutes(
 
   // POST /api/project-chat — cwd-based 对话(新建 / resume)。
   // 自由对话:不注入任务上下文(prompt = 用户原话);关联任务靠 claude 后续 get_task 自然产生。
-  fastify.post<{ Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[] } }>(
+  fastify.post<{ Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[]; extraPaths?: string[] } }>(
     '/api/project-chat',
     async (
       request: FastifyRequest<{
-        Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[] };
+        Body: { repoPath?: string; message?: string; sessionId?: string; side?: 'windows' | 'wsl'; images?: { data: string; mediaType: string }[]; extraPaths?: string[] };
       }>,
       reply: FastifyReply,
     ) => {
       const repoPath = request.body?.repoPath?.trim();
       if (!repoPath) return reply.status(400).send({ error: 'repoPath 不能为空' });
 
-      // 安全校验:cwd 必须是 tasks 已登记的项目路径(白名单),防止任意目录 spawn claude。
-      // 本服务监听 localhost,但浏览器扩展/其他页面仍可打,不能让前端自由指定任意 cwd。
+      // 安全校验:cwd 必须是 tasks 已登记的项目路径或前端 repoHistory 额外传入的路径。
+      // extraPaths 来自前端 localStorage repoHistory(用户曾浏览选择过的项目路径),localhost 服务风险可控。
       const knownRepos = collectKnownRepos((await taskRepository.findAll()).map((t) => t.toJSON()));
+      for (const p of request.body?.extraPaths ?? []) {
+        if (!isValidRepoPath(p)) continue;
+        const key = normalizeRepoKey(p);
+        if (!knownRepos.some((r) => normalizeRepoKey(r.repoPath) === key)) {
+          knownRepos.push({ repoPath: p, projectName: projectNameOf(p) });
+        }
+      }
       const knownKeys = new Set(knownRepos.map((r) => normalizeRepoKey(r.repoPath)));
       if (!knownKeys.has(normalizeRepoKey(repoPath))) {
         return reply.status(403).send({ error: '该路径未登记为项目,无法在此对话' });

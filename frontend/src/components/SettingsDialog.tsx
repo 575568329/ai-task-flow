@@ -1,9 +1,9 @@
 // frontend/src/components/SettingsDialog.tsx
 // 设置弹窗(Tab 式):模型配置 / 存储管理 / MCP 挂载 / 快捷键。
 // 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Plug, Keyboard, Moon, Layers } from 'lucide-react';
+import { Database, SlidersHorizontal, Plug, Keyboard, Moon, Layers, BookOpen } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -21,12 +21,15 @@ import { McpHelpPanel } from './McpHelpPanel';
 import { ShortcutsPanel } from './ShortcutsPanel';
 import { NightModePanel } from './NightModePanel';
 import { ClaudeProfilePanel } from './ClaudeProfilePanel';
+import { MaimemoConfigPanel } from './MaimemoConfigPanel';
 
-type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'mcp' | 'shortcuts' | 'night';
+type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'mcp' | 'shortcuts' | 'night' | 'maimemo';
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** 初始打开的 tab(可选,如生词本页「连接墨墨」按钮跳转到 maimemo)。string 以便 uiStore 传递。 */
+  initialTab?: string;
 }
 
 interface TabDef {
@@ -40,12 +43,18 @@ const TABS: TabDef[] = [
   { key: 'claude-profile', label: 'Claude 配置', icon: Layers },
   { key: 'storage', label: '存储管理', icon: Database },
   { key: 'mcp', label: 'MCP 挂载', icon: Plug },
+  { key: 'maimemo', label: '墨墨同步', icon: BookOpen },
   { key: 'shortcuts', label: '快捷键', icon: Keyboard },
   { key: 'night', label: '夜间开发', icon: Moon },
 ];
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-  const [tab, setTab] = useState<SettingsTab>('llm');
+export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
+  const [tab, setTab] = useState<SettingsTab>((initialTab as SettingsTab) ?? 'llm');
+
+  // 每次打开时按 initialTab 重置(支持外部指定跳转 tab,如「连接墨墨」)
+  useEffect(() => {
+    if (open) setTab((initialTab as SettingsTab) ?? 'llm');
+  }, [open, initialTab]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,6 +104,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <StoragePanel />
               ) : tab === 'mcp' ? (
                 <McpHelpPanel />
+              ) : tab === 'maimemo' ? (
+                <MaimemoConfigPanel />
               ) : tab === 'night' ? (
                 <NightModePanel />
               ) : (

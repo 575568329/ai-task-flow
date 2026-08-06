@@ -182,6 +182,11 @@ export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');
 }
 
+/** 墨墨背单词配置(含 token 明文),与 llm-config.json / claude-profiles.json 同级敏感 */
+export function maimemoConfigFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'maimemo-config.json');
+}
+
 /** 知识库目录(项目内,进 git,相对项目根) */
 export function knowledgeDirPath(): string {
   // ESM 中获取当前文件路径: import.meta.url → file:///... → 绝对路径

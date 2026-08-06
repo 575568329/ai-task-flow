@@ -4,10 +4,15 @@
 import type { AgentEvent, ChatTurn, ImageAttachment, ProjectChatGroup } from '@ai-task-flow/shared';
 import { http } from './http';
 import { streamAgentEvents } from './sse-utils';
+import { loadRepoHistory } from '@/lib/repoHistory';
 
-/** 拉取按项目聚合的对话视图(悬浮窗项目 tab + 对话列表) */
-export function fetchProjectChats() {
-  return http.get<{ projects: ProjectChatGroup[] }>('/project-chat/projects');
+/** 拉取按项目聚合的对话视图(悬浮窗项目 tab + 对话列表)。
+ *  extraPaths: 前端 repoHistory 中的额外项目路径,后端一并扫描 */
+export function fetchProjectChats(extraPaths?: string[]) {
+  const qs = extraPaths?.length
+    ? `?extra=${extraPaths.map(encodeURIComponent).join(',')}`
+    : '';
+  return http.get<{ projects: ProjectChatGroup[] }>(`/project-chat/projects${qs}`);
 }
 
 /** 加载某历史会话的完整消息时间线(后端解析 jsonl → ChatTurn[]) */
@@ -40,7 +45,7 @@ export async function* streamProjectChat(
   const response = await fetch('/api/project-chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repoPath, message, sessionId, side, images }),
+    body: JSON.stringify({ repoPath, message, sessionId, side, images, extraPaths: loadRepoHistory() }),
     signal, // abort 时 fetch 抛 AbortError,后端 request close → kill claude 子进程
   });
 

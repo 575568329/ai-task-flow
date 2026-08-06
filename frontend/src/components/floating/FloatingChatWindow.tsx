@@ -7,7 +7,7 @@
 // 内容:项目 tab(按 repoPath 分组)+ 左右分栏(左 SessionList 常驻对话列表 + 右 ConversationPanel)。
 // 左栏可一键收起,收起状态与 bounds 一起记忆 localStorage(沿用 bounds 同模式,不污染 store)。
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { X, PanelLeft } from 'lucide-react';
+import { X, PanelLeft, Plus } from 'lucide-react';
 import { ConversationPanel } from './ConversationPanel';
 import { SessionList } from './SessionList';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -255,6 +255,17 @@ export function FloatingChatWindow() {
             </div>
           ))}
         </div>
+        {/* 添加项目按钮:浏览选择文件夹,结果写入 repoHistory + 刷新列表 */}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => void useProjectChatStore.getState().addCustomProject()}
+          className="text-muted-foreground hover:text-foreground hover:bg-background/60 inline-flex size-6 shrink-0 items-center justify-center rounded"
+          aria-label="添加项目"
+          title="浏览选择项目文件夹"
+        >
+          <Plus className="size-3.5" />
+        </button>
         {/* 列表收起按钮(关闭按钮左侧):一键收起/展开左栏对话列表 */}
         <button
           type="button"

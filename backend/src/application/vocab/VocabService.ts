@@ -10,8 +10,10 @@ import type {
   VocabListResponse,
   VocabUpdateDTO,
   TranslateResponse,
+  YoudaoImportResultDTO,
 } from '@ai-task-flow/shared';
 import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
+import { parseYoudaoBin } from './YoudaoBinParser.js';
 
 const logger = new FileLogger('vocab');
 
@@ -98,6 +100,11 @@ export class VocabService {
     if (typeof query.starred === 'boolean') {
       items = items.filter(v => v.starred === query.starred);
     }
+    if (query.studySyncStatus) {
+      // 缺省 studySyncStatus 视为 'pending'（与仓储 findByStudySyncStatus 一致）
+      const status = query.studySyncStatus;
+      items = items.filter(v => (v.studySyncStatus ?? 'pending') === status);
+    }
 
     items = [...items].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
@@ -132,6 +139,53 @@ export class VocabService {
     if (!vocab) throw new VocabNotFoundError(id);
     await this.repository.delete(id);
     logger.info('deleteVocab 成功', { id });
+  }
+
+  /**
+   * 导入有道 .bin 生词本：解析 → 一次性 findAll 内存去重 → 批量 saveMany 新词。
+   * 导入强制 targetLang='zh'（有道翻译生词统一中文目标）。
+   * 解析失败的条目跳过并计入 skipped，不中断整体导入。
+   */
+  async importFromYoudaoBin(buffer: Buffer): Promise<YoudaoImportResultDTO> {
+    const { words, skipped, skipReasons } = parseYoudaoBin(buffer);
+    const parsed = words.length;
+    if (parsed === 0) {
+      return { parsed: 0, added: 0, duplicates: 0, skipped, skipReasons };
+    }
+    const TARGET_LANG = 'zh';
+    // 一次 findAll 构建已有词的唯一键集合，避免逐条 findByWordAndLang 的 N 次全表读
+    const existing = await this.repository.findAll();
+    const existingKeys = new Set(existing.map(v => v.uniqueKey()));
+    const newVocabs: Vocab[] = [];
+    let duplicates = 0;
+    for (const w of words) {
+      const word = w.word.trim();
+      if (!word) continue;
+      const key = `${word.toLowerCase()}|${TARGET_LANG}`;
+      if (existingKeys.has(key)) {
+        duplicates += 1;
+        continue;
+      }
+      existingKeys.add(key); // 防止同批次内重复词被重复新增
+      const { pos, translation } = extractPosAndTranslation(w.translation);
+      newVocabs.push(
+        Vocab.create({
+          word,
+          translation: translation || w.translation || word,
+          targetLang: TARGET_LANG,
+          sourceLang: w.sourceLang ?? 'en',
+          pos,
+        }),
+      );
+    }
+    if (newVocabs.length > 0) await this.repository.saveMany(newVocabs);
+    logger.info('importFromYoudaoBin 完成', {
+      parsed,
+      added: newVocabs.length,
+      duplicates,
+      skipped,
+    });
+    return { parsed, added: newVocabs.length, duplicates, skipped, skipReasons };
   }
 
   /**
@@ -226,4 +280,17 @@ export class VocabService {
       return { translation: raw };
     }
   }
+}
+
+/** 词性前缀匹配（n./v./adj./phr. 等），用于从有道释义中分离 pos 与译文 */
+const IMPORT_POS_RE = /^(n|v|adj|adv|prep|conj|pron|art|num|abbr|phr|vt|vi|aux|det|int|modal)\b\.?\s*/i;
+
+/** 从「n. 卷回；反转;」这类释义中分离出 pos 与纯译文；无词性前缀则整体作译文 */
+function extractPosAndTranslation(raw?: string): { pos?: string; translation: string } {
+  if (!raw) return { translation: '' };
+  const m = raw.match(IMPORT_POS_RE);
+  if (m) {
+    return { pos: m[0].trim(), translation: raw.slice(m[0].length).trim() };
+  }
+  return { translation: raw };
 }

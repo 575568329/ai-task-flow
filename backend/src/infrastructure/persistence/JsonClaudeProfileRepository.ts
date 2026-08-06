@@ -8,12 +8,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { claudeProfilesFilePath } from '../../config/dataDir.js';
 import type { ClaudeSettings } from '../../domain/claude-profile/settingsCodec.js';
+import type { ClaudeApiPreset } from '@ai-task-flow/shared';
 
 /** 存储中的单条 profile(settings 为完整快照明文) */
 export interface StoredClaudeProfile {
   id: string;
   name: string;
   settings: ClaudeSettings;
+  /** 每个 profile 可存多组 API 预设(model+baseURL+apiKey) */
+  apiPresets: ClaudeApiPreset[];
   updatedAt: string;
 }
 
@@ -57,7 +60,11 @@ export class JsonClaudeProfileRepository {
     try {
       const content = await fs.readFile(this.filePath, 'utf-8');
       const parsed = JSON.parse(content) as Partial<ProfileStorageData>;
-      return { profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [] };
+      return {
+        profiles: Array.isArray(parsed.profiles)
+          ? parsed.profiles.map((p) => ({ ...p, apiPresets: Array.isArray(p.apiPresets) ? p.apiPresets : [] }))
+          : [],
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { profiles: [] };
       throw error;

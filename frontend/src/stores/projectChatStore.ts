@@ -9,6 +9,9 @@ import { create } from 'zustand';
 import type { ChatTurn, ImageAttachment, ProjectChatGroup } from '@ai-task-flow/shared';
 import { applyChatEvent, chatEventUid } from '@/lib/chatEvents';
 import { fetchProjectChats, loadProjectSession, streamProjectChat } from '@/api/projectChat';
+import { loadRepoHistory, addRepoHistory } from '@/lib/repoHistory';
+import { systemApi } from '@/api/task';
+import { toast } from '@/components/ui/toaster';
 
 /** 终态 usage(result 事件,与 taskChatStore.TurnUsage 同形) */
 export interface ProjectTurnUsage {
@@ -60,6 +63,8 @@ interface ProjectChatStore {
   closeWindow: () => void;
   /** 拉取项目聚合视图 */
   loadProjects: () => Promise<void>;
+  /** 浏览选择并添加项目到悬浮窗(调用原生文件夹选择器,结果写入 repoHistory + 刷新列表) */
+  addCustomProject: () => Promise<void>;
   /** 切换项目 tab(恢复该项目记忆对话,或建空) */
   selectProject: (repoPath: string) => void;
   /** 打开某历史会话(加载时间线,写入该项目的当前对话) */
@@ -174,7 +179,8 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
     loadProjects: async () => {
       set({ projectsLoading: true });
       try {
-        const { projects } = await fetchProjectChats();
+        const history = loadRepoHistory();
+        const { projects } = await fetchProjectChats(history);
         set({ projects, projectsLoading: false });
         if (projects.length > 0) {
           // 默认激活第一个(若当前无激活),并 ensureActive 让首项目进对话视图
@@ -186,6 +192,25 @@ export const useProjectChatStore = create<ProjectChatStore>((set, get) => {
         set({ projectsLoading: false });
         // 加载失败留痕,不阻断(悬浮窗显示空/错误提示)
         console.warn('[projectChatStore] loadProjects 失败', error);
+      }
+    },
+
+    // 浏览选择项目文件夹:调原生选择器 → 写入 repoHistory → 刷新项目列表 → 自动选中
+    addCustomProject: async () => {
+      try {
+        toast.info('正在打开文件夹选择器…');
+        const result = await systemApi.selectDirectory();
+        if (!result?.path) return; // 用户取消
+        addRepoHistory(result.path);
+        await get().loadProjects();
+        // 自动选中新添加的项目
+        const found = get().projects.find((p) => p.repoPath === result.path);
+        if (found) get().selectProject(found.repoPath);
+        toast.success(`已添加项目: ${found?.projectName ?? result.path}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn('[projectChatStore] addCustomProject 失败', error);
+        toast.error(`添加项目失败: ${msg}`);
       }
     },
 

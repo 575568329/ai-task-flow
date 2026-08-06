@@ -23,11 +23,13 @@ import type { LlmConfigService } from '../../application/llm-config/LlmConfigSer
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import type { VocabService } from '../../application/vocab/VocabService.js';
+import type { MaimemoService } from '../../application/maimemo/MaimemoService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
 import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
+import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
 import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
 import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 import { UsageService } from '../../application/usage/UsageService.js';
@@ -78,6 +80,7 @@ export async function createHttpServer(
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
+  maimemoService: MaimemoService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -175,6 +178,7 @@ export async function createHttpServer(
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
+  await registerMaimemoRoutes(fastify, maimemoService);
   await registerSystemRoutes(fastify, agentRuntimeManager);
   await registerUsageRoutes(fastify, usageService);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
@@ -248,12 +252,13 @@ export async function startHttpServer(
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
+  maimemoService: MaimemoService,
 ) {
   // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

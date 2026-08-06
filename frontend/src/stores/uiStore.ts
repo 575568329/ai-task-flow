@@ -85,6 +85,11 @@ interface UIState {
   expandAllGroups: () => void;
   /** 首次初始化(无 localStorage 记忆时):只展开 defaultOpenKey,收起其余。已初始化则不动。 */
   initGroups: (allKeys: string[], defaultOpenKey: string) => void;
+  /** 设置弹窗开关 + 初始 tab(供任意组件打开,如生词本页「连接墨墨」跳 maimemo tab) */
+  settingsOpen: boolean;
+  settingsTab: string | null;
+  setSettingsOpen: (open: boolean) => void;
+  openSettings: (tab?: string) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -149,6 +154,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     saveCollapsedGroups(next);
     set({ collapsedGroups: next });
   },
+
+  settingsOpen: false,
+  settingsTab: null,
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  openSettings: (tab) => set({ settingsOpen: true, settingsTab: tab ?? null }),
 }));
 
 /** 应用启动时调用一次,把初始主题挂到 <html> */

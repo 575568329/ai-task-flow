@@ -15,6 +15,9 @@ import { LlmConfigService } from '../../../application/llm-config/LlmConfigServi
 import { WebClipService } from '../../../application/webclip/WebClipService.js';
 import { JsonVocabRepository } from '../../../infrastructure/persistence/JsonVocabRepository.js';
 import { VocabService } from '../../../application/vocab/VocabService.js';
+import { JsonMaimemoConfigRepository } from '../../../infrastructure/persistence/JsonMaimemoConfigRepository.js';
+import { MaimemoClient } from '../../../infrastructure/maimemo/MaimemoClient.js';
+import { MaimemoService } from '../../../application/maimemo/MaimemoService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -56,6 +59,13 @@ describe('HTTP Server', () => {
     const vocabRepository = new JsonVocabRepository(testVocabPath);
     const vocabService = new VocabService(vocabRepository, llmConfigService);
 
+    // 墨墨同步测试依赖（临时 config 文件隔离；不连真实墨墨 API）
+    const testMaimemoConfigPath = path.join(os.tmpdir(), `test-maimemo-${id}.json`);
+    const maimemoConfigRepo = new JsonMaimemoConfigRepository(testMaimemoConfigPath);
+    const maimemoService = new MaimemoService(maimemoConfigRepo, vocabRepository);
+    await maimemoService.init();
+    maimemoService.useClient(new MaimemoClient(() => maimemoService.getActiveToken()));
+
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       taskRepository,
@@ -66,6 +76,7 @@ describe('HTTP Server', () => {
       webClipService,
       knowledgeService,
       vocabService,
+      maimemoService,
     );
   });
 

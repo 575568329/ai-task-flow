@@ -17,6 +17,20 @@ export interface ClaudeSettingsTarget {
   exists: boolean;
 }
 
+/** 每个 profile 可存储多组 API 预设(model+baseURL+apiKey),编辑时 Select 切换 */
+export interface ClaudeApiPreset {
+  /** randomUUID,前端生成或后端生成 */
+  id: string;
+  /** 用户可读标签,如 "GLM-4V"、"DeepSeek V4" */
+  label: string;
+  /** settings 顶层 model 字段 */
+  model: string;
+  /** settings.env.ANTHROPIC_BASE_URL */
+  baseURL: string;
+  /** settings.env.ANTHROPIC_AUTH_TOKEN(后端存储明文,前端脱敏) */
+  apiKey: string;
+}
+
 /** profile 视图(含完整 settings 供前端编辑回显) */
 export interface ClaudeProfileSummary {
   id: string;
@@ -31,6 +45,8 @@ export interface ClaudeProfileSummary {
   topLevelKeys: string[];
   /** 完整 settings JSON(编辑时回显用) */
   settings: Record<string, unknown>;
+  /** 该 profile 的 API 预设列表(可为空) */
+  apiPresets: ClaudeApiPreset[];
   updatedAt: string;
 }
 
@@ -59,6 +75,8 @@ export interface ClaudeProfileImportRequest {
 export interface ClaudeProfileUpdateRequest {
   name?: string;
   settings?: Record<string, unknown>;
+  /** 更新 API 预设列表(省略表示不改动) */
+  apiPresets?: ClaudeApiPreset[];
 }
 
 /** 应用结果 */

@@ -23,6 +23,9 @@ import { WebClipService } from './application/webclip/WebClipService.js';
 import { KnowledgeService } from './application/knowledge/KnowledgeService.js';
 import { JsonVocabRepository } from './infrastructure/persistence/JsonVocabRepository.js';
 import { VocabService } from './application/vocab/VocabService.js';
+import { JsonMaimemoConfigRepository } from './infrastructure/persistence/JsonMaimemoConfigRepository.js';
+import { MaimemoClient } from './infrastructure/maimemo/MaimemoClient.js';
+import { MaimemoService } from './application/maimemo/MaimemoService.js';
 import { knowledgeDirPath } from './config/dataDir.js';
 
 export interface StartAppOptions {
@@ -90,6 +93,13 @@ export async function startApp(options: StartAppOptions = {}) {
   const vocabRepository = new JsonVocabRepository();
   const vocabService = new VocabService(vocabRepository, llmConfigService);
 
+  // 墨墨同步：configRepo + service 先建（client 的 getToken 闭包引用 service），init 后再注入 client
+  const maimemoConfigRepo = new JsonMaimemoConfigRepository();
+  const maimemoService = new MaimemoService(maimemoConfigRepo, vocabRepository);
+  await maimemoService.init();
+  const maimemoClient = new MaimemoClient(() => maimemoService.getActiveToken());
+  maimemoService.useClient(maimemoClient);
+
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
   try {
@@ -122,7 +132,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,
