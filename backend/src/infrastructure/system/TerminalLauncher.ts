@@ -35,6 +35,31 @@ export const SHELL_LAUNCHERS: Record<
     `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${perm}${resume}"`,
 };
 
+/**
+ * 需要从子进程环境中剥离的环境变量前缀。
+ *
+ * 后端进程启动时 settings.json 的 env 字段被加载到 process.env（Claude Code 行为），
+ * 而 start 命令打开的子终端会继承这些变量 → Claude Code 启动时 process.env 已被污染，
+ * settings.json 里的配置无法正确生效。典型症状：弹窗打开的终端用的是后端进程启动时的
+ * 模型配置，而非用户当前在 settings.json 里选的配置。
+ *
+ * 解决：exec 时显式传入不含这些前缀的 env，让子进程的 Claude Code 从 settings.json 读取。
+ */
+const ENV_PREFIXES_TO_STRIP = ['ANTHROPIC_', 'CLAUDE_'];
+
+/**
+ * 构建干净的子进程环境：复制当前 process.env 但剥离 Claude 相关变量。
+ * 保留其他所有变量（PATH、SystemRoot 等）以确保终端能正常启动。
+ */
+function buildCleanEnv(): NodeJS.ProcessEnv {
+  const clean: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (ENV_PREFIXES_TO_STRIP.some((prefix) => key.startsWith(prefix))) continue;
+    if (value !== undefined) clean[key] = value;
+  }
+  return clean;
+}
+
 export class TerminalLauncher {
   /**
    * 打开新终端窗口并运行 claude 命令
@@ -59,7 +84,7 @@ export class TerminalLauncher {
     }
 
     try {
-      await execAsync(command);
+      await execAsync(command, { env: buildCleanEnv() });
     } catch (error) {
       throw new Error(`Failed to launch terminal: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -101,7 +126,7 @@ export class TerminalLauncher {
     const command = SHELL_LAUNCHERS[env](winPath, wslPath, permArg, resumeArg);
 
     try {
-      await execAsync(command);
+      await execAsync(command, { env: buildCleanEnv() });
     } catch (error) {
       throw new Error(
         `Failed to launch ${env} terminal: ${error instanceof Error ? error.message : String(error)}`

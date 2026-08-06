@@ -31,7 +31,9 @@ const VIEWS: Record<ViewKey, ComponentType> = {
 
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('board');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+  const settingsTab = useUIStore((s) => s.settingsTab);
   // 视图切换淡入:keep-alive 架构下视图不卸载(保留聊天/分栏等状态),
   // 故只对主内容区整体做 opacity 淡入,而非逐视图进退场(那会丢失各视图状态)。
   const viewControls = useAnimationControls();
@@ -79,7 +81,7 @@ function App() {
           })}
         </motion.div>
       </main>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab ?? undefined} />
       <Toaster />
       <ImagePreviewOverlay />
       {/* 任务对话悬浮窗(Portal 到 body,无 tab 时不渲染) */}
