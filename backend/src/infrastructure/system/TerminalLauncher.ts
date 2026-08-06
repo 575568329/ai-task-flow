@@ -21,18 +21,20 @@ export const SHELL_LAUNCHERS: Record<
   TaskEnv,
   (winPath: string, wslPath: string, permArg: string, resumeArg: string) => string
 > = {
-  // cmd: 新开 cmd 窗口, /k 保持窗口, /d 切到工作目录
+  // cmd: 新开 cmd 窗口, /k 保持窗口不关闭, /d 切到工作目录
   // permArg:夜间模式时为 ' --permission-mode bypassPermissions'(跳过所有权限确认),否则空串
+  // claude 退出后 cmd 窗口保持打开,等待用户手动关闭
   cmd: (winPath, _wsl, perm, resume) =>
-    `start "Claude" cmd /k "cd /d "${winPath}" && claude${perm}${resume}"`,
+    `start "Claude" cmd /k "cd /d "${winPath}" && claude${perm}${resume} || echo. && echo Claude 已退出,按任意键关闭窗口... && pause>nul"`,
   // wsl: 不能直接 `wsl.exe -- claude`——claude 退出(或 interop 启动 claude.exe 失败)时
   // wsl 进程立即结束、conhost 窗口一闪而过。用 bash -lc 包裹:登录 shell 确保 PATH/环境完整,
-  // 末尾 exec bash 保证 claude 退出后窗口不关(便于看到启动失败的原因,而不是闪退)。
+  // claude 退出后 exec bash -i 启动交互 shell 永久阻塞,窗口保持打开由用户手动关闭。
   wsl: (_win, wslPath, perm, resume) =>
-    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${perm}${resume}; exec bash"`,
-  // pwsh: PowerShell 7, -NoExit 保持窗口
+    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${perm}${resume}; exec bash -i"`,
+  // pwsh: PowerShell 7, -NoExit 保持窗口不关闭
+  // claude 退出后 pwsh 窗口保持打开,显示提示符等待用户手动关闭
   pwsh: (winPath, _wsl, perm, resume) =>
-    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${perm}${resume}"`,
+    `start pwsh.exe -NoExit -Command "cd '${winPath}'; claude${perm}${resume}; Write-Host ''; Write-Host 'Claude 已退出,可以手动关闭窗口' -ForegroundColor Yellow"`,
 };
 
 /**
