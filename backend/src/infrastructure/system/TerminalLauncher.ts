@@ -1,10 +1,54 @@
 import { exec } from 'child_process';
+import { writeFileSync } from 'fs';
+import path from 'path';
 import { promisify } from 'util';
 import os from 'os';
 import { toWslPath } from './pathCodec.js';
 import type { TaskEnv } from '@ai-task-flow/shared';
 
 const execAsync = promisify(exec);
+
+/**
+ * WSL 启动脚本内容(固定,由后端写入 Windows temp,WSL 经 /mnt/c 执行)。
+ *
+ * 为什么用脚本文件而非 `bash -c "内联命令"`:
+ *   wt → wsl → bash 多层命令行对引号、分号、$?、-i 标志的传递极不稳定 ——
+ *   实测 `ec=$?; echo $ec` 在 `bash -lic` 下被 PROMPT_COMMAND 覆盖(变量赋值丢值、
+ *   退出码永远空);带分号的复杂脚本经 wt 传递会被截断(后续命令不执行)。
+ *   把全部 bash 逻辑放进文件后,wt/wsl 只需执行"文件路径 + 简单参数",彻底消除
+ *   命令行解析层的不确定性。原则:运行时自探测自洽,不被外部解析层破坏。
+ *
+ * 为什么用 wt.exe 而非 `start wsl.exe`(conhost):
+ *   claude(Ink TUI)在 conhost 下 TTY/stdin 支持不稳,跑子进程/后台任务时会
+ *   重新检测 stdin,被判定为非交互/EOF → 静默退出(退出码 0,无报错)。这是
+ *   claude 在 WSL 的已知问题类(anthropics/claude-code#24513、#20115)。Windows
+ *   Terminal 提供稳定的 PTY,是该问题的社区共识解法。
+ *
+ * 脚本流程:补 PATH(~/.local/bin)→ claude "$@" → 退出码写文件(事后诊断)
+ *          → exec 交互式登录 shell(保证窗口由用户手动关闭,不自动关闭)
+ */
+const WSL_LAUNCHER_SCRIPT = `#!/usr/bin/env bash
+set +e
+export PATH="$HOME/.local/bin:$PATH"
+claude "$@"
+code=$?
+echo "$code" > /tmp/atf_claude_exit.log
+echo
+echo "──── claude 已退出 (code=$code) · 退出码见 /tmp/atf_claude_exit.log · 窗口保持开启,手动关闭 ────"
+exec bash -l -i
+`;
+
+const WSL_LAUNCHER_SCRIPT_NAME = 'atf_wsl_launcher.sh';
+
+/**
+ * 确保 WSL 启动脚本存在于 Windows temp(WSL 通过 /mnt/c/<temp> 访问)。
+ * 内容固定 → 每次覆盖写(幂等,IO 极小,无需清理)。返回脚本在 WSL 内的绝对路径。
+ */
+function ensureWslLauncherScript(): string {
+  const winPath = path.join(os.tmpdir(), WSL_LAUNCHER_SCRIPT_NAME);
+  writeFileSync(winPath, WSL_LAUNCHER_SCRIPT, 'utf8');
+  return toWslPath(winPath);
+}
 
 /**
  * 三种环境的终端启动命令构造器(策略映射)。
@@ -26,11 +70,11 @@ export const SHELL_LAUNCHERS: Record<
   // claude 退出后 cmd 窗口保持打开,等待用户手动关闭
   cmd: (winPath, _wsl, perm, resume) =>
     `start "Claude" cmd /k "cd /d "${winPath}" && claude${perm}${resume} || echo. && echo Claude 已退出,按任意键关闭窗口... && pause>nul"`,
-  // wsl: 不能直接 `wsl.exe -- claude`——claude 退出(或 interop 启动 claude.exe 失败)时
-  // wsl 进程立即结束、conhost 窗口一闪而过。用 bash -lc 包裹:登录 shell 确保 PATH/环境完整,
-  // claude 退出后 exec bash -i 启动交互 shell 永久阻塞,窗口保持打开由用户手动关闭。
+  // wsl:用 Windows Terminal(wt.exe)宿主 + 脚本文件启动(详见上方 WSL_LAUNCHER_SCRIPT 注释)。
+  // 链路:wt 提供 PTY(替代 conhost,解决 claude TUI 中途静默退出)→ wsl --cd 切到项目目录
+  //      → bash 执行启动脚本(perm/resume 作为位置参数 $@ 透传给脚本内的 claude)
   wsl: (_win, wslPath, perm, resume) =>
-    `start "Claude" wsl.exe --cd "${wslPath}" -- bash -lc "claude${perm}${resume}; exec bash -i"`,
+    `wt.exe --title "Claude" -- wsl.exe --cd "${wslPath}" -- bash "${ensureWslLauncherScript()}"${perm}${resume}`,
   // pwsh: PowerShell 7, -NoExit 保持窗口不关闭
   // claude 退出后 pwsh 窗口保持打开,显示提示符等待用户手动关闭
   pwsh: (winPath, _wsl, perm, resume) =>
