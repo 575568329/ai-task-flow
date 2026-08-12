@@ -21,6 +21,9 @@ import { useMaimemoStore } from '@/stores/maimemoStore';
 import { useUIStore } from '@/stores/uiStore';
 import { speak, isSpeechSupported } from '@/lib/speech';
 import { cn } from '@/lib/utils';
+import { toast } from '@/components/ui/toaster';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildVocabRowItems, type VocabRowMenuCtx } from './vocabRowContextMenu';
 import type { VocabDTO, TranslateResponse, StudySyncStatus, MaimemoWordStudyRecord } from '@ai-task-flow/shared';
 
 const PAGE_SIZE = 50;
@@ -445,8 +448,22 @@ function VocabRow({
   const status = vocab.studySyncStatus ?? 'pending';
   const hasDetail = status === 'synced' && !!record;
 
+  const menuCtx: VocabRowMenuCtx = {
+    speakOriginal: () => speak(vocab.word, vocab.sourceLang || undefined),
+    speakTranslation: () => speak(vocab.translation, vocab.targetLang),
+    toggleStar: onToggleStar,
+    toggleMastered: onToggleMastered,
+    copyWord: () =>
+      navigator.clipboard.writeText(vocab.word).then(
+        () => toast.success('单词已复制'),
+        () => toast.error('复制失败'),
+      ),
+    remove: onRemove,
+  };
+
   return (
-    <div className="group rounded-md border hover:bg-accent/40">
+    <ContextMenuHost items={buildVocabRowItems} target={vocab} ctx={menuCtx}>
+      <div className="group rounded-md border hover:bg-accent/40">
       <div className="flex items-start gap-2 p-2">
         <div
           className={cn('min-w-0 flex-1', hasDetail && 'cursor-pointer')}
@@ -490,7 +507,8 @@ function VocabRow({
           {record.nextReviewAt && <span>下次 {new Date(record.nextReviewAt).toLocaleDateString()}（{formatDaysUntil(record.nextReviewAt)}）</span>}
         </div>
       )}
-    </div>
+      </div>
+    </ContextMenuHost>
   );
 }
 
