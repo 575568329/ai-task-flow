@@ -121,7 +121,14 @@ export async function startApp(options: StartAppOptions = {}) {
   }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '3000', 10);
-  const host = options.host ?? process.env.HOST ?? '0.0.0.0';
+  // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口(含 spawn 终端)。
+  // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
+  const host = options.host ?? process.env.HOST ?? '127.0.0.1';
+  if (host === '0.0.0.0' || host === '::') {
+    console.warn(
+      `⚠️  监听 ${host}:服务无鉴权,同网段可访问全部接口(含 spawn 终端/bypass 权限)。仅限隔离网络。`,
+    );
+  }
 
   // 自动查找可用端口（开发模式需要，CLI 已在外层处理）
   const actualPort = await findAvailablePort(preferredPort, host);

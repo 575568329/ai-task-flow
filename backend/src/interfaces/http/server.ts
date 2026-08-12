@@ -17,6 +17,7 @@ import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { isLocalAccess } from '../../utils/localAccess.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
@@ -153,12 +154,7 @@ export async function createHttpServer(
     // 判断请求是否来自本机回环:前端据此控制敏感页面(设置/存储管理)的可见性。
     // 本机浏览器访问 => true(看得到设置);同网段其他设备访问 => false(屏蔽设置入口)。
     // key 明文本身在任何情况下都不会下发(GET /api/llm-config 已脱敏),此处仅用于页面可见性。
-    const ip = request.ip;
-    const localAccess =
-      ip === '127.0.0.1' ||
-      ip === '::1' ||
-      ip === '::ffff:127.0.0.1' ||
-      ip === 'localhost';
+    const localAccess = isLocalAccess(request.ip);
     return {
       status: 'ok',
       service: 'ai-task-flow',
