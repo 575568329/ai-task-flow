@@ -52,6 +52,9 @@ interface MindmapState {
   setSaveStatus: (s: MindmapSaveStatus) => void;
   /** 保存成功后更新 version 基准 + 清 dirty */
   onSaved: (newVersion: number) => void;
+  /** 自动布局信号（Toolbar 点击 → tick++ → editor effect 执行 dagre 布局） */
+  autoLayoutTick: number;
+  triggerAutoLayout: () => void;
 }
 
 export const useMindmapStore = create<MindmapState>((set, get) => ({
@@ -62,6 +65,7 @@ export const useMindmapStore = create<MindmapState>((set, get) => ({
   draft: null,
   isDirty: false,
   saveStatus: 'idle',
+  autoLayoutTick: 0,
 
   fetchList: async () => {
     set({ listLoading: true });
@@ -144,4 +148,5 @@ export const useMindmapStore = create<MindmapState>((set, get) => ({
       saveStatus: 'saved',
       current: s.current ? { ...s.current, version: newVersion } : s.current,
     })),
+  triggerAutoLayout: () => set((s) => ({ autoLayoutTick: s.autoLayoutTick + 1 })),
 }));

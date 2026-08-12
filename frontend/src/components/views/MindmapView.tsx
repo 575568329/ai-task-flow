@@ -2,7 +2,7 @@
 // 思维导图视图：列表页（空状态/新建/打开/删除/复制）+ 编辑页（Toolbar + 画布）。
 // keep-alive 架构下本视图常驻（hidden 切换）；有 current 显示编辑器，否则列表。
 import { useEffect, useState } from 'react';
-import { Network, Plus, Trash2, Copy, ArrowLeft, Loader2 } from 'lucide-react';
+import { Network, Plus, Trash2, Copy, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -137,6 +137,7 @@ function EditorPage() {
   const saveStatus = useMindmapStore((s) => s.saveStatus);
   const closeDoc = useMindmapStore((s) => s.closeDoc);
   const renameCurrent = useMindmapStore((s) => s.renameCurrent);
+  const triggerAutoLayout = useMindmapStore((s) => s.triggerAutoLayout);
   const [title, setTitle] = useState(current.title);
 
   // 文档切换时同步标题输入框
@@ -170,6 +171,9 @@ function EditorPage() {
           placeholder="文档标题"
         />
         <SaveBadge isDirty={isDirty} status={saveStatus} />
+        <Button variant="outline" size="sm" className="ml-2 h-8" onClick={triggerAutoLayout}>
+          <Sparkles className="mr-1 size-3.5" /> 自动布局
+        </Button>
         <span className="text-muted-foreground ml-auto pr-2 text-xs">{current.nodeCount} 节点</span>
       </header>
       <div className="flex-1 overflow-hidden">

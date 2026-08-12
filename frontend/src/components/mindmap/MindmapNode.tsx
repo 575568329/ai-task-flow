@@ -3,7 +3,7 @@
 // React.memo 包裹 + data 稳定引用（editor 保证）+ 回调走 Context → 拖拽时只重渲染被拖节点。
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { FileText } from 'lucide-react';
+import { FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import type { MindmapNodeData } from '@ai-task-flow/shared';
 import { useMindmapEditor } from './mindmapContext';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ function branchStyle(branch?: string): React.CSSProperties | undefined {
 }
 
 export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<MindmapRFNode>) {
-  const { updateNodeData } = useMindmapEditor();
+  const { updateNodeData, toggleExpand, hasChildren } = useMindmapEditor();
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const level = data.level ?? 1;
@@ -99,6 +99,22 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
         <span className={cn('select-none whitespace-nowrap', textClass)}>{data.label}</span>
       )}
       {data.note && <FileText className="size-3 shrink-0 opacity-50" />}
+      {hasChildren(id) && (
+        <button
+          className="nodrag ml-0.5 flex size-4 shrink-0 items-center justify-center rounded opacity-40 hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleExpand(id);
+          }}
+          title={data.expanded === false ? '展开子节点' : '折叠子节点'}
+        >
+          {data.expanded === false ? (
+            <ChevronRight className="size-3" />
+          ) : (
+            <ChevronDown className="size-3" />
+          )}
+        </button>
+      )}
       <Handle type="source" position={Position.Right} />
     </div>
   );

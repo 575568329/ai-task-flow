@@ -9,6 +9,16 @@ import type { MindmapNodeData } from '@ai-task-flow/shared';
 export interface MindmapEditorContextValue {
   /** 更新节点 data（label/note/branch 等） */
   updateNodeData: (id: string, patch: Partial<MindmapNodeData>) => void;
+  /** 加子节点 */
+  addChildNode: (parentId: string) => void;
+  /** 加同级节点 */
+  addSiblingNode: (siblingId: string) => void;
+  /** 删除节点及子树 */
+  deleteNode: (id: string) => void;
+  /** 折叠/展开子树 */
+  toggleExpand: (id: string) => void;
+  /** 节点是否有子节点（折叠按钮显隐判断） */
+  hasChildren: (id: string) => boolean;
 }
 
 export const MindmapEditorContext = createContext<MindmapEditorContextValue | null>(null);

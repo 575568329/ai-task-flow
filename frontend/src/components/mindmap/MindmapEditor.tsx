@@ -29,6 +29,8 @@ import { useMindmapStore } from '@/stores/mindmapStore';
 import { MindmapNode, type MindmapRFNode } from './MindmapNode';
 import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
+import { getLayoutedElements } from './layout';
+import { useMindmapActions } from './useMindmapActions';
 
 // 必须在组件外（否则每次渲染新引用 → RF 重注册所有类型 → 全部节点重渲染）
 const nodeTypes = { mindmap: MindmapNode };
@@ -115,6 +117,18 @@ function EditorCanvas() {
 
   const onMove: OnMove = useCallback((_evt, vp) => setViewport(vp), []);
 
+  // 自动布局：Toolbar 触发信号（autoLayoutTick）→ effect 执行 dagre 重排
+  const autoLayoutTick = useMindmapStore((s) => s.autoLayoutTick);
+  const lastLayoutTick = useRef(0);
+  useEffect(() => {
+    if (autoLayoutTick === lastLayoutTick.current || autoLayoutTick === 0) return;
+    lastLayoutTick.current = autoLayoutTick;
+    const { nodes: layouted } = getLayoutedElements(latestRef.current.nodes, latestRef.current.edges);
+    setNodes(layouted as MindmapRFNode[]);
+    markDirty();
+    triggerSave();
+  }, [autoLayoutTick, markDirty, triggerSave]);
+
   // 节点 data 更新（MindmapNode 经 Context 调用，保证 data 引用稳定不破 memo）
   const updateNodeData = useCallback((id: string, patch: Partial<MindmapRFNode['data']>) => {
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
@@ -122,13 +136,51 @@ function EditorCanvas() {
     triggerSave();
   }, [markDirty, triggerSave]);
 
-  const ctxValue = useMemo<MindmapEditorContextValue>(() => ({ updateNodeData }), [updateNodeData]);
+  // 节点操作（加子/加同级/删子树/折叠展开）
+  const actions = useMindmapActions({
+    setNodes,
+    setEdges,
+    getLatest: () => latestRef.current,
+    markDirty,
+    triggerSave,
+  });
+  const selectedNode = nodes.find((n) => n.selected);
+
+  // 键盘：Tab=加子 / Enter=加同级 / Delete=删子树（编辑态 input 内不拦截）
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!selectedNode) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        actions.addChildNode(selectedNode.id);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        actions.addSiblingNode(selectedNode.id);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
+        e.preventDefault();
+        actions.deleteNode(selectedNode.id);
+      }
+    },
+    [selectedNode, actions],
+  );
+
+  const hasChildren = useCallback(
+    (id: string) => latestRef.current.edges.some((e) => e.source === id),
+    [],
+  );
+  const ctxValue = useMemo<MindmapEditorContextValue>(
+    () => ({ updateNodeData, ...actions, hasChildren }),
+    [updateNodeData, actions, hasChildren],
+  );
 
   if (!current) return null;
 
   return (
     <MindmapEditorContext.Provider value={ctxValue}>
-      <div className="h-full w-full" tabIndex={0}>
+      <div className="h-full w-full outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
