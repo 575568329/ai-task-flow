@@ -4,6 +4,9 @@
 // 顶部「+ 新建对话」。来源色标补齐问题①(历史项无 Win/WSL 标签),常驻列表解决②(多对话不直观)。
 import { Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/components/ui/toaster';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildSessionItems, type SessionMenuCtx } from './sessionListContextMenu';
 import type { ProjectSessionSummary } from '@ai-task-flow/shared';
 
 interface SessionListProps {
@@ -36,6 +39,14 @@ function SourceBadge({ source }: { source?: 'windows' | 'wsl' }) {
 }
 
 export function SessionList({ sessions, activeSessionId, loading, onSelect, onNew, onRefresh }: SessionListProps) {
+  const menuCtx: SessionMenuCtx = {
+    select: onSelect,
+    copyResume: (id) =>
+      navigator.clipboard.writeText(`claude --resume ${id}`).then(
+        () => toast.success('恢复指令已复制'),
+        () => toast.error('复制失败'),
+      ),
+  };
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
@@ -81,11 +92,11 @@ export function SessionList({ sessions, activeSessionId, loading, onSelect, onNe
           sessions.map((s) => {
             const isActive = s.sessionId === activeSessionId;
             return (
-              <button
-                key={s.sessionId}
-                type="button"
-                data-active={isActive ? 'true' : undefined}
-                onClick={() => onSelect(s.sessionId, s.source ?? 'windows')}
+              <ContextMenuHost key={s.sessionId} items={buildSessionItems} target={s} ctx={menuCtx}>
+                <button
+                  type="button"
+                  data-active={isActive ? 'true' : undefined}
+                  onClick={() => onSelect(s.sessionId, s.source ?? 'windows')}
                 className={cn(
                   'hover:bg-accent mb-0.5 flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left',
                   isActive && 'bg-accent',
@@ -102,7 +113,8 @@ export function SessionList({ sessions, activeSessionId, loading, onSelect, onNe
                   <span>· {new Date(s.lastActiveAt).toLocaleDateString()}</span>
                   <span>· {s.messageCount}条</span>
                 </div>
-              </button>
+                </button>
+              </ContextMenuHost>
             );
           })
         )}
