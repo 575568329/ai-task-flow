@@ -24,8 +24,16 @@ function branchStyle(branch?: string): React.CSSProperties | undefined {
 }
 
 export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<MindmapRFNode>) {
-  const { updateNodeData, addChildNode, addSiblingNode, deleteNode, toggleExpand, hasChildren } =
-    useMindmapEditor();
+  const {
+    updateNodeData,
+    addChildNode,
+    addSiblingNode,
+    deleteNode,
+    toggleExpand,
+    promoteNode,
+    demoteNode,
+    hasChildren,
+  } = useMindmapEditor();
   const [editing, setEditing] = useState(false);
   // 入场动画：mount 时 opacity 0 + scale 0.88，下一帧过渡到正常（新增节点淡入）
   const [entered, setEntered] = useState(false);
@@ -66,6 +74,8 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     addSibling: addSiblingNode,
     deleteNode,
     toggleExpand,
+    promoteNode,
+    demoteNode,
     setBranch: (nid, branch) => updateNodeData(nid, { branch }),
     hasChildren,
   };

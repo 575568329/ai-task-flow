@@ -17,6 +17,10 @@ export interface MindmapEditorContextValue {
   deleteNode: (id: string) => void;
   /** 折叠/展开子树 */
   toggleExpand: (id: string) => void;
+  /** 提升一级（成 grandparent 的子） */
+  promoteNode: (id: string) => void;
+  /** 降级一级（成前兄弟的子） */
+  demoteNode: (id: string) => void;
   /** 节点是否有子节点（折叠按钮显隐判断） */
   hasChildren: (id: string) => boolean;
 }

@@ -15,6 +15,8 @@ export interface MindmapActions {
   addSiblingNode: (siblingId: string) => void;
   deleteNode: (id: string) => void;
   toggleExpand: (id: string) => void;
+  promoteNode: (id: string) => void;
+  demoteNode: (id: string) => void;
 }
 
 /** 计算应隐藏的节点 id 集合（所有 collapsed 节点的后代）。导出供测试 */
@@ -51,6 +53,37 @@ export function applyHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]) {
       hidden: hidden.has(e.source) || hidden.has(e.target) || undefined,
     })),
   };
+}
+
+/**
+ * 递归调整 rootId 及其所有后代的 level（±delta）。
+ * promote/demote 时保持子树内相对层级（字号/粗细/线宽由 level 驱动）。
+ * 导出供测试。
+ */
+export function adjustSubtreeLevel(
+  nodes: MindmapRFNode[],
+  edges: MindmapRFEdge[],
+  rootId: string,
+  delta: number,
+): MindmapRFNode[] {
+  const childrenOf = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!childrenOf.has(e.source)) childrenOf.set(e.source, []);
+    childrenOf.get(e.source)!.push(e.target);
+  }
+  const ids = new Set<string>();
+  const stack = [rootId];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (ids.has(cur)) continue;
+    ids.add(cur);
+    stack.push(...(childrenOf.get(cur) ?? []));
+  }
+  return nodes.map((n) =>
+    ids.has(n.id)
+      ? { ...n, data: { ...n.data, level: Math.max(0, (n.data.level ?? 1) + delta) } }
+      : n,
+  );
 }
 
 export function useMindmapActions(params: {
@@ -183,5 +216,55 @@ export function useMindmapActions(params: {
     [getLatest, setNodes, setEdges, markDirty, triggerSave],
   );
 
-  return { addChildNode, addSiblingNode, deleteNode, toggleExpand };
+  /**
+   * 提升一级：node 从 parent 下移到 grandparent 下（改 edge 的 source）。
+   * root 或父是 root（无 grandparent）不可提升。子树 level -1。
+   */
+  const promoteNode = useCallback(
+    (id: string) => {
+      const { nodes, edges } = getLatest();
+      const parentEdge = edges.find((e) => e.target === id);
+      if (!parentEdge) return; // root 无父
+      const grandEdge = edges.find((e) => e.target === parentEdge.source);
+      if (!grandEdge) return; // 父是 root，无 grandparent
+      const newEdges = edges.map((e) =>
+        e.id === parentEdge.id ? { ...e, source: grandEdge.source } : e,
+      );
+      const adjusted = adjustSubtreeLevel(nodes, newEdges, id, -1);
+      const result = applyHidden(adjusted, newEdges);
+      setNodes(result.nodes);
+      setEdges(result.edges);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, setEdges, markDirty, triggerSave],
+  );
+
+  /**
+   * 降级一级：node 从 parent 下移到「前一个兄弟」下（改 edge 的 source）。
+   * 第一个子（无前兄弟）不可降级。子树 level +1。
+   */
+  const demoteNode = useCallback(
+    (id: string) => {
+      const { nodes, edges } = getLatest();
+      const parentEdge = edges.find((e) => e.target === id);
+      if (!parentEdge) return; // root
+      const siblingEdges = edges.filter((e) => e.source === parentEdge.source);
+      const idx = siblingEdges.findIndex((e) => e.target === id);
+      if (idx <= 0) return; // 第一个子或未找到 → 无前兄弟
+      const prevSiblingId = siblingEdges[idx - 1].target;
+      const newEdges = edges.map((e) =>
+        e.id === parentEdge.id ? { ...e, source: prevSiblingId } : e,
+      );
+      const adjusted = adjustSubtreeLevel(nodes, newEdges, id, 1);
+      const result = applyHidden(adjusted, newEdges);
+      setNodes(result.nodes);
+      setEdges(result.edges);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, setEdges, markDirty, triggerSave],
+  );
+
+  return { addChildNode, addSiblingNode, deleteNode, toggleExpand, promoteNode, demoteNode };
 }

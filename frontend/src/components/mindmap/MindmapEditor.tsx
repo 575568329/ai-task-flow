@@ -291,6 +291,14 @@ function EditorCanvas() {
         takeSnapshot();
         actions.toggleExpand(id);
       },
+      promoteNode: (id) => {
+        takeSnapshot();
+        actions.promoteNode(id);
+      },
+      demoteNode: (id) => {
+        takeSnapshot();
+        actions.demoteNode(id);
+      },
       hasChildren,
     }),
     [updateNodeData, actions, hasChildren, takeSnapshot],

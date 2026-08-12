@@ -1,8 +1,15 @@
 // frontend/src/components/mindmap/nodeContextMenu.ts
 // 思维导图节点右键菜单项工厂（数据驱动）。
-// 复用 useMindmapActions 的加子/加同级/删子树/折叠 + updateNodeData 改色 + 本地 setEditing 编辑。
-// 零新业务逻辑，只把已有操作组织成菜单项。
-import { Pencil, Plus, Trash2, Palette, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Pencil,
+  Plus,
+  Trash2,
+  Palette,
+  ChevronDown,
+  ChevronRight,
+  CornerLeftUp,
+  CornerLeftDown,
+} from 'lucide-react';
 import type { BranchKey, MindmapNodeData } from '@ai-task-flow/shared';
 import type { MenuItemBuilder } from '@/components/context-menu/types';
 
@@ -13,6 +20,8 @@ export interface MindmapMenuCtx {
   addSibling: (id: string) => void;
   deleteNode: (id: string) => void;
   toggleExpand: (id: string) => void;
+  promoteNode: (id: string) => void;
+  demoteNode: (id: string) => void;
   setBranch: (id: string, branch: BranchKey) => void;
   hasChildren: (id: string) => boolean;
 }
@@ -89,6 +98,22 @@ export const buildMindmapNodeItems: MenuItemBuilder<MindmapNodeTarget, MindmapMe
       icon: collapsed ? ChevronRight : ChevronDown,
       hidden: !ctx.hasChildren(id),
       onSelect: () => ctx.toggleExpand(id),
+    },
+    {
+      type: 'action',
+      key: 'promote',
+      label: '提升一级',
+      icon: CornerLeftUp,
+      disabled: isRoot,
+      onSelect: () => ctx.promoteNode(id),
+    },
+    {
+      type: 'action',
+      key: 'demote',
+      label: '降级一级',
+      icon: CornerLeftDown,
+      disabled: isRoot,
+      onSelect: () => ctx.demoteNode(id),
     },
     { type: 'separator', key: 's3' },
     {

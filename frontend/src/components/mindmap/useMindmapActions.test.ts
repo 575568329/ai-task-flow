@@ -2,7 +2,12 @@
 // 思维导图节点操作测试：computeHidden/applyHidden（纯函数）+ useMindmapActions（hook）。
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useMindmapActions, computeHidden, applyHidden } from './useMindmapActions';
+import {
+  useMindmapActions,
+  computeHidden,
+  applyHidden,
+  adjustSubtreeLevel,
+} from './useMindmapActions';
 import type { MindmapRFNode } from './MindmapNode';
 import type { MindmapRFEdge } from './BranchEdge';
 import type { BranchKey } from '@ai-task-flow/shared';
@@ -162,5 +167,68 @@ describe('useMindmapActions（hook）', () => {
     const newEdges = setEdges.mock.calls[0][0] as MindmapRFEdge[];
     expect(newEdges).toHaveLength(2);
     expect(newEdges.some((e) => e.target === sibling.id && e.source === 'root')).toBe(true);
+  });
+
+  it('promoteNode：root 不可提升', () => {
+    const root = node('root', { level: 0 });
+    const { result, setNodes } = setup([root], []);
+    result.current.promoteNode('root');
+    expect(setNodes).not.toHaveBeenCalled();
+  });
+
+  it('promoteNode：level2 提升成 grandparent 子，edge source 改、level-1', () => {
+    const root = node('root', { level: 0 });
+    const a = node('a', { level: 1 });
+    const b = node('b', { level: 2 });
+    const { result, setNodes, setEdges } = setup(
+      [root, a, b],
+      [edge('e1', 'root', 'a'), edge('e2', 'a', 'b')],
+    );
+    result.current.promoteNode('b');
+    const newEdges = setEdges.mock.calls[0][0] as MindmapRFEdge[];
+    expect(newEdges.find((e) => e.id === 'e2')!.source).toBe('root'); // b 父从 a → root
+    const newNodes = setNodes.mock.calls[0][0] as MindmapRFNode[];
+    expect(newNodes.find((n) => n.id === 'b')!.data.level).toBe(1);
+  });
+
+  it('demoteNode：第一个子不可降级', () => {
+    const root = node('root', { level: 0 });
+    const a = node('a', { level: 1 });
+    const { result, setNodes } = setup([root, a], [edge('e1', 'root', 'a')]);
+    result.current.demoteNode('a');
+    expect(setNodes).not.toHaveBeenCalled();
+  });
+
+  it('demoteNode：非首降级成前兄弟子，edge source 改、level+1', () => {
+    const root = node('root', { level: 0 });
+    const a = node('a', { level: 1 });
+    const b = node('b', { level: 1 });
+    const { result, setNodes, setEdges } = setup(
+      [root, a, b],
+      [edge('e1', 'root', 'a'), edge('e2', 'root', 'b')],
+    );
+    result.current.demoteNode('b');
+    const newEdges = setEdges.mock.calls[0][0] as MindmapRFEdge[];
+    expect(newEdges.find((e) => e.id === 'e2')!.source).toBe('a'); // b 父从 root → a
+    const newNodes = setNodes.mock.calls[0][0] as MindmapRFNode[];
+    expect(newNodes.find((n) => n.id === 'b')!.data.level).toBe(2);
+  });
+});
+
+describe('adjustSubtreeLevel', () => {
+  it('递归调整 rootId 及后代 level，非子树不动', () => {
+    const nodes = [node('root', { level: 0 }), node('a', { level: 1 }), node('b', { level: 2 })];
+    const edges = [edge('e1', 'root', 'a'), edge('e2', 'a', 'b')];
+    const r = adjustSubtreeLevel(nodes, edges, 'a', 1);
+    expect(r.find((n) => n.id === 'a')!.data.level).toBe(2);
+    expect(r.find((n) => n.id === 'b')!.data.level).toBe(3);
+    expect(r.find((n) => n.id === 'root')!.data.level).toBe(0);
+  });
+
+  it('level 不低于 0', () => {
+    const nodes = [node('root', { level: 0 }), node('a', { level: 1 })];
+    const edges = [edge('e1', 'root', 'a')];
+    const r = adjustSubtreeLevel(nodes, edges, 'a', -5);
+    expect(r.find((n) => n.id === 'a')!.data.level).toBe(0);
   });
 });
