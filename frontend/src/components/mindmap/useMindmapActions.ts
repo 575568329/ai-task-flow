@@ -17,8 +17,8 @@ export interface MindmapActions {
   toggleExpand: (id: string) => void;
 }
 
-/** 计算应隐藏的节点 id 集合（所有 collapsed 节点的后代） */
-function computeHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]): Set<string> {
+/** 计算应隐藏的节点 id 集合（所有 collapsed 节点的后代）。导出供测试 */
+export function computeHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]): Set<string> {
   const hidden = new Set<string>();
   const childrenOf = new Map<string, string[]>();
   for (const e of edges) {
@@ -41,8 +41,8 @@ function computeHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]): Set<stri
   return hidden;
 }
 
-/** 按 expanded 状态重算并写入 hidden（折叠子树隐藏节点 + 关联边） */
-function applyHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]) {
+/** 按 expanded 状态重算并写入 hidden（折叠子树隐藏节点 + 关联边）。导出供测试 */
+export function applyHidden(nodes: MindmapRFNode[], edges: MindmapRFEdge[]) {
   const hidden = computeHidden(nodes, edges);
   return {
     nodes: nodes.map((n) => ({ ...n, hidden: hidden.has(n.id) || undefined })),
