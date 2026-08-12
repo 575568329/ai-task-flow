@@ -7,6 +7,12 @@ import type { ProjectSessionSummary } from '@ai-task-flow/shared';
 // of React")。vitest.config.ts 的 react alias 对 externalize 的 node_modules 包不完全生效,故 stub。
 // 产品构建 vite dedupe 生效不受影响。
 vi.mock('lucide-react', () => ({ Plus: () => null, RefreshCw: () => null }));
+vi.mock('@/components/context-menu/ContextMenuHost', () => ({
+  ContextMenuHost: ({ children }: any) => children,
+}));
+vi.mock('@/components/ui/toaster', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
 
 // 文件级 cleanup(同 MessageStream.test),每个用例后清 DOM 避免累积
 afterEach(cleanup);

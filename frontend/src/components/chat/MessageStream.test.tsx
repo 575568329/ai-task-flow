@@ -9,6 +9,10 @@ import type { ChatTurn } from '@ai-task-flow/shared';
 vi.mock('@/components/chat/MessageContent', () => ({
   MessageContent: ({ content }: { content: string }) => <div>{content}</div>,
 }));
+// ContextMenuHost 依赖 radix（portal/focus），test 环境直接透传 children
+vi.mock('@/components/context-menu/ContextMenuHost', () => ({
+  ContextMenuHost: ({ children }: any) => children,
+}));
 
 // 文件级 cleanup(vitest 1.6.1 setupFiles 的 afterEach 跨文件不生效),每个用例后清 DOM
 afterEach(cleanup);

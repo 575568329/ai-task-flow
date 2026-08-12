@@ -41,6 +41,8 @@ import { MessageContent } from '@/components/chat/MessageContent';
 import { MdEditor } from '../knowledge/MdEditor';
 import { exportElementToPdf, downloadText } from '@/lib/docExport';
 import { copyDiskPath } from '@/lib/copyPath';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildTaskDocItems, type TaskDocMenuCtx } from './taskDocsContextMenu';
 import { FileTree } from './FileTree';
 
 type Mode = 'tasks' | 'files';
@@ -95,6 +97,12 @@ export function TaskDocsView() {
   // 任务文档
   const [query, setQuery] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const taskDocMenuCtx: TaskDocMenuCtx = {
+    open: (id) => setSelectedTaskId(id),
+    copyPath: (taskFilePath) => {
+      if (taskFilePath) void copyDiskPath(taskFilePath);
+    },
+  };
 
   // 项目文件:多 root(挂载的文件夹)
   const [roots, setRoots] = useState<string[]>(() => loadRoots());
@@ -349,21 +357,22 @@ export function TaskDocsView() {
                     </div>
                   ) : (
                     filtered.map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        className={cn(
-                          'w-full rounded-md px-2 py-1.5 text-left transition-colors',
-                          selectedTaskId === t.id ? 'bg-accent' : 'hover:bg-accent/50',
-                        )}
-                        onClick={() => setSelectedTaskId(t.id)}
-                      >
-                        <div className="truncate text-sm">{t.title || '(无标题)'}</div>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
-                          <span className="text-muted-foreground">{t.status}</span>
-                          <span className="text-muted-foreground/60">{t.id}</span>
-                        </div>
-                      </button>
+                      <ContextMenuHost key={t.id} items={buildTaskDocItems} target={t} ctx={taskDocMenuCtx}>
+                        <button
+                          type="button"
+                          className={cn(
+                            'w-full rounded-md px-2 py-1.5 text-left transition-colors',
+                            selectedTaskId === t.id ? 'bg-accent' : 'hover:bg-accent/50',
+                          )}
+                          onClick={() => setSelectedTaskId(t.id)}
+                        >
+                          <div className="truncate text-sm">{t.title || '(无标题)'}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+                            <span className="text-muted-foreground">{t.status}</span>
+                            <span className="text-muted-foreground/60">{t.id}</span>
+                          </div>
+                        </button>
+                      </ContextMenuHost>
                     ))
                   )}
                 </div>
