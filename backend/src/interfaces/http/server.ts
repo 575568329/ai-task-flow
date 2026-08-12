@@ -24,12 +24,14 @@ import type { WebClipService } from '../../application/webclip/WebClipService.js
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import type { VocabService } from '../../application/vocab/VocabService.js';
 import type { MaimemoService } from '../../application/maimemo/MaimemoService.js';
+import type { MindmapService } from '../../application/mindmap/MindmapService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
 import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
 import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
+import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
 import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
 import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 import { UsageService } from '../../application/usage/UsageService.js';
@@ -81,6 +83,7 @@ export async function createHttpServer(
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
   maimemoService: MaimemoService,
+  mindmapService: MindmapService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -179,6 +182,7 @@ export async function createHttpServer(
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
   await registerMaimemoRoutes(fastify, maimemoService);
+  await registerMindmapRoutes(fastify, mindmapService);
   await registerSystemRoutes(fastify, agentRuntimeManager);
   await registerUsageRoutes(fastify, usageService);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
@@ -253,12 +257,13 @@ export async function startHttpServer(
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
   maimemoService: MaimemoService,
+  mindmapService: MindmapService,
 ) {
   // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

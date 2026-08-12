@@ -117,6 +117,11 @@ export function vocabFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'vocab.json');
 }
 
+/** mindmaps.json 路径(思维导图文档集合,单文件多文档),与 vocab.json 同级 */
+export function mindmapsFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'mindmaps.json');
+}
+
 /** 上传图片目录 */
 export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');
