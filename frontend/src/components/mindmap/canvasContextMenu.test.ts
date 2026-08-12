@@ -6,16 +6,21 @@ import type { MenuContext } from '@/components/context-menu/types';
 
 describe('buildCanvasItems', () => {
   function setup() {
-    const ctx: MindmapCanvasCtx = { autoLayout: vi.fn(), fitView: vi.fn() };
+    const ctx: MindmapCanvasCtx = {
+      autoLayout: vi.fn(),
+      fitView: vi.fn(),
+      exportPng: vi.fn(),
+    };
     const mc = { target: null, ctx } as MenuContext<null, MindmapCanvasCtx>;
     return { ctx, mc };
   }
 
-  it('包含「自动布局」与「适应视图」两项，顺序固定', () => {
+  it('包含 自动布局 / 适应视图 / 导出PNG + 1 分隔符', () => {
     const { mc } = setup();
     const items = buildCanvasItems(mc);
-    expect(items.map((i) => i.key)).toEqual(['layout', 'fit']);
-    expect(items.every((i) => i.type === 'action')).toBe(true);
+    expect(items.map((i) => i.key)).toEqual(['layout', 'fit', 's1', 'export']);
+    expect(items.filter((i) => i.type === 'action')).toHaveLength(3);
+    expect(items.filter((i) => i.type === 'separator')).toHaveLength(1);
   });
 
   it('自动布局 onSelect 调 ctx.autoLayout', () => {
@@ -32,5 +37,13 @@ describe('buildCanvasItems', () => {
     const fit = items.find((i) => i.key === 'fit');
     if (fit?.type === 'action') fit.onSelect(mc);
     expect(ctx.fitView).toHaveBeenCalledTimes(1);
+  });
+
+  it('导出 PNG onSelect 调 ctx.exportPng', () => {
+    const { ctx, mc } = setup();
+    const items = buildCanvasItems(mc);
+    const exp = items.find((i) => i.key === 'export');
+    if (exp?.type === 'action') exp.onSelect(mc);
+    expect(ctx.exportPng).toHaveBeenCalledTimes(1);
   });
 });

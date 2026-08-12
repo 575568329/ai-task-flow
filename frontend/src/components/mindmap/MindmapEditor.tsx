@@ -16,9 +16,12 @@ import {
   Controls,
   MiniMap,
   useReactFlow,
+  getNodesBounds,
+  getViewportForBounds,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
+  type Node,
   type NodeChange,
   type EdgeChange,
   type Connection,
@@ -26,6 +29,7 @@ import {
 } from '@xyflow/react';
 import type { MindmapFlowEdge, MindmapFlowNode, MindmapViewport } from '@ai-task-flow/shared';
 import { mindmapApi } from '@/api/mindmap';
+import { toPng } from 'html-to-image';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { MindmapNode, type MindmapRFNode } from './MindmapNode';
 import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
@@ -65,28 +69,37 @@ function EditorCanvas() {
   const latestRef = useRef({ nodes, edges, viewport });
   latestRef.current = { nodes, edges, viewport };
 
-  // 自动保存：debounce 2s。每次 nodes/edges 变化重设 timer，停止编辑 2s 后落库。
+  // 保存：doSave 核心 + triggerSave（debounce 自动）+ saveNow（Ctrl+S 立即）
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const triggerSave = useCallback(() => {
+  const doSave = useCallback(async () => {
     if (!current) return;
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        const { nodes: n, edges: e, viewport: vp } = latestRef.current;
-        const updated = await mindmapApi.update(current.id, {
-          nodes: n as MindmapFlowNode[],
-          edges: e as MindmapFlowEdge[],
-          viewport: vp,
-          expectedVersion: current.version, // 乐观锁基准
-        });
-        onSaved(updated.version);
-      } catch {
-        setSaveStatus('error');
-        // http 拦截器已 toast（含 409 冲突提示）
-      }
-    }, AUTOSAVE_DELAY);
+    setSaveStatus('saving');
+    try {
+      const { nodes: n, edges: e, viewport: vp } = latestRef.current;
+      const updated = await mindmapApi.update(current.id, {
+        nodes: n as MindmapFlowNode[],
+        edges: e as MindmapFlowEdge[],
+        viewport: vp,
+        expectedVersion: current.version, // 乐观锁基准
+      });
+      onSaved(updated.version);
+    } catch {
+      setSaveStatus('error');
+      // http 拦截器已 toast（含 409 冲突提示）
+    }
   }, [current, setSaveStatus, onSaved]);
+
+  // 自动保存：debounce 2s。每次 nodes/edges 变化重设 timer，停止编辑 2s 后落库。
+  const triggerSave = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void doSave(), AUTOSAVE_DELAY);
+  }, [doSave]);
+
+  // 立即保存：Ctrl+S 手动触发，清 debounce 直接落库。
+  const saveNow = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    void doSave();
+  }, [doSave]);
 
   // 卸载时清 timer，避免对已卸载组件 setState
   useEffect(() => () => clearTimeout(saveTimer.current), []);
@@ -139,12 +152,48 @@ function EditorCanvas() {
     triggerSave();
   }, [markDirty, triggerSave]);
 
-  // 画布右键菜单上下文（自动布局 + 适应视图）
+  // 画布右键菜单上下文（自动布局 + 适应视图 + 导出 PNG）
   const triggerAutoLayout = useMindmapStore((s) => s.triggerAutoLayout);
   const { fitView } = useReactFlow();
+
+  // 导出整张图为 PNG（白底，过滤 minimap/controls，按节点 bounds 计算导出范围）
+  const exportPng = useCallback(() => {
+    const allNodes = latestRef.current.nodes as Node[];
+    if (allNodes.length === 0) return;
+    const bounds = getNodesBounds(allNodes);
+    const padding = 100;
+    const width = bounds.width + padding * 2;
+    const height = bounds.height + padding * 2;
+    const { x, y, zoom } = getViewportForBounds(bounds, width, height, 0.5, 2, padding);
+    const viewportEl = document.querySelector('.react-flow__viewport');
+    if (!viewportEl) return;
+    toPng(viewportEl as HTMLElement, {
+      backgroundColor: '#ffffff',
+      width,
+      height,
+      style: {
+        width: `${width}px`,
+        height: `${height}px`,
+        transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+      },
+      filter: (node) => {
+        const cls = (node as HTMLElement)?.classList;
+        return !(cls?.contains('react-flow__minimap') || cls?.contains('react-flow__controls'));
+      },
+    })
+      .then((dataUrl) => {
+        const a = document.createElement('a');
+        a.download = `${current?.title ?? 'mindmap'}.png`;
+        a.href = dataUrl;
+        a.click();
+      })
+      .catch((err) => console.error('[mindmap] 导出 PNG 失败', err));
+  }, [current]);
+
   const canvasCtx: MindmapCanvasCtx = {
     autoLayout: triggerAutoLayout,
     fitView: () => fitView({ padding: 0.3 }),
+    exportPng,
   };
 
   // 节点操作（加子/加同级/删子树/折叠展开）
@@ -160,6 +209,12 @@ function EditorCanvas() {
   // 键盘：Tab=加子 / Enter=加同级 / Delete=删子树（编辑态 input 内不拦截）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Ctrl+S / Cmd+S 立即保存（无需选中节点，拦截浏览器默认保存）
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        saveNow();
+        return;
+      }
       if (!selectedNode) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
@@ -175,7 +230,7 @@ function EditorCanvas() {
         actions.deleteNode(selectedNode.id);
       }
     },
-    [selectedNode, actions],
+    [selectedNode, actions, saveNow],
   );
 
   const hasChildren = useCallback(
