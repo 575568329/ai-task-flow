@@ -40,7 +40,7 @@
 | 层 | 技术 |
 |----|------|
 | 后端 | Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git + tsyringe |
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS v4 + Zustand + @dnd-kit + react-diff-view |
+| 前端 | React 19 + TypeScript + Vite + Tailwind CSS v4 + Zustand + @dnd-kit + react-diff-view + shadcn/ui |
 | 架构 | DDD 四层(domain / application / infrastructure / interfaces)+ EventBus |
 | 存储 | JSON 文件(`~/.ai-task-flow/tasks.json`)+ EventStore(JSONL) |
 | 实时 | SSE(Server-Sent Events) |

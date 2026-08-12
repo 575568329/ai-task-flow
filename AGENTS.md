@@ -123,12 +123,10 @@
 - 列表渲染必须提供稳定唯一 `key`，禁止使用数组索引。
 - 组件 Props 定义 interface，导出供外部使用。
 
-### 4.3 Vue 约定（如适用）
+### 4.3 前端框架约定
 
-- Vue 3 + Composition API + `<script setup>` 语法。
-- 组合式函数 (Composables) 抽离复用逻辑，命名 `useXxx`。
-- Props 使用 `defineProps<T>()` 泛型声明，带默认值用 `withDefaults`。
-- 响应式数据：基本类型用 `ref`，对象用 `reactive`，不混用。
+> 本项目前端为 **React 19 + shadcn/ui(Radix) + Tailwind CSS v4 + Zustand**(详见 4.2 节),不使用 Vue。
+> 若未来引入 Vue 3 项目,遵循 Composition API + `<script setup>` + `defineProps<T>()` + `ref`/`reactive` 惯例。
 
 ### 4.4 样式与 CSS
 
@@ -450,7 +448,7 @@ Step 5: 集成收尾
 
 **技术栈**: 
 - Backend: Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git
-- Frontend: Vue 3 + TypeScript + Vite + Element Plus
+- Frontend: React 19 + TypeScript + Vite + shadcn/ui(Radix) + Tailwind CSS v4 + Zustand
 - Architecture: DDD 四层 + git worktree 隔离 + EventBus
 
 **MVP 周期**: 2-3 周
