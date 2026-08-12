@@ -17,6 +17,7 @@ export interface MindmapActions {
   toggleExpand: (id: string) => void;
   promoteNode: (id: string) => void;
   demoteNode: (id: string) => void;
+  moveSibling: (id: string, direction: 'up' | 'down') => void;
 }
 
 /** 计算应隐藏的节点 id 集合（所有 collapsed 节点的后代）。导出供测试 */
@@ -266,5 +267,43 @@ export function useMindmapActions(params: {
     [getLatest, setNodes, setEdges, markDirty, triggerSave],
   );
 
-  return { addChildNode, addSiblingNode, deleteNode, toggleExpand, promoteNode, demoteNode };
+  /**
+   * 上移/下移：在父的 children 里交换相邻顺序（改 edges 顺序）。
+   * 配合自定义树布局（按 children 顺序排），重排后顺序立即生效。
+   */
+  const moveSibling = useCallback(
+    (id: string, direction: 'up' | 'down') => {
+      const { nodes, edges } = getLatest();
+      const parentEdge = edges.find((e) => e.target === id);
+      if (!parentEdge) return; // root 无兄弟
+      const parentId = parentEdge.source;
+      const parentEdges = edges.filter((e) => e.source === parentId);
+      const otherEdges = edges.filter((e) => e.source !== parentId);
+      const idx = parentEdges.findIndex((e) => e.target === id);
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= parentEdges.length) return;
+      const newParentEdges = [...parentEdges];
+      [newParentEdges[idx], newParentEdges[swapIdx]] = [
+        newParentEdges[swapIdx],
+        newParentEdges[idx],
+      ];
+      const newEdges = [...otherEdges, ...newParentEdges];
+      const result = applyHidden(nodes, newEdges);
+      setNodes(result.nodes);
+      setEdges(result.edges);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, setEdges, markDirty, triggerSave],
+  );
+
+  return {
+    addChildNode,
+    addSiblingNode,
+    deleteNode,
+    toggleExpand,
+    promoteNode,
+    demoteNode,
+    moveSibling,
+  };
 }

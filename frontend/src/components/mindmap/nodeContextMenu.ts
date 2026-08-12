@@ -9,6 +9,8 @@ import {
   ChevronRight,
   CornerLeftUp,
   CornerLeftDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import type { BranchKey, MindmapNodeData } from '@ai-task-flow/shared';
 import type { MenuItemBuilder } from '@/components/context-menu/types';
@@ -22,6 +24,7 @@ export interface MindmapMenuCtx {
   toggleExpand: (id: string) => void;
   promoteNode: (id: string) => void;
   demoteNode: (id: string) => void;
+  moveSibling: (id: string, direction: 'up' | 'down') => void;
   setBranch: (id: string, branch: BranchKey) => void;
   hasChildren: (id: string) => boolean;
 }
@@ -114,6 +117,22 @@ export const buildMindmapNodeItems: MenuItemBuilder<MindmapNodeTarget, MindmapMe
       icon: CornerLeftDown,
       disabled: isRoot,
       onSelect: () => ctx.demoteNode(id),
+    },
+    {
+      type: 'action',
+      key: 'moveUp',
+      label: '上移',
+      icon: ArrowUp,
+      disabled: isRoot,
+      onSelect: () => ctx.moveSibling(id, 'up'),
+    },
+    {
+      type: 'action',
+      key: 'moveDown',
+      label: '下移',
+      icon: ArrowDown,
+      disabled: isRoot,
+      onSelect: () => ctx.moveSibling(id, 'down'),
     },
     { type: 'separator', key: 's3' },
     {

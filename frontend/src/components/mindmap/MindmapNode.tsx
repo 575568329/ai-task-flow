@@ -32,6 +32,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     toggleExpand,
     promoteNode,
     demoteNode,
+    moveSibling,
     hasChildren,
   } = useMindmapEditor();
   const [editing, setEditing] = useState(false);
@@ -76,6 +77,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     toggleExpand,
     promoteNode,
     demoteNode,
+    moveSibling,
     setBranch: (nid, branch) => updateNodeData(nid, { branch }),
     hasChildren,
   };

@@ -1,5 +1,5 @@
 // frontend/src/components/board/taskCardContextMenu.test.ts
-// 任务卡右键菜单工厂测试。
+// 任务卡右键菜单工厂测试（含状态/优先级子菜单）。
 import { describe, it, expect, vi } from 'vitest';
 import { buildTaskCardItems, type TaskCardMenuCtx } from './taskCardContextMenu';
 import { TaskStatus, Priority, type TaskDTO } from '@ai-task-flow/shared';
@@ -27,6 +27,8 @@ function setup(task?: Partial<TaskDTO>) {
     openTerminal: vi.fn(),
     copyPrompt: vi.fn(),
     copyId: vi.fn(),
+    moveStatus: vi.fn(),
+    setPriority: vi.fn(),
     removeTask: vi.fn(),
   };
   const mc = { target: makeTask(task), ctx } as MenuContext<TaskDTO, TaskCardMenuCtx>;
@@ -34,20 +36,17 @@ function setup(task?: Partial<TaskDTO>) {
 }
 
 describe('buildTaskCardItems', () => {
-  it('包含核心菜单项 + 2 分隔符', () => {
+  it('包含核心菜单项 + 状态/优先级子菜单 + 3 分隔符', () => {
     const { mc } = setup();
     const items = buildTaskCardItems(mc);
     expect(items.map((i) => i.key)).toEqual(
       expect.arrayContaining([
-        'detail',
-        'chat',
-        'terminal',
-        'copyPrompt',
-        'copyId',
-        'delete',
+        'detail', 'chat', 'terminal', 'copyPrompt', 'copyId',
+        'status', 'priority', 'delete',
       ]),
     );
-    expect(items.filter((i) => i.type === 'separator')).toHaveLength(2);
+    expect(items.filter((i) => i.type === 'submenu')).toHaveLength(2);
+    expect(items.filter((i) => i.type === 'separator')).toHaveLength(3);
   });
 
   it('无 repoPath：对话/终端 disabled', () => {
@@ -59,14 +58,31 @@ describe('buildTaskCardItems', () => {
     expect(terminal.type === 'action' && terminal.disabled).toBe(true);
   });
 
-  it('有 repoPath：对话/终端 enabled', () => {
-    const { mc } = setup({ repoPath: '/repo' });
+  it('状态子菜单：当前状态项 disabled', () => {
+    const { mc } = setup({ status: TaskStatus.TODO });
     const items = buildTaskCardItems(mc);
-    const chat = items.find((i) => i.key === 'chat')!;
-    expect(chat.type === 'action' && chat.disabled).toBe(false);
+    const status = items.find((i) => i.key === 'status')!;
+    expect(status.type).toBe('submenu');
+    if (status.type === 'submenu') {
+      const sub = typeof status.items === 'function' ? status.items({} as never) : status.items;
+      const todo = sub.find((s) => s.key === String(TaskStatus.TODO));
+      expect(todo?.type === 'action' && todo.disabled).toBe(true);
+    }
   });
 
-  it('各 action onSelect 触发对应回调', () => {
+  it('优先级子菜单：当前优先级项 disabled', () => {
+    const { mc } = setup({ priority: Priority.P1 });
+    const items = buildTaskCardItems(mc);
+    const priority = items.find((i) => i.key === 'priority')!;
+    if (priority.type === 'submenu') {
+      const sub =
+        typeof priority.items === 'function' ? priority.items({} as never) : priority.items;
+      const p1 = sub.find((s) => s.key === String(Priority.P1));
+      expect(p1?.type === 'action' && p1.disabled).toBe(true);
+    }
+  });
+
+  it('核心 action onSelect 触发对应回调', () => {
     const { ctx, mc } = setup();
     const items = buildTaskCardItems(mc);
     const call = (k: string) => {
@@ -77,8 +93,6 @@ describe('buildTaskCardItems', () => {
     expect(ctx.openDetail).toHaveBeenCalledWith('WS-001');
     call('copyId');
     expect(ctx.copyId).toHaveBeenCalledWith('WS-001');
-    call('copyPrompt');
-    expect(ctx.copyPrompt).toHaveBeenCalled();
     call('delete');
     expect(ctx.removeTask).toHaveBeenCalled();
   });

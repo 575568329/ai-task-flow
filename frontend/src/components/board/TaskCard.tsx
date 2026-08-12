@@ -26,6 +26,8 @@ interface TaskCardProps {
 export function TaskCard({ task }: TaskCardProps) {
   const setSelectedTask = useUIStore((s) => s.setSelectedTask);
   const openForRepo = useProjectChatStore((s) => s.openForRepo);
+  const optimisticMove = useTaskStore((s) => s.optimisticMove);
+  const updateTaskAction = useTaskStore((s) => s.update);
   const removeTaskAction = useTaskStore((s) => s.remove);
   const { confirm } = useConfirm();
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -52,6 +54,16 @@ export function TaskCard({ task }: TaskCardProps) {
         () => toast.success('任务 ID 已复制'),
         () => toast.error('复制失败'),
       ),
+    moveStatus: (id, status) => {
+      optimisticMove(id, status).catch((e) =>
+        toast.error(e instanceof Error ? e.message : '移动失败,已回滚'),
+      );
+    },
+    setPriority: (id, priority) => {
+      updateTaskAction(id, { priority }).catch((e) =>
+        toast.error(e instanceof Error ? e.message : '修改优先级失败'),
+      );
+    },
     removeTask: async (t) => {
       if (
         !(await confirm({

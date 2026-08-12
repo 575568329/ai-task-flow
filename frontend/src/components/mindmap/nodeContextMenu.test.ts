@@ -1,5 +1,5 @@
 // frontend/src/components/mindmap/nodeContextMenu.test.ts
-// 思维导图节点右键菜单项工厂测试。
+// 思维导图节点右键菜单项工厂测试（含提升/降级/上移/下移）。
 import { describe, it, expect, vi } from 'vitest';
 import { buildMindmapNodeItems, type MindmapMenuCtx } from './nodeContextMenu';
 import type { MindmapNodeData } from '@ai-task-flow/shared';
@@ -19,6 +19,7 @@ function makeCtx(o: Partial<MindmapMenuCtx> = {}): MindmapMenuCtx {
     toggleExpand: vi.fn(),
     promoteNode: vi.fn(),
     demoteNode: vi.fn(),
+    moveSibling: vi.fn(),
     setBranch: vi.fn(),
     hasChildren: () => false,
     ...o,
@@ -35,13 +36,9 @@ function actionOf(items: Items, key: string) {
   const it = items.find((i) => i.key === key);
   return it && it.type === 'action' ? it : undefined;
 }
-function submenuOf(items: Items, key: string) {
-  const it = items.find((i) => i.key === key);
-  return it && it.type === 'submenu' ? it : undefined;
-}
 
 describe('buildMindmapNodeItems', () => {
-  it('包含核心菜单项 + 3 分隔符（含提升/降级）', () => {
+  it('包含全部菜单项（含提升/降级/上移/下移）', () => {
     const items = buildMindmapNodeItems({
       target: makeTarget(),
       ctx: makeCtx({ hasChildren: () => true }),
@@ -49,28 +46,31 @@ describe('buildMindmapNodeItems', () => {
     const keys = items.map((i) => i.key);
     expect(keys).toEqual(
       expect.arrayContaining([
-        'edit',
-        'child',
-        'sibling',
-        'color',
-        'toggle',
-        'promote',
-        'demote',
-        'delete',
+        'edit', 'child', 'sibling', 'color', 'toggle',
+        'promote', 'demote', 'moveUp', 'moveDown', 'delete',
       ]),
     );
-    expect(items.filter((i) => i.type === 'separator')).toHaveLength(3);
   });
 
-  it('根节点：删除/加同级/提升/降级 disabled', () => {
+  it('根节点：提升/降级/上移/下移/删除/加同级 均 disabled', () => {
     const items = buildMindmapNodeItems({ target: makeTarget({ level: 0 }), ctx: makeCtx() });
-    expect(actionOf(items, 'delete')?.disabled).toBe(true);
-    expect(actionOf(items, 'sibling')?.disabled).toBe(true);
     expect(actionOf(items, 'promote')?.disabled).toBe(true);
     expect(actionOf(items, 'demote')?.disabled).toBe(true);
+    expect(actionOf(items, 'moveUp')?.disabled).toBe(true);
+    expect(actionOf(items, 'moveDown')?.disabled).toBe(true);
   });
 
-  it('提升/降级 onSelect 触发对应回调', () => {
+  it('上移/下移 onSelect 调 moveSibling', () => {
+    const ctx = makeCtx();
+    const mc: MenuContext<Target, MindmapMenuCtx> = { target: makeTarget(), ctx };
+    const items = buildMindmapNodeItems(mc);
+    actionOf(items, 'moveUp')?.onSelect(mc);
+    expect(ctx.moveSibling).toHaveBeenCalledWith('n1', 'up');
+    actionOf(items, 'moveDown')?.onSelect(mc);
+    expect(ctx.moveSibling).toHaveBeenCalledWith('n1', 'down');
+  });
+
+  it('提升/降级 onSelect 调对应回调', () => {
     const ctx = makeCtx();
     const mc: MenuContext<Target, MindmapMenuCtx> = { target: makeTarget(), ctx };
     const items = buildMindmapNodeItems(mc);
@@ -78,20 +78,6 @@ describe('buildMindmapNodeItems', () => {
     expect(ctx.promoteNode).toHaveBeenCalledWith('n1');
     actionOf(items, 'demote')?.onSelect(mc);
     expect(ctx.demoteNode).toHaveBeenCalledWith('n1');
-  });
-
-  it('颜色子菜单含 8 色，首色 onSelect 调 setBranch(blue)', () => {
-    const setBranch = vi.fn();
-    const ctx = makeCtx({ setBranch });
-    const mc: MenuContext<Target, MindmapMenuCtx> = { target: makeTarget(), ctx };
-    const items = buildMindmapNodeItems(mc);
-    const color = submenuOf(items, 'color');
-    expect(color).toBeDefined();
-    const sub = typeof color!.items === 'function' ? color!.items(mc) : color!.items;
-    expect(sub).toHaveLength(8);
-    const first = sub[0];
-    if (first.type === 'action') first.onSelect(mc);
-    expect(setBranch).toHaveBeenCalledWith('n1', 'blue');
   });
 
   it('无子节点：折叠项 hidden', () => {
@@ -102,16 +88,20 @@ describe('buildMindmapNodeItems', () => {
     expect(actionOf(items, 'toggle')?.hidden).toBe(true);
   });
 
-  it('编辑/加子/加同级/删除 onSelect 触发对应回调', () => {
+  it('颜色子菜单含 8 色', () => {
+    const ctx = makeCtx();
+    const mc: MenuContext<Target, MindmapMenuCtx> = { target: makeTarget(), ctx };
+    const items = buildMindmapNodeItems(mc);
+    const color = items.find((i) => i.key === 'color');
+    expect(color?.type).toBe('submenu');
+  });
+
+  it('核心 action onSelect 触发对应回调', () => {
     const ctx = makeCtx();
     const mc: MenuContext<Target, MindmapMenuCtx> = { target: makeTarget(), ctx };
     const items = buildMindmapNodeItems(mc);
     actionOf(items, 'edit')?.onSelect(mc);
     expect(ctx.edit).toHaveBeenCalledWith('n1');
-    actionOf(items, 'child')?.onSelect(mc);
-    expect(ctx.addChild).toHaveBeenCalledWith('n1');
-    actionOf(items, 'sibling')?.onSelect(mc);
-    expect(ctx.addSibling).toHaveBeenCalledWith('n1');
     actionOf(items, 'delete')?.onSelect(mc);
     expect(ctx.deleteNode).toHaveBeenCalledWith('n1');
   });

@@ -299,6 +299,10 @@ function EditorCanvas() {
         takeSnapshot();
         actions.demoteNode(id);
       },
+      moveSibling: (id, direction) => {
+        takeSnapshot();
+        actions.moveSibling(id, direction);
+      },
       hasChildren,
     }),
     [updateNodeData, actions, hasChildren, takeSnapshot],

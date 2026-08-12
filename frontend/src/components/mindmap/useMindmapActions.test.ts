@@ -213,6 +213,41 @@ describe('useMindmapActions（hook）', () => {
     const newNodes = setNodes.mock.calls[0][0] as MindmapRFNode[];
     expect(newNodes.find((n) => n.id === 'b')!.data.level).toBe(2);
   });
+
+  it('moveSibling：root 无兄弟不生效', () => {
+    const root = node('root', { level: 0 });
+    const { result, setEdges } = setup([root], []);
+    result.current.moveSibling('root', 'up');
+    expect(setEdges).not.toHaveBeenCalled();
+  });
+
+  it('moveSibling：b 上移 → parent 的子顺序变为 [b, a]', () => {
+    const root = node('root', { level: 0 });
+    const a = node('a', { level: 1 });
+    const b = node('b', { level: 1 });
+    const { result, setEdges } = setup(
+      [root, a, b],
+      [edge('e1', 'root', 'a'), edge('e2', 'root', 'b')],
+    );
+    result.current.moveSibling('b', 'up');
+    const newEdges = setEdges.mock.calls[0][0] as MindmapRFEdge[];
+    const parentChildTargets = newEdges
+      .filter((e) => e.source === 'root')
+      .map((e) => e.target);
+    expect(parentChildTargets).toEqual(['b', 'a']);
+  });
+
+  it('moveSibling：a 已是第一个，上移不生效', () => {
+    const root = node('root', { level: 0 });
+    const a = node('a', { level: 1 });
+    const b = node('b', { level: 1 });
+    const { result, setEdges } = setup(
+      [root, a, b],
+      [edge('e1', 'root', 'a'), edge('e2', 'root', 'b')],
+    );
+    result.current.moveSibling('a', 'up');
+    expect(setEdges).not.toHaveBeenCalled();
+  });
 });
 
 describe('adjustSubtreeLevel', () => {
