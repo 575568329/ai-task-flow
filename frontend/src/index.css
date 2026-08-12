@@ -180,6 +180,9 @@ body,
 .react-flow__node.selected .mm-card {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+  /* 彩色发光（ring 色晕染），比单纯 outline 更有质感 */
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent),
+    0 4px 16px color-mix(in oklch, var(--ring) 25%, transparent);
 }
 
 /* 思维导图隐藏默认 handle，hover/选中时显示 */
@@ -215,9 +218,18 @@ body,
   border-bottom: none;
 }
 
-/* 拖拽态阴影（作用于内层 .mm-card，不动 RF 的 transform.translate） */
+/* 节点视觉：统一漂浮阴影 + hover 上浮 + 拖拽加重（作用于内层 .mm-card，
+   不动 RF 节点 wrapper 的 transform.translate，避免定位冲突） */
 .mm-card {
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 5%, transparent),
+    0 4px 12px color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+/* hover 轻微上浮 + 阴影加深（交互反馈；排除选中/拖拽态避免冲突） */
+.react-flow__node:not(.dragging):not(.selected) .mm-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px color-mix(in oklch, var(--foreground) 9%, transparent),
+    0 8px 20px color-mix(in oklch, var(--foreground) 11%, transparent);
 }
 .react-flow__node.dragging .mm-card {
   box-shadow: 0 12px 28px color-mix(in oklch, var(--foreground) 18%, transparent);
