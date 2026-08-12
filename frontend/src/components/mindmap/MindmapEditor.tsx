@@ -36,6 +36,7 @@ import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
 import { getLayoutedElements } from './layout';
 import { useMindmapActions } from './useMindmapActions';
+import { useUndoRedo } from './useUndoRedo';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
 
@@ -68,6 +69,15 @@ function EditorCanvas() {
   // 最新编辑态的 ref（供 debounce 保存的闭包读取，避免捕获过期 state）
   const latestRef = useRef({ nodes, edges, viewport });
   latestRef.current = { nodes, edges, viewport };
+
+  // 撤销/重做（事务粒度快照，上限 50 步）。所有变更操作前调 takeSnapshot。
+  const undoApi = useUndoRedo({
+    getLatest: () => latestRef.current,
+    setNodes,
+    setEdges,
+    markDirty,
+  });
+  const { takeSnapshot, undo: undoAction, redo: redoAction } = undoApi;
 
   // 保存：doSave 核心 + triggerSave（debounce 自动）+ saveNow（Ctrl+S 立即）
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -124,14 +134,18 @@ function EditorCanvas() {
 
   const onConnect = useCallback(
     (conn: Connection) => {
+      takeSnapshot();
       setEdges((eds) => addEdge({ ...conn, type: 'mindmap' }, eds) as MindmapRFEdge[]);
       markDirty();
       triggerSave();
     },
-    [markDirty, triggerSave],
+    [takeSnapshot, markDirty, triggerSave],
   );
 
   const onMove: OnMove = useCallback((_evt, vp) => setViewport(vp), []);
+
+  // 拖拽结束记录一次快照（拖拽过程每帧不记录，只松手时记一次）
+  const onNodeDragStop = useCallback(() => takeSnapshot(), [takeSnapshot]);
 
   // 自动布局：Toolbar 触发信号（autoLayoutTick）→ effect 执行 dagre 重排
   const autoLayoutTick = useMindmapStore((s) => s.autoLayoutTick);
@@ -139,11 +153,12 @@ function EditorCanvas() {
   useEffect(() => {
     if (autoLayoutTick === lastLayoutTick.current || autoLayoutTick === 0) return;
     lastLayoutTick.current = autoLayoutTick;
+    takeSnapshot();
     const { nodes: layouted } = getLayoutedElements(latestRef.current.nodes, latestRef.current.edges);
     setNodes(layouted as MindmapRFNode[]);
     markDirty();
     triggerSave();
-  }, [autoLayoutTick, markDirty, triggerSave]);
+  }, [autoLayoutTick, takeSnapshot, markDirty, triggerSave]);
 
   // 节点 data 更新（MindmapNode 经 Context 调用，保证 data 引用稳定不破 memo）
   const updateNodeData = useCallback((id: string, patch: Partial<MindmapRFNode['data']>) => {
@@ -215,22 +230,37 @@ function EditorCanvas() {
         saveNow();
         return;
       }
+      // Ctrl+Z 撤销 / Ctrl+Shift+Z 或 Ctrl+Y 重做
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redoAction();
+        else undoAction();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        redoAction();
+        return;
+      }
       if (!selectedNode) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
       if (e.key === 'Tab') {
         e.preventDefault();
+        takeSnapshot();
         actions.addChildNode(selectedNode.id);
       } else if (e.key === 'Enter') {
         e.preventDefault();
+        takeSnapshot();
         actions.addSiblingNode(selectedNode.id);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
         e.preventDefault();
+        takeSnapshot();
         actions.deleteNode(selectedNode.id);
       }
     },
-    [selectedNode, actions, saveNow],
+    [selectedNode, actions, saveNow, takeSnapshot, undoAction, redoAction],
   );
 
   const hasChildren = useCallback(
@@ -238,8 +268,31 @@ function EditorCanvas() {
     [],
   );
   const ctxValue = useMemo<MindmapEditorContextValue>(
-    () => ({ updateNodeData, ...actions, hasChildren }),
-    [updateNodeData, actions, hasChildren],
+    () => ({
+      // 每个变更前 takeSnapshot，支持右键菜单操作的撤销
+      updateNodeData: (id, patch) => {
+        takeSnapshot();
+        updateNodeData(id, patch);
+      },
+      addChildNode: (id) => {
+        takeSnapshot();
+        actions.addChildNode(id);
+      },
+      addSiblingNode: (id) => {
+        takeSnapshot();
+        actions.addSiblingNode(id);
+      },
+      deleteNode: (id) => {
+        takeSnapshot();
+        actions.deleteNode(id);
+      },
+      toggleExpand: (id) => {
+        takeSnapshot();
+        actions.toggleExpand(id);
+      },
+      hasChildren,
+    }),
+    [updateNodeData, actions, hasChildren, takeSnapshot],
   );
 
   if (!current) return null;
@@ -257,6 +310,7 @@ function EditorCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStop={onNodeDragStop}
           onMove={onMove}
           fitView
           fitViewOptions={{ padding: 0.3 }}
