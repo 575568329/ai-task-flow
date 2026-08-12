@@ -37,6 +37,7 @@ import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapC
 import { getLayoutedElements } from './layout';
 import { useMindmapActions } from './useMindmapActions';
 import { useUndoRedo } from './useUndoRedo';
+import { OutlinePanel } from './OutlinePanel';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
 
@@ -322,6 +323,7 @@ function EditorCanvas() {
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} />
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable className="bg-card" />
+          <OutlinePanel />
         </ReactFlow>
         </div>
       </ContextMenuHost>
