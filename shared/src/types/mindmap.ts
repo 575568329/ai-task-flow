@@ -24,13 +24,18 @@ export interface MindmapViewport {
   zoom: number;
 }
 
-/** 节点业务数据（存于 React Flow node.data，随 toObject() 序列化） */
+/**
+ * 节点业务数据（存于 React Flow node.data，随 toObject() 序列化）。
+ * index signature 满足 React Flow 的 Node<T> 约束（T extends Record<string, unknown>），
+ * 后端当不透明 blob 存取不受影响。
+ */
 export interface MindmapNodeData {
   label: string; // 节点文本
   note?: string; // 节点备注（纯文本，hover/点击展开）
   expanded?: boolean; // 是否展开子节点（默认 true）
   branch?: BranchKey; // 所属分支色（决定节点/连线配色）
   level?: number; // 层级深度，0=根（用于字号/字重/线宽递减）
+  [key: string]: unknown;
 }
 
 /**

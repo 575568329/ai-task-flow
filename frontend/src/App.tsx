@@ -10,6 +10,7 @@ import { ChatView } from '@/components/views/ChatView';
 import { DocsView } from '@/components/views/DocsView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
 import { VocabView } from '@/components/views/VocabView';
+import { MindmapView } from '@/components/views/MindmapView';
 import { UsageView } from '@/components/views/UsageView';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/toaster';
@@ -26,6 +27,7 @@ const VIEWS: Record<ViewKey, ComponentType> = {
   docs: DocsView,
   knowledge: KnowledgeView,
   vocab: VocabView,
+  mindmap: MindmapView,
   usage: UsageView,
 };
 
