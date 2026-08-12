@@ -221,9 +221,14 @@ body,
 /* 节点视觉：统一漂浮阴影 + hover 上浮 + 拖拽加重（作用于内层 .mm-card，
    不动 RF 节点 wrapper 的 transform.translate，避免定位冲突） */
 .mm-card {
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, opacity 0.2s ease;
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 5%, transparent),
     0 4px 12px color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+/* 入场动画：mount 时淡入+放大（作用于内层 .mm-card，不动 RF 定位 transform） */
+.mm-card.mm-entering {
+  opacity: 0;
+  transform: scale(0.88);
 }
 /* hover 轻微上浮 + 阴影加深（交互反馈；排除选中/拖拽态避免冲突） */
 .react-flow__node:not(.dragging):not(.selected) .mm-card:hover {

@@ -27,6 +27,12 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
   const { updateNodeData, addChildNode, addSiblingNode, deleteNode, toggleExpand, hasChildren } =
     useMindmapEditor();
   const [editing, setEditing] = useState(false);
+  // 入场动画：mount 时 opacity 0 + scale 0.88，下一帧过渡到正常（新增节点淡入）
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
   const inputRef = useRef<HTMLInputElement>(null);
   const level = data.level ?? 1;
   const isRoot = level === 0;
@@ -93,7 +99,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
   return (
     <ContextMenuHost items={buildMindmapNodeItems} target={{ id, data }} ctx={menuCtx}>
       <div
-        className={cn('mm-card group flex items-center gap-1.5', cardClass)}
+        className={cn('mm-card group flex items-center gap-1.5', cardClass, !entered && 'mm-entering')}
         style={branchBgStyle}
         onDoubleClick={(e) => {
           e.stopPropagation();
