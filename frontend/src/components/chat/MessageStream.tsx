@@ -11,6 +11,9 @@ import { MessageContent } from '@/components/chat/MessageContent';
 import { Collapse } from '@/components/ui/collapse';
 import { ThinkingCard } from '@/components/board/ThinkingCard';
 import { ToolUseCard } from '@/components/board/ToolUseCard';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildTurnItems, type TurnMenuCtx } from './turnContextMenu';
+import { toast } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import type { ChatBlock, ChatTurn } from '@ai-task-flow/shared';
 
@@ -243,11 +246,20 @@ const TurnRow = memo(function TurnRow({
   onCopyAll?: (text: string) => void;
 }) {
   if (turn.role === 'user') {
+    const turnCtx: TurnMenuCtx = {
+      copy: (text) =>
+        navigator.clipboard.writeText(text).then(
+          () => toast.success('已复制'),
+          () => toast.error('复制失败'),
+        ),
+    };
     return (
       <div className="flex flex-col items-end gap-1.5">
-        <div className="bg-primary text-primary-foreground max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm">
-          {turn.text}
-        </div>
+        <ContextMenuHost items={buildTurnItems} target={{ text: turn.text ?? '' }} ctx={turnCtx}>
+          <div className="bg-primary text-primary-foreground max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm">
+            {turn.text}
+          </div>
+        </ContextMenuHost>
         {turn.images && turn.images.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end">
             {turn.images.map((dataUrl, i) => (
