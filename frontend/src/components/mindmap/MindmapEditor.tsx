@@ -15,6 +15,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  useReactFlow,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
@@ -31,6 +32,8 @@ import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
 import { getLayoutedElements } from './layout';
 import { useMindmapActions } from './useMindmapActions';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
 
 // 必须在组件外（否则每次渲染新引用 → RF 重注册所有类型 → 全部节点重渲染）
 const nodeTypes = { mindmap: MindmapNode };
@@ -136,6 +139,14 @@ function EditorCanvas() {
     triggerSave();
   }, [markDirty, triggerSave]);
 
+  // 画布右键菜单上下文（自动布局 + 适应视图）
+  const triggerAutoLayout = useMindmapStore((s) => s.triggerAutoLayout);
+  const { fitView } = useReactFlow();
+  const canvasCtx: MindmapCanvasCtx = {
+    autoLayout: triggerAutoLayout,
+    fitView: () => fitView({ padding: 0.3 }),
+  };
+
   // 节点操作（加子/加同级/删子树/折叠展开）
   const actions = useMindmapActions({
     setNodes,
@@ -180,7 +191,8 @@ function EditorCanvas() {
 
   return (
     <MindmapEditorContext.Provider value={ctxValue}>
-      <div className="h-full w-full outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
+      <ContextMenuHost items={buildCanvasItems} target={null} ctx={canvasCtx}>
+        <div className="h-full w-full outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -202,7 +214,8 @@ function EditorCanvas() {
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable className="bg-card" />
         </ReactFlow>
-      </div>
+        </div>
+      </ContextMenuHost>
     </MindmapEditorContext.Provider>
   );
 }

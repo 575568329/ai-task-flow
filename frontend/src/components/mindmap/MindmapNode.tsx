@@ -99,6 +99,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
           e.stopPropagation();
           setEditing(true);
         }}
+        onContextMenu={(e) => e.stopPropagation()}
       >
         <Handle type="target" position={Position.Left} />
         {editing ? (
