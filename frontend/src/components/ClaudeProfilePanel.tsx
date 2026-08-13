@@ -2,7 +2,8 @@
 // 设置弹窗的一个 Tab:Claude Code settings.json 多套配置快照 + 一键切换。
 //
 // 列目标 → 选 profile → 点切换(备份后覆盖写入)。
-// ⚠️ settings 原文含 ANTHROPIC_AUTH_TOKEN:后端返回的 profile 已脱敏,本面板不接触明文。
+// ⚠️ settings 原文含 ANTHROPIC_AUTH_TOKEN 明文:后端 toSummary 下发完整 settings(用户编辑
+//    自己的配置快照,决策项 3A=故意保留)。JSON 编辑器会显示明文凭证,共享屏幕/截图注意遮挡。
 // 导入走「从目标文件导入」—— 后端正读文件、全程明文不经过前端。
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Loader2, Plus, Download, Trash2, Check, RefreshCw, AlertTriangle, Pencil, Eye, EyeOff } from 'lucide-react';
@@ -396,6 +397,11 @@ function ProfileEditDialog({
             <Label htmlFor="profile-json">
               settings.json {editing && '(选中预设会自动更新此处)'}
             </Label>
+            {/* 敏感凭证提示:settings 含 ANTHROPIC_AUTH_TOKEN 明文,共享屏幕/截图时注意遮挡 */}
+            <div className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>此 JSON 含 <code className="font-mono">ANTHROPIC_AUTH_TOKEN</code> 等明文凭证(用于编辑你自己的 Claude 配置)。共享屏幕或截图时请遮挡。</span>
+            </div>
             <textarea
               id="profile-json"
               className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 rounded-md border px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
