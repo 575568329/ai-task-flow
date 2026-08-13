@@ -24,13 +24,6 @@ export function encodeProjectPath(rawPath: string): string {
  * 用于:env=wsl 时启动 wsl.exe 的 --cd 参数,以及扫描 WSL 侧历史会话时编码。
  * 已是 /mnt 形态或无盘符的路径原样返回(正斜杠化)。
  */
-export function toWslPath(windowsPath: string): string {
-  const forward = windowsPath.replace(/\\/g, '/');
-  // 匹配盘符开头: 可选前导 / + 盘符 + :
-  const m = forward.match(/^\/?(?<drive>[a-zA-Z]):(?=\/)/);
-  if (m && m.groups) {
-    const drive = m.groups.drive.toLowerCase();
-    return forward.replace(/^\/?[a-zA-Z]:/, `/mnt/${drive}`);
-  }
-  return forward;
-}
+// 实现已上提至 utils/wslPath.ts(P2-18:消除 domain → infrastructure 跨层违规)。
+// re-export 保持 infrastructure 调用方(AgentRunner/Scanner/TerminalLauncher/sdk-loader)兼容。
+export { toWslPath } from '../../utils/wslPath.js';

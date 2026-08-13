@@ -1,7 +1,7 @@
 // backend/src/domain/claude-profile/settingsCodec.ts
 // settings.json 的纯函数处理:规范化比对、脱敏视图、Windows→WSL 路径改写。
 // 纯函数无 IO,便于单测覆盖(这三件事都是「写错就静默失效」的高风险点)。
-import { toWslPath } from '../../infrastructure/system/pathCodec.js';
+import { toWslPath } from '../../utils/wslPath.js';
 import { maskApiKey } from '../../utils/mask.js';
 
 /** settings.json 内容(结构由 Claude Code 定义,这里只当作任意 JSON 对象透传) */
