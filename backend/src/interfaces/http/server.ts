@@ -187,6 +187,22 @@ export async function createHttpServer(
     await agentRuntimeManager.shutdown();
   });
 
+  // 全局错误处理(P1-16):未捕获的抛错统一转 JSON,避免 Fastify 默认吐 HTML/堆栈到前端。
+  // statusCode 沿用 Fastify 自带(4xx 校验错误已带 statusCode;业务 throw Error 默认 500)。
+  // TODO(P2-20):引入 DomainError 基类后,按 error.code/httpStatus 精准映射 4xx。
+  fastify.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+    const statusCode =
+      typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
+        ? error.statusCode
+        : 500;
+    if (statusCode >= 500) {
+      fastify.log.error(error, `未处理错误 ${request.method} ${request.url}`);
+    } else {
+      fastify.log.warn({ statusCode, url: request.url }, error.message);
+    }
+    reply.status(statusCode).send({ error: error.message || 'Internal Server Error', statusCode });
+  });
+
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
     await fastify.register(staticPlugin, {

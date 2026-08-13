@@ -179,8 +179,28 @@ const isDirectRun = import.meta.url === `file://${process.argv[1]?.replace(/\\/g
   || process.argv[1]?.endsWith('http-server.js');
 
 if (isDirectRun) {
-  startApp().catch((error) => {
-    console.error('Failed to start HTTP server:', error);
-    process.exit(1);
-  });
+  startApp()
+    .then((server) => {
+      // 优雅关闭(P1-16):Ctrl+C / kill 时先 server.close()(触发 onClose → dispose 常驻 runtime,
+      // 杀 claude 子进程防孤儿),再 exit。Node 默认硬退会跳过 onClose,留下僵尸 claude 进程。
+      let closing = false;
+      const shutdown = async (sig: string) => {
+        if (closing) return; // 防 Ctrl+C 连按重复触发
+        closing = true;
+        console.log(`\n${sig} 收到,正在优雅关闭...`);
+        try {
+          await server.close();
+          console.log('✓ 已关闭(常驻 runtime 已 dispose)');
+        } catch (e) {
+          console.error('关闭过程出错:', e);
+        }
+        process.exit(0);
+      };
+      process.on('SIGINT', () => void shutdown('SIGINT'));
+      process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    })
+    .catch((error) => {
+      console.error('Failed to start HTTP server:', error);
+      process.exit(1);
+    });
 }
