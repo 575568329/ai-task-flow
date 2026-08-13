@@ -9,6 +9,9 @@ import { logsDirPath } from '../../config/dataDir.js';
 
 type LogLevel = 'INFO' | 'WARN' | 'ERROR';
 
+/** 单日志文件大小上限(P2-26 轮转阈值):超此则 rename 为 .log.1,防磁盘撑满。 */
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10 MB
+
 /** 敏感字段脱敏:apiKey/authorization 仅保留首尾,中间打码 */
 function maskSecret(value: string): string {
   if (!value) return '';
@@ -43,6 +46,21 @@ export class FileLogger {
     }
   }
 
+  /**
+   * 大小轮转(P2-26):append 前检查,超 MAX_LOG_SIZE 则 rename .log → .log.1(覆盖旧备份,
+   * 只保留 1 个)。防日志无限增长撑满磁盘。statSync 失败(文件不存在)忽略,首次写正常。
+   */
+  private maybeRotate(): void {
+    try {
+      const stat = fs.statSync(this.logFile);
+      if (stat.size >= MAX_LOG_SIZE) {
+        fs.renameSync(this.logFile, `${this.logFile}.1`);
+      }
+    } catch {
+      // 文件不存在(首次写)或 stat 失败:忽略,照常 append
+    }
+  }
+
   private write(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
     const timestamp = new Date().toISOString();
     const metaStr = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
@@ -57,6 +75,7 @@ export class FileLogger {
     this.ensureDir();
     if (!this.dirReady) return;
     try {
+      this.maybeRotate();
       fs.appendFileSync(this.logFile, line + '\n', 'utf-8');
     } catch {
       // 落盘失败已在 console 留痕,静默
