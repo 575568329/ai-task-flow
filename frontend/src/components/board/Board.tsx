@@ -16,6 +16,7 @@ import {
 import { TaskStatus } from '@ai-task-flow/shared';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { toast } from '@/components/ui/toaster';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCardBody } from './TaskCard';
@@ -27,7 +28,7 @@ export function Board() {
   const projectFilter = useUIStore((s) => s.projectFilter);
   const sourceFilter = useUIStore((s) => s.sourceFilter);
   const searchQuery = useUIStore((s) => s.searchQuery);
-  const initGroups = useUIStore((s) => s.initGroups);
+  const initGroups = useBoardGroupingStore((s) => s.initGroups);
 
   // distance 8px:小于阈值算点击(打开 Drawer),超过算拖拽
   const sensors = useSensors(
