@@ -87,7 +87,7 @@ npm run build:backend
 
 ## MCP 工具(给 Claude Code)
 
-配置好后,在 Claude Code 里可直接调用以下 **6 个工具**(完整说明见 [`docs/MCP_TOOLS_GUIDE.md`](docs/MCP_TOOLS_GUIDE.md)):
+配置好后,在 Claude Code 里可直接调用以下 **6 个工具**(完整说明见 [`docs/20260606000000_MCP_TOOLS_GUIDE.md`](docs/20260606000000_MCP_TOOLS_GUIDE.md)):
 
 | 工具 | 作用 |
 |------|------|

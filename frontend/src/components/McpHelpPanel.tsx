@@ -1,7 +1,7 @@
 // frontend/src/components/McpHelpPanel.tsx
 // 设置弹窗的一个 Tab:MCP 挂载说明(静态说明 + 一键挂载按钮)。
 // 告诉用户如何在 Claude Code 挂载本看板的 MCP server,并提供一键注册按钮
-// (前端→backend→spawn setup-mcp.mjs)。说明文案与 docs/MCP_TOOLS_GUIDE.md 对齐。
+// (前端→backend→spawn setup-mcp.mjs)。说明文案与 docs/20260606000000_MCP_TOOLS_GUIDE.md 对齐。
 import { useState } from 'react';
 import { Copy, Check, Terminal, Plug, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -149,7 +149,7 @@ export function McpHelpPanel() {
             数据存于 <code className="bg-muted rounded px-1">~/.ai-task-flow/tasks.json</code>,换机器需新建一个空的
           </li>
           <li>
-            完整说明见 <code className="bg-muted rounded px-1">docs/MCP_TOOLS_GUIDE.md</code>
+            完整说明见 <code className="bg-muted rounded px-1">docs/20260606000000_MCP_TOOLS_GUIDE.md</code>
           </li>
         </ul>
       </div>
