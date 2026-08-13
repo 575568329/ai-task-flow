@@ -2,6 +2,7 @@
 // settings.json 的纯函数处理:规范化比对、脱敏视图、Windows→WSL 路径改写。
 // 纯函数无 IO,便于单测覆盖(这三件事都是「写错就静默失效」的高风险点)。
 import { toWslPath } from '../../infrastructure/system/pathCodec.js';
+import { maskApiKey } from '../../utils/mask.js';
 
 /** settings.json 内容(结构由 Claude Code 定义,这里只当作任意 JSON 对象透传) */
 export type ClaudeSettings = Record<string, unknown>;
@@ -90,13 +91,6 @@ export function materializeForSide(
   return { settings, rewritten: 0 };
 }
 
-/** 密钥脱敏:保留首尾各 4 位(与 llm-config 的 maskApiKey 口径一致) */
-function maskToken(token: string): string {
-  if (!token) return '';
-  if (token.length <= 8) return '****';
-  return `${token.slice(0, 4)}${'*'.repeat(Math.min(token.length - 8, 8))}${token.slice(-4)}`;
-}
-
 /** 从 settings 中读取字符串字段(路径形如 env.ANTHROPIC_BASE_URL),缺失返回空串 */
 function readString(settings: ClaudeSettings, ...pathSegments: string[]): string {
   let cursor: unknown = settings;
@@ -117,7 +111,7 @@ export function summarizeSettings(settings: ClaudeSettings): {
   return {
     baseURL: readString(settings, 'env', 'ANTHROPIC_BASE_URL'),
     model: readString(settings, 'model'),
-    authTokenMasked: maskToken(readString(settings, 'env', 'ANTHROPIC_AUTH_TOKEN')),
+    authTokenMasked: maskApiKey(readString(settings, 'env', 'ANTHROPIC_AUTH_TOKEN')),
     topLevelKeys: Object.keys(settings).sort(),
   };
 }
