@@ -2,7 +2,6 @@
 // 并发与崩溃安全:继承 JsonRepository(withWriteLock 串行化 + tmp+rename 原子写)。
 // 历史问题(已修):原 saveAll 裸 fs.writeFile,写一半崩溃损坏全量对话历史;
 // 且 loadAll→改→saveAll 非原子。现所有写方法经 withWriteLock 串行化 + 原子写。
-import { injectable } from 'tsyringe';
 import { chatFilePath } from '../../config/dataDir.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import { Conversation } from '../../domain/research/entities/Conversation.js';
@@ -19,7 +18,6 @@ interface ChatStorageData {
  * JSON 文件存储的 Chat 仓储实现
  * 存储位置：~/.ai-task-flow/chats.json
  */
-@injectable()
 export class JsonChatRepository extends JsonRepository implements ChatRepository {
   constructor(customPath?: string) {
     // 走统一的 resolveDataDir(),与 tasks.json / events.jsonl 同目录,

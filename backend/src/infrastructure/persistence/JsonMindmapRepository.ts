@@ -1,7 +1,6 @@
 // backend/src/infrastructure/persistence/JsonMindmapRepository.ts
 import fs from 'fs/promises';
 import path from 'path';
-import { injectable } from 'tsyringe';
 import type { MindmapDocDTO } from '@ai-task-flow/shared';
 import { mindmapsFilePath } from '../../config/dataDir.js';
 import type { MindmapRepository } from '../../domain/mindmap/repositories/MindmapRepository.js';
@@ -14,7 +13,7 @@ interface MindmapStorageData {
 /**
  * JSON 文件存储的思维导图仓储实现。
  * 存储位置：~/.ai-task-flow/mindmaps.json（单文件多文档集合）。
- * 仿 JsonVocabRepository：@injectable、loadAll/saveAll、withWriteLock、customPath（测试用）。
+ * 仿 JsonVocabRepository：loadAll/saveAll、withWriteLock、customPath（测试用）。
  *
  * 并发安全：写操作经 withWriteLock 串行化（promise-chain mutex），避免 loadAll→改→saveAll
  * 在 async 织入下后写覆盖前写。Node 单进程内 mutex 即可，无需文件锁。
@@ -26,7 +25,6 @@ interface MindmapStorageData {
  * 演进路径：文档数/体积增长后可拆为 mindmaps/<id>.json + mindmaps/index.json（仅 meta），
  * PUT 只读写单文件，消除读写放大。当前 MVP 单文件够用，与 vocab/tasks 同模式。
  */
-@injectable()
 export class JsonMindmapRepository implements MindmapRepository {
   private readonly filePath: string;
   /** 写操作串行化链：每次写追加到链尾，保证 loadAll→saveAll 临界区不交织 */

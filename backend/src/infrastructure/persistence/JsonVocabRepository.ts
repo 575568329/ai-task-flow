@@ -1,7 +1,6 @@
 // backend/src/infrastructure/persistence/JsonVocabRepository.ts
 import fs from 'fs/promises';
 import path from 'path';
-import { injectable } from 'tsyringe';
 import type { StudySyncStatus } from '@ai-task-flow/shared';
 import { vocabFilePath } from '../../config/dataDir.js';
 import type { VocabRepository } from '../../domain/vocab/repositories/VocabRepository.js';
@@ -15,13 +14,12 @@ interface VocabStorageData {
 /**
  * JSON 文件存储的 Vocab 仓储实现。
  * 存储位置：~/.ai-task-flow/vocab.json
- * 仿 JsonChatRepository：@injectable、loadAll/saveAll、fromJSON/toJSON。
+ * 仿 JsonChatRepository：loadAll/saveAll、fromJSON/toJSON。
  *
  * 并发安全：所有写操作（save/saveMany/delete）经 withWriteLock 串行化，
  * 避免「loadAll → 改内存 → saveAll」整文件重写在 async 织入下后写覆盖前写。
  * Node 单进程，进程内 promise-chain mutex 即可，无需文件锁。
  */
-@injectable()
 export class JsonVocabRepository implements VocabRepository {
   private readonly filePath: string;
   /** 写操作串行化链：每次写追加到链尾，保证 loadAll→saveAll 临界区不交织 */

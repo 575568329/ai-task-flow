@@ -7,9 +7,10 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { container } from '../../infrastructure/di/container.js';
+import { JsonTaskRepository } from '../../infrastructure/persistence/JsonTaskRepository.js';
+import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
+import { knowledgeDirPath } from '../../config/dataDir.js';
 import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
-import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { ALL_TOOLS, HANDLERS } from './tools/index.js';
 
 /**
@@ -34,8 +35,11 @@ class AITaskFlowServer {
       { capabilities: { tools: {}, resources: {} } },
     );
 
-    this.taskRepository = container.resolve<TaskRepository>('TaskRepository');
-    this.knowledgeService = container.resolve<KnowledgeService>('KnowledgeService');
+    // MCP 进程手工装配(MCP 是 stdio server,不经 HTTP;原 tsyringe container 已移除,决策项2A)。
+    // TaskRepository 用默认实例(读默认 ~/.ai-task-flow/tasks.json)。MCP 写入触发 HTTP 侧
+    // 刷新靠 TaskFileWatcher 轮询,未接 EventBus(报告 P1 议题,本次不动)。
+    this.taskRepository = new JsonTaskRepository();
+    this.knowledgeService = new KnowledgeService(knowledgeDirPath());
 
     this.setupHandlers();
   }

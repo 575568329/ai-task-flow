@@ -3,7 +3,6 @@
 // 历史问题(已修):原 saveAll 裸 fs.writeFile,写一半崩溃损坏整个 tasks.json(全部任务丢失);
 // 且 loadAll→改→saveAll 非原子,前端连发 PATCH 在 async 织入下后写覆盖前写。
 // 现 save/delete 经 withWriteLock 串行化 + 原子写。
-import { injectable } from 'tsyringe';
 import { tasksFilePath } from '../../config/dataDir.js';
 import { Task } from '../../domain/workflow/entities/Task.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
@@ -23,7 +22,6 @@ import { JsonRepository } from './JsonRepository.js';
  * JSON 文件存储的 Task 仓储实现
  * 存储位置：~/.ai-task-flow/tasks.json
  */
-@injectable()
 export class JsonTaskRepository extends JsonRepository implements TaskRepository {
   constructor(
     customPath?: string,
