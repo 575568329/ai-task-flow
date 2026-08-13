@@ -1,5 +1,6 @@
 // backend/src/infrastructure/maimemo/MaimemoClient.ts
 import type { MaimemoWordStudyRecord } from '@ai-task-flow/shared';
+import { fetchWithTimeout } from '../../utils/http.js';
 
 /** 墨墨开放 API 基址（实测验证；注意带 /open 前缀，非 api.maimemo.com） */
 const MAIMEMO_BASE_URL = 'https://open.maimemo.com/open';
@@ -82,7 +83,7 @@ export class MaimemoClient {
     await this.limiter.acquire();
     const token = this.getToken().trim();
     if (!token) throw new MaimemoApiError(401, '尚未配置墨墨 token');
-    const res = await fetch(`${MAIMEMO_BASE_URL}${path}`, {
+    const res = await fetchWithTimeout(`${MAIMEMO_BASE_URL}${path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,

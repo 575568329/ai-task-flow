@@ -1,6 +1,7 @@
 // backend/src/infrastructure/llm/OpenAiCompatibleProvider.ts
 import type { LlmProvider, LlmMessage, StreamChunk } from './LlmProvider.js';
 import { FileLogger, maskSecret } from '../logging/FileLogger.js';
+import { fetchWithTimeout } from '../../utils/http.js';
 
 interface OpenAIChatCompletionChoice {
   delta?: { content?: string };
@@ -42,7 +43,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       messageCount: messages.length,
     });
 
-    const response = await fetch(url, {
+    // 流式:5min 兜底超时(AbortSignal.timeout 计整个流,过长会断流,但防无限挂死)。
+    // 上层(taskChatStore 等)有 AbortController 控制用户主动停止。
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +56,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         messages,
         stream: true,
       }),
-    });
+    }, 300_000);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -125,7 +128,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       messageCount: messages.length,
     });
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

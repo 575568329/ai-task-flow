@@ -12,6 +12,7 @@
 //   - tools/call 结果是「二层 JSON」:result.content[0].text 本身又是
 //     一个 JSON 字符串,parse 后才是 [{title,link,content,refer}] 数组。
 import type { Source } from '@ai-task-flow/shared';
+import { fetchWithTimeout } from '../../utils/http.js';
 
 const MCP_ENDPOINT = 'https://open.bigmodel.cn/api/mcp/web_search_prime/mcp';
 
@@ -107,7 +108,7 @@ export class GlmWebSearchClient {
 
   /** MCP initialize 握手,返回响应头里的 Mcp-Session-Id */
   private async initialize(apiKey: string): Promise<string | null> {
-    const res = await fetch(MCP_ENDPOINT, {
+    const res = await fetchWithTimeout(MCP_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -135,7 +136,7 @@ export class GlmWebSearchClient {
     sessionId: string,
     query: string,
   ): Promise<GlmSearchItem[]> {
-    const res = await fetch(MCP_ENDPOINT, {
+    const res = await fetchWithTimeout(MCP_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

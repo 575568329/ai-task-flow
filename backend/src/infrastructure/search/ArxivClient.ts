@@ -1,5 +1,6 @@
 // backend/src/infrastructure/search/ArxivClient.ts
 import type { Source } from '@ai-task-flow/shared';
+import { fetchGetRetry } from '../../utils/http.js';
 
 interface ArxivEntry {
   id: string;
@@ -31,7 +32,7 @@ export class ArxivClient {
     const url = `http://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=${maxResults}&sortBy=relevance&sortOrder=descending`;
 
     try {
-      const response = await fetch(url);
+      const response = await fetchGetRetry(url);
       if (!response.ok) {
         throw new Error(`arXiv API failed: ${response.status}`);
       }
