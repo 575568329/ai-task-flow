@@ -63,6 +63,8 @@ export interface ClaudeProfileCreateRequest {
   name: string;
   /** settings.json 的完整内容(对象) */
   settings: Record<string, unknown>;
+  /** 新建时一并保存的 API 预设(省略为空数组)。一次创建避免前端二次请求名字反查的竞态(P1-15) */
+  apiPresets?: ClaudeApiPreset[];
 }
 
 /** 从某目标的现有 settings.json 导入为 profile(明文不经过前端) */

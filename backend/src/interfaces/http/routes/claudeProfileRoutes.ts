@@ -42,9 +42,9 @@ export async function registerClaudeProfileRoutes(
 
   // POST /api/claude-profiles — 粘贴整份 settings JSON 新建
   fastify.post<{ Body: ClaudeProfileCreateRequest }>('/api/claude-profiles', async (request, reply) => {
-    const { name, settings } = request.body ?? {};
+    const { name, settings, apiPresets } = request.body ?? {};
     try {
-      const created = await service.create(name, settings);
+      const created = await service.create(name, settings, apiPresets);
       return reply.status(201).send(created);
     } catch (error) {
       if (error instanceof ClaudeProfileValidationError) {

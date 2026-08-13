@@ -4,8 +4,8 @@
 // 切换语义:整份覆盖目标 settings.json,覆盖前先备份到 ~/.ai-task-flow/claude-settings-backups/。
 // 写入 WSL 目标时把 hooks command 里的 Windows 绝对路径转成 /mnt 形态(否则 hook 静默失败)。
 //
-// ⚠️ profile 的 settings 是含密钥的明文快照:本服务对外只返回 summarize 后的脱敏视图,
-// 唯一的明文出口是 applyProfile 写入目标文件(那是用户自己的 settings.json)。
+// ⚠️ profile 的 settings 是含密钥的明文快照:toSummary 下发完整 settings(用户需编辑自己的
+//    快照,决策 3A=故意保留;前端 JSON 编辑器有敏感凭证提示)。唯一明文写盘出口是 applyProfile。
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -28,6 +28,7 @@ import {
   type ClaudeSettings,
 } from '../../domain/claude-profile/settingsCodec.js';
 import type {
+  ClaudeApiPreset,
   ClaudeProfileApplyResponse,
   ClaudeProfileListResponse,
   ClaudeProfileSummary,
@@ -68,13 +69,17 @@ export class ClaudeProfileService {
     };
   }
 
-  /** 粘贴整份 settings JSON 新建 profile */
-  async create(name: string, settings: unknown): Promise<ClaudeProfileSummary> {
+  /** 粘贴整份 settings JSON 新建 profile(可选一并保存 API 预设,避免前端二次请求竞态) */
+  async create(
+    name: string,
+    settings: unknown,
+    apiPresets?: ClaudeApiPreset[],
+  ): Promise<ClaudeProfileSummary> {
     const profile: StoredClaudeProfile = {
       id: randomUUID(),
       name: this.validateName(name),
       settings: this.validateSettings(settings),
-      apiPresets: [],
+      apiPresets: Array.isArray(apiPresets) ? apiPresets : [],
       updatedAt: new Date().toISOString(),
     };
     await this.repository.save(profile);

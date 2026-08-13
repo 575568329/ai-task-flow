@@ -272,17 +272,8 @@ function ProfileEditDialog({
           setSaving(false);
           return;
         }
-        await claudeProfileApi.create({ name: name.trim(), settings });
-        // 新建时 apiPresets 随 settings 一起保存需要二次 update
-        if (presets.length > 0) {
-          toast.success('已创建,正在保存 API 预设…');
-          const created = await claudeProfileApi.list().then((r) =>
-            r.profiles.find((p) => p.name === name.trim()),
-          );
-          if (created) {
-            await claudeProfileApi.update(created.id, { apiPresets: presets });
-          }
-        }
+        // 一次创建带 apiPresets(后端 create 支持,避免二次请求名字反查的竞态;P1-15)
+        await claudeProfileApi.create({ name: name.trim(), settings, apiPresets: presets });
       }
       toast.success(editing ? '已更新' : '已创建');
       onSaved();
