@@ -57,7 +57,7 @@ export class UsageService {
   async getSummary(query: UsageSummaryQuery): Promise<UsageSummary> {
     const sessions = await this.getAllSessions();
     const filtered = sessions.filter(s => this.matchesQuery(s, query));
-    return this.aggregate(filtered);
+    return UsageService.aggregate(filtered);
   }
 
   /** 取全量会话(L1 staleness 命中直接返回,否则 L2 增量扫描) */
@@ -116,8 +116,8 @@ export class UsageService {
     return true;
   }
 
-  /** 五维度聚合(纯函数,便于单测) */
-  private aggregate(sessions: ClaudeSessionMeta[]): UsageSummary {
+  /** 五维度聚合(纯函数,便于单测;P2-17 改 static 暴露测试入口) */
+  static aggregate(sessions: ClaudeSessionMeta[]): UsageSummary {
     const modelMap = new Map<string, UsageModelRow>();
     const taskMap = new Map<string, UsageTaskRow>();
     const projectMap = new Map<string, UsageProjectRow>();
@@ -130,7 +130,7 @@ export class UsageService {
     for (const s of sessions) {
       const u = s.usage;
       if (!u) continue;
-      const cost = this.sessionCost(u.byModel);
+      const cost = UsageService.sessionCost(u.byModel);
 
       // byModel(按模型,精确 requestCount)
       for (const [model, mu] of Object.entries(u.byModel)) {
@@ -220,7 +220,7 @@ export class UsageService {
   }
 
   /** 单会话 cost:按模型拆(不同模型单价不同),Σ estimateCost(model, ModelAccum) */
-  private sessionCost(byModel: Record<string, ModelAccum>): number {
+  static sessionCost(byModel: Record<string, ModelAccum>): number {
     let sum = 0;
     for (const [model, mu] of Object.entries(byModel)) {
       sum += estimateCost(model, mu) ?? 0;
