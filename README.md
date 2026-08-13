@@ -1,6 +1,6 @@
 # AI Task Flow
 
-> 个人 AI 任务编排看板 + MCP Server
+> 个人 AI 工作台 — 任务编排看板 + 原生 Claude Code 对话 + 知识库 + 思维导图,经 MCP 协议串联
 
 在网页看板上录入任务,点「派发」自动创建 git worktree;你在终端用**原生 Claude Code** 通过 MCP 协议拉取任务、回写状态;看板经 SSE 自动同步。不嵌入、不代起 agent,你始终掌控 AI 交互。
 

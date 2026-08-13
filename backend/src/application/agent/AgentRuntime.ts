@@ -113,6 +113,10 @@ export class AgentRuntime implements RuntimeRecord {
     this.queryHandle = query({ prompt: this.inputStream, options });
     this.consumePromise = this.runConsumeLoop();
     logger.info('runtime 创建', { side: this.side, cwd: this.cwd });
+    // bypassPermissions 固定开启(个人本地工具设计:claude 自动执行不卡顿,决策项5=A)。
+    // 留 warn 痕迹:每个 runtime 实例旁路一次,便于事后排查"为什么我的终端没弹权限"。
+    // 远程攻击面已由 host 收敛 127.0.0.1 + system 路由非本机拒绝根治(见批次2)。
+    logger.warn('runtime 启用权限旁路(bypassPermissions)', { side: this.side, cwd: this.cwd });
   }
 
   touch(now: number = Date.now()): void {
