@@ -68,7 +68,32 @@ function extractContentPreview(raw: string): string {
 }
 
 /**
- * 解析 markdown 中的 [[wiki]] 链接,返回目标标题列表
+ * 将 frontmatter 中含 [[wiki-link]] 的行转为合法 YAML list，
+ * 避免 js-yaml 把 [[ 误解析为 flow sequence 起始符而抛 YAMLException。
+ *
+ * before: related: [[a]], [[b]]
+ * after:  related:\n  - "[[a]]"\n  - "[[b]]"
+ *
+ * 仅处理 --- ... --- 之间的区域，不影响正文。
+ */
+function sanitizeFrontmatterWikiLinks(raw: string): string {
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!fmMatch) return raw;
+
+  const sanitized = fmMatch[1].replace(
+    /^(?<key>\S+):\s*(?<values>.*\[\[[^\]]+\]\].*)$/gm,
+    (_line: string, key: string, values: string) => {
+      const wikiLinks = [...values.matchAll(/\[\[([^\]]+)\]\]/g)].map(m => m[1]);
+      if (wikiLinks.length === 0) return _line;
+      const items = wikiLinks.map(l => `  - "[[${l}]]"`).join('\n');
+      return `${key}:\n${items}`;
+    },
+  );
+  return raw.replace(fmMatch[1], sanitized);
+}
+
+/**
+ * 提取 markdown 中的 [[wiki]] 链接,返回目标标题列表
  * (后续 buildBacklinks 时会 resolve 到实际 path)
  */
 function extractWikiLinks(content: string): string[] {
@@ -128,7 +153,7 @@ async function scanDir(
       if (kind === 'md') {
         try {
           const raw = await fs.readFile(childAbs, 'utf-8');
-          const parsed = matter(raw);
+          const parsed = matter(sanitizeFrontmatterWikiLinks(raw));
 
           // tags
           if (parsed.data.tags && Array.isArray(parsed.data.tags)) {
