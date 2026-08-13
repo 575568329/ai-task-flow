@@ -12,7 +12,7 @@ import { ChevronDown } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { TaskCard } from './TaskCard';
 import { Collapse } from '@/components/ui/collapse';
-import { useUIStore } from '@/stores/uiStore';
+import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { cn } from '@/lib/utils';
 
 interface ProjectGroupProps {
@@ -23,8 +23,8 @@ interface ProjectGroupProps {
 }
 
 export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
-  const collapsed = useUIStore((s) => s.collapsedGroups[groupKey] === true);
-  const toggleGroup = useUIStore((s) => s.toggleGroup);
+  const collapsed = useBoardGroupingStore((s) => s.collapsedGroups[groupKey] === true);
+  const toggleGroup = useBoardGroupingStore((s) => s.toggleGroup);
 
   return (
     <div className="flex flex-col gap-1">

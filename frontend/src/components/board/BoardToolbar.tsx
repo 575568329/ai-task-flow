@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { sseClient } from '@/api/sse';
 import { cn } from '@/lib/utils';
 import { ALL_OPTION, UNGROUPED_KEY } from './meta';
@@ -44,8 +45,8 @@ export function BoardToolbar() {
     window.addEventListener('shortcuts-changed', reload);
     return () => window.removeEventListener('shortcuts-changed', reload);
   }, []);
-  const collapseAllGroups = useUIStore((s) => s.collapseAllGroups);
-  const expandAllGroups = useUIStore((s) => s.expandAllGroups);
+  const collapseAllGroups = useBoardGroupingStore((s) => s.collapseAllGroups);
+  const expandAllGroups = useBoardGroupingStore((s) => s.expandAllGroups);
 
   // SSE 连接状态:绿点=已连接 / 灰点=断开(订阅 sseClient,onopen/onerror 自动更新)
   const [sseConnected, setSseConnected] = useState(false);
