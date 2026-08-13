@@ -24,13 +24,6 @@ export interface MaskedLlmConfig {
   model: string;
 }
 
-/** API Key 脱敏：保留前4后4位，中间用星号替代 */
-export function maskApiKey(apiKey: string): string {
-  if (!apiKey || apiKey.length <= 8) {
-    return apiKey ? '****' : '';
-  }
-  const head = apiKey.slice(0, 4);
-  const tail = apiKey.slice(-4);
-  const middle = '*'.repeat(Math.min(apiKey.length - 8, 8));
-  return `${head}${middle}${tail}`;
-}
+// API Key 脱敏统一实现移至 utils/mask.ts(P2-19 DRY,与 settingsCodec.maskToken 合一)。
+// re-export 保持现有 `from LlmConfigEntity` import 路径兼容。
+export { maskApiKey } from '../../utils/mask.js';

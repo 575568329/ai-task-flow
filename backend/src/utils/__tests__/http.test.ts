@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchWithTimeout, fetchGetRetry } from '../http.js';
 
 describe('fetchWithTimeout', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('正常透传 fetch 并返回 response', async () => {
     const mock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok'));
@@ -30,7 +32,9 @@ describe('fetchWithTimeout', () => {
 });
 
 describe('fetchGetRetry', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('200 一次性返回,不重试', async () => {
     const mock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }));
