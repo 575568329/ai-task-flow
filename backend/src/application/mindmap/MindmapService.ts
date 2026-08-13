@@ -10,40 +10,41 @@ import type {
   MindmapUpdateDTO,
 } from '@ai-task-flow/shared';
 import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
+import { DomainError } from '../../domain/_shared/DomainError.js';
 
 const logger = new FileLogger('mindmap');
 
-// ============ 类型化领域错误（路由层按 instanceof 映射 HTTP 状态码） ============
+// ============ 类型化领域错误(P2-20: 继承 DomainError 带 httpStatus,setErrorHandler 自动映射) ============
 
 /** 思维导图不存在 → 404 */
-export class MindmapNotFoundError extends Error {
+export class MindmapNotFoundError extends DomainError {
+  readonly httpStatus = 404;
   constructor(id: string) {
-    super(`思维导图不存在：${id}`);
-    this.name = 'MindmapNotFoundError';
+    super(`思维导图不存在：${id}`, 'MINDMAP_NOT_FOUND');
   }
 }
 
 /** 数据校验失败（标题/图结构/上限） → 400 */
-export class MindmapValidationError extends Error {
+export class MindmapValidationError extends DomainError {
+  readonly httpStatus = 400;
   constructor(message: string) {
-    super(message);
-    this.name = 'MindmapValidationError';
+    super(message, 'MINDMAP_VALIDATION');
   }
 }
 
 /** 乐观锁冲突（版本不匹配，多 tab 编辑互相覆盖） → 409 */
-export class MindmapConflictError extends Error {
+export class MindmapConflictError extends DomainError {
+  readonly httpStatus = 409;
   constructor(id: string) {
-    super(`文档已被他处修改，请刷新后重试：${id}`);
-    this.name = 'MindmapConflictError';
+    super(`文档已被他处修改，请刷新后重试：${id}`, 'MINDMAP_CONFLICT');
   }
 }
 
 /** 文档数量上限超出 → 400 */
-export class MindmapLimitExceededError extends Error {
+export class MindmapLimitExceededError extends DomainError {
+  readonly httpStatus = 400;
   constructor(message: string) {
-    super(message);
-    this.name = 'MindmapLimitExceededError';
+    super(message, 'MINDMAP_LIMIT_EXCEEDED');
   }
 }
 

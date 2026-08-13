@@ -18,6 +18,7 @@ import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { isLocalAccess } from '../../utils/localAccess.js';
+import { DomainError } from '../../domain/_shared/DomainError.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
@@ -187,14 +188,15 @@ export async function createHttpServer(
     await agentRuntimeManager.shutdown();
   });
 
-  // 全局错误处理(P1-16):未捕获的抛错统一转 JSON,避免 Fastify 默认吐 HTML/堆栈到前端。
-  // statusCode 沿用 Fastify 自带(4xx 校验错误已带 statusCode;业务 throw Error 默认 500)。
-  // TODO(P2-20):引入 DomainError 基类后,按 error.code/httpStatus 精准映射 4xx。
+  // 全局错误处理(P1-16 + P2-20):未捕获的抛错统一转 JSON。
+  // 优先级:DomainError.httpStatus(业务 4xx/5xx 精准) > Fastify statusCode(校验 4xx) > 默认 500。
   fastify.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     const statusCode =
-      typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
-        ? error.statusCode
-        : 500;
+      error instanceof DomainError
+        ? error.httpStatus
+        : typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
+          ? error.statusCode
+          : 500;
     if (statusCode >= 500) {
       fastify.log.error(error, `未处理错误 ${request.method} ${request.url}`);
     } else {
