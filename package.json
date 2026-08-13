@@ -10,9 +10,9 @@
     "extension"
   ],
   "scripts": {
-    "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "dev": "concurrently --raw --kill-others-on-fail -n shared,backend,frontend -c blue,green,magenta \"npm run dev:shared\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:windows": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
     "dev:bash": "bash scripts/dev.sh",
-    "dev:concurrently": "concurrently --raw --kill-others-on-fail -n shared,backend,frontend -c blue,green,magenta \"npm run dev:shared\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:shared": "cd shared && npm run build:watch",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
