@@ -1,10 +1,21 @@
 // frontend/src/components/chat/MermaidBlock.tsx
-// Mermaid 图表渲染:mermaid.render 异步生成 SVG,点击可调用已有 lightbox 预览放大。
+// Mermaid 图表渲染:mermaid 动态 import(P2-23 懒加载,避免 mermaid 库进首屏 bundle)。
+// mermaid.render 异步生成 SVG,点击调 lightbox 预览放大。
 import { useEffect, useState } from 'react';
-import mermaid from 'mermaid';
 import { usePreviewStore } from '@/stores/previewStore';
 
-mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+type MermaidApi = typeof import('mermaid').default;
+// 模块级缓存:mermaid 库只加载+初始化一次(多个 MermaidBlock 共享)
+let mermaidPromise: Promise<MermaidApi> | null = null;
+function loadMermaid(): Promise<MermaidApi> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((m) => {
+      m.default.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+      return m.default;
+    });
+  }
+  return mermaidPromise;
+}
 
 // 运行时递增的图表 id(mermaid 要求唯一)
 let diagramSeq = 0;
@@ -21,8 +32,8 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   useEffect(() => {
     let cancelled = false;
     const id = `mermaid-diagram-${++diagramSeq}`;
-    mermaid
-      .render(id, code)
+    loadMermaid()
+      .then((m) => m.render(id, code))
       .then(({ svg: rendered }) => {
         if (!cancelled) setSvg(rendered);
       })

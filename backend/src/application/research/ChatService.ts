@@ -147,7 +147,7 @@ export class ChatService {
     }
 
     // 5. 构造 RAG messages（抄 Perplexica writer.ts）
-    const systemPrompt = this.buildWriterPrompt(sources, customPrompt);
+    const systemPrompt = ChatService.buildWriterPrompt(sources, customPrompt);
     const messages: LlmMessage[] = [
       { role: 'system', content: systemPrompt },
       ...historyForLLM,
@@ -175,7 +175,7 @@ export class ChatService {
     }
 
     // 7. 引用编号合法性校验（剥除越界 [n]）
-    const validatedContent = this.validateCitations(assistantContent, sources);
+    const validatedContent = ChatService.validateCitations(assistantContent, sources);
 
     // 8. 持久化 assistant 消息
     const assistantMsg = ChatMessage.createAssistant(conversationId, validatedContent, sources);
@@ -194,7 +194,7 @@ export class ChatService {
     };
   }
 
-  private buildWriterPrompt(sources: Source[], customPrompt: string = ''): string {
+  static buildWriterPrompt(sources: Source[], customPrompt: string = ''): string {
     // 抄 Perplexica writer.ts 引用要求
     let prompt = `You are a research assistant. Provide detailed, well-structured answers.
 
@@ -227,7 +227,7 @@ export class ChatService {
     return prompt;
   }
 
-  private validateCitations(content: string, sources: Source[]): string {
+  static validateCitations(content: string, sources: Source[]): string {
     // 剥除越界引用编号（抄 Perplexica useChat.tsx citationRegex）
     const citationRegex = /\[(\d+)\]/g;
     return content.replace(citationRegex, (match, num) => {
