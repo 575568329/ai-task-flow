@@ -259,6 +259,7 @@ export async function scanKnowledge(root: string): Promise<KnowledgeManifest> {
       tags: [],
       backlinks: {},
       generatedAt: Date.now(),
+      basePath: root,
     };
   }
 
@@ -279,5 +280,6 @@ export async function scanKnowledge(root: string): Promise<KnowledgeManifest> {
     tags,
     backlinks,
     generatedAt: Date.now(),
+    basePath: root,
   };
 }

@@ -1,6 +1,7 @@
 // backend/src/infrastructure/llm/AnthropicProvider.ts
 import type { LlmProvider, LlmMessage, StreamChunk } from './LlmProvider.js';
 import { FileLogger, maskSecret } from '../logging/FileLogger.js';
+import { fetchWithTimeout } from '../../utils/http.js';
 
 const logger = new FileLogger('llm');
 
@@ -68,7 +69,8 @@ export class AnthropicProvider implements LlmProvider {
     const url = `${this.baseURL}/v1/messages`;
     logger.info('streamText(anthropic) 请求', { url, model: this.model, apiKey: maskSecret(this.apiKey), messageCount: messages.length });
 
-    const response = await fetch(url, {
+    // 流式:5min 兜底超时(防无限挂死;上层 AbortController 控制主动停止)
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -76,7 +78,7 @@ export class AnthropicProvider implements LlmProvider {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(this.buildPayload(messages, true, MAX_TOKENS_STREAM)),
-    });
+    }, 300_000);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -131,7 +133,7 @@ export class AnthropicProvider implements LlmProvider {
     const url = `${this.baseURL}/v1/messages`;
     logger.info('generateObject(anthropic) 请求', { url, model: this.model, apiKey: maskSecret(this.apiKey), messageCount: messages.length });
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

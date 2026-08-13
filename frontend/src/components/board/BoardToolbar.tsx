@@ -1,7 +1,8 @@
 // frontend/src/components/board/BoardToolbar.tsx
 // 看板顶部工具栏:连接状态 / 项目筛选 / 来源筛选 / 搜索 / 分组折叠快捷 + 新建任务。
+// 「打开终端」入口已移至全局悬浮坞(FloatingDock),看板页不再单独提供。
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronsDownUp, ChevronsUpDown, Plus, Search, Terminal } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,7 +17,6 @@ import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';
 import { cn } from '@/lib/utils';
 import { ALL_OPTION, UNGROUPED_KEY } from './meta';
-import { OpenClaudeDialog } from './OpenClaudeDialog';
 import {
   loadShortcuts,
   eventToCombo,
@@ -36,8 +36,6 @@ export function BoardToolbar() {
   const setSourceFilter = useUIStore((s) => s.setSourceFilter);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const setCreatingTask = useUIStore((s) => s.setCreatingTask);
-  const selectedTaskId = useUIStore((s) => s.selectedTaskId);
-  const creatingTask = useUIStore((s) => s.creatingTask);
 
   // 快捷键配置(设置面板改动后通过 'shortcuts-changed' 事件重载)
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts());
@@ -53,7 +51,7 @@ export function BoardToolbar() {
   const [sseConnected, setSseConnected] = useState(false);
   useEffect(() => sseClient.onStatusChange(setSseConnected), []);
 
-  // 全局快捷键(配置可改):newTask=新建,openTerminal=打开终端(抽屉未开时走看板级)
+  // 全局快捷键(配置可改):newTask=新建任务。打开终端改由悬浮坞提供,看板级不再拦截。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isCapturing()) return; // 设置面板捕获重绑时暂停业务监听
@@ -64,14 +62,11 @@ export function BoardToolbar() {
       if (combo === shortcuts.newTask) {
         e.preventDefault();
         setCreatingTask(true);
-      } else if (combo === shortcuts.openTerminal && selectedTaskId === null && !creatingTask) {
-        e.preventDefault();
-        setOpenClaude(true);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcuts, setCreatingTask, selectedTaskId, creatingTask]);
+  }, [shortcuts, setCreatingTask]);
 
   const projects = useMemo(
     () =>
@@ -89,8 +84,6 @@ export function BoardToolbar() {
     }
     return Array.from(keys);
   }, [tasks]);
-
-  const [openClaude, setOpenClaude] = useState(false);
 
   return (
     <div className="bg-background/80 flex items-center gap-2 border-b px-3 py-2 backdrop-blur">
@@ -175,15 +168,6 @@ export function BoardToolbar() {
       <div className="ml-auto flex items-center gap-2">
         <Button
           size="sm"
-          variant="outline"
-          onClick={() => setOpenClaude(true)}
-          title={`打开终端 (${formatCombo(shortcuts.openTerminal)})`}
-        >
-          <Terminal className="size-4" />
-          打开终端
-        </Button>
-        <Button
-          size="sm"
           onClick={() => setCreatingTask(true)}
           title={`新建任务 (${formatCombo(shortcuts.newTask)})`}
         >
@@ -191,14 +175,6 @@ export function BoardToolbar() {
           新建任务
         </Button>
       </div>
-
-      {/* 看板级打开终端:选项目路径(已有或自选)→ 新建/恢复 Claude 会话 */}
-      <OpenClaudeDialog
-        open={openClaude}
-        onOpenChange={setOpenClaude}
-        env="pwsh"
-        allowPickRepo
-      />
     </div>
   );
 }

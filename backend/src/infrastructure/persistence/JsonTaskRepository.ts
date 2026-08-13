@@ -1,7 +1,8 @@
 // backend/src/infrastructure/persistence/JsonTaskRepository.ts
-import fs from 'fs/promises';
-import path from 'path';
-import { injectable } from 'tsyringe';
+// 并发与崩溃安全:继承 JsonRepository(withWriteLock 串行化 + tmp+rename 原子写)。
+// 历史问题(已修):原 saveAll 裸 fs.writeFile,写一半崩溃损坏整个 tasks.json(全部任务丢失);
+// 且 loadAll→改→saveAll 非原子,前端连发 PATCH 在 async 织入下后写覆盖前写。
+// 现 save/delete 经 withWriteLock 串行化 + 原子写。
 import { tasksFilePath } from '../../config/dataDir.js';
 import { Task } from '../../domain/workflow/entities/Task.js';
 import { TaskId } from '../../domain/workflow/value-objects/TaskId.js';
@@ -15,41 +16,33 @@ import { EventStore } from '../pubsub/EventStore.js';
 import { TaskFileWatcher } from './TaskFileWatcher.js';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { normalizeSteps } from '@ai-task-flow/shared';
+import { JsonRepository } from './JsonRepository.js';
 
 /**
  * JSON 文件存储的 Task 仓储实现
  * 存储位置：~/.ai-task-flow/tasks.json
  */
-@injectable()
-export class JsonTaskRepository implements TaskRepository {
-  private readonly filePath: string;
-
+export class JsonTaskRepository extends JsonRepository implements TaskRepository {
   constructor(
     customPath?: string,
     private eventBus?: EventBus,
     private eventStore?: EventStore,
     private watcher?: TaskFileWatcher,
   ) {
-    if (customPath) {
-      this.filePath = customPath;
-    } else {
-      this.filePath = tasksFilePath();
-    }
+    super(customPath ?? tasksFilePath());
   }
 
   async save(task: Task): Promise<void> {
-    const tasks = await this.loadAll();
-    const index = tasks.findIndex(t => t.id.equals(task.id));
+    // 「读-改-写」经 withWriteLock 串行化,避免并发 save 在 async 织入下后写覆盖前写
+    await this.withWriteLock(async () => {
+      const tasks = await this.loadAll();
+      const index = tasks.findIndex(t => t.id.equals(task.id));
+      if (index >= 0) tasks[index] = task;
+      else tasks.push(task);
+      await this.saveAll(tasks);
+    });
 
-    if (index >= 0) {
-      tasks[index] = task;
-    } else {
-      tasks.push(task);
-    }
-
-    await this.saveAll(tasks);
-
-    // 发布和持久化领域事件
+    // 发布和持久化领域事件(锁外执行:数据已原子落盘,事件发布可与下一次写并行)
     const events = task.domainEvents;
     if (events.length > 0) {
       for (const event of events) {
@@ -57,13 +50,11 @@ export class JsonTaskRepository implements TaskRepository {
         if (this.eventBus) {
           await this.eventBus.publish(event);
         }
-
         // 持久化到 EventStore（如果有）
         if (this.eventStore) {
           await this.eventStore.append(event);
         }
       }
-
       // 清除已发布的事件
       task.clearEvents();
     }
@@ -84,34 +75,26 @@ export class JsonTaskRepository implements TaskRepository {
   }
 
   async delete(id: TaskId): Promise<void> {
-    const tasks = await this.loadAll();
-    const filtered = tasks.filter(t => !t.id.equals(id));
-    await this.saveAll(filtered);
+    await this.withWriteLock(async () => {
+      const tasks = await this.loadAll();
+      const filtered = tasks.filter(t => !t.id.equals(id));
+      await this.saveAll(filtered);
+    });
   }
 
   private async loadAll(): Promise<Task[]> {
-    try {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const content = await fs.readFile(this.filePath, 'utf-8');
-      const data = JSON.parse(content);
-
-      // 兼容两种格式：直接数组或包含 tasks 字段的对象
-      const dtos: TaskDTO[] = Array.isArray(data) ? data : (data.tasks || []);
-
-      return dtos.map(dto => this.dtoToEntity(dto));
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        return [];
-      }
-      throw error;
-    }
+    const text = await this.read();
+    if (text === undefined) return [];
+    const data = JSON.parse(text);
+    // 兼容两种格式：直接数组或包含 tasks 字段的对象
+    const dtos: TaskDTO[] = Array.isArray(data) ? data : (data.tasks || []);
+    return dtos.map(dto => this.dtoToEntity(dto));
   }
 
   private async saveAll(tasks: Task[]): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     const dtos = tasks.map(t => t.toJSON());
     const raw = JSON.stringify(dtos, null, 2);
-    await fs.writeFile(this.filePath, raw);
+    await this.write(raw);
     // 通知文件监听器:这是本进程写入,刷新基线,避免随后轮询误判为外部变更而重复推送
     this.watcher?.markSelfWrite(raw);
   }

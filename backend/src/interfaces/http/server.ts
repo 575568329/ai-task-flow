@@ -17,20 +17,41 @@ import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { isLocalAccess } from '../../utils/localAccess.js';
 import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
 import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import type { VocabService } from '../../application/vocab/VocabService.js';
+import type { MaimemoService } from '../../application/maimemo/MaimemoService.js';
+import type { MindmapService } from '../../application/mindmap/MindmapService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerUsageRoutes } from './routes/usageRoutes.js';
+import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
+import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
+import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
+import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
+import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 import { UsageService } from '../../application/usage/UsageService.js';
+import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
+import { registerProjectChatRoutes } from './routes/projectChatRoutes.js';
+import { AgentRuntimeManager } from '../../application/agent/AgentRuntimeManager.js';
+import { TaskSessionStore } from '../../infrastructure/persistence/TaskSessionStore.js';
+import { SessionTitleStore } from '../../infrastructure/persistence/SessionTitleStore.js';
 
 /** 用量聚合服务(无外部依赖,模块级单例:跨请求保持 L1/L2 扫描缓存) */
 const usageService = new UsageService();
+
+/** 常驻 runtime 池(Phase 2):同 (side, sessionId) 连发复用同一 claude 进程,turn2 无冷启。模块级单例 */
+const agentRuntimeManager = new AgentRuntimeManager();
+const taskSessionStore = new TaskSessionStore();
+const sessionTitleStore = new SessionTitleStore();
+
+/** Claude Code settings.json 多套配置切换(无外部依赖,模块级单例即可) */
+const claudeProfileService = new ClaudeProfileService(new JsonClaudeProfileRepository());
 
 /** 请求体上限。扩展网页剪藏会把多张图片以 base64 编码塞进请求体，远超 Fastify 默认 1MB，
  *  否则后端返回 413 Payload Too Large。25MB 覆盖常见多图场景；图片传输优化后可调小。 */
@@ -62,6 +83,8 @@ export async function createHttpServer(
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
+  maimemoService: MaimemoService,
+  mindmapService: MindmapService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -131,12 +154,7 @@ export async function createHttpServer(
     // 判断请求是否来自本机回环:前端据此控制敏感页面(设置/存储管理)的可见性。
     // 本机浏览器访问 => true(看得到设置);同网段其他设备访问 => false(屏蔽设置入口)。
     // key 明文本身在任何情况下都不会下发(GET /api/llm-config 已脱敏),此处仅用于页面可见性。
-    const ip = request.ip;
-    const localAccess =
-      ip === '127.0.0.1' ||
-      ip === '::1' ||
-      ip === '::ffff:127.0.0.1' ||
-      ip === 'localhost';
+    const localAccess = isLocalAccess(request.ip);
     return {
       status: 'ok',
       service: 'ai-task-flow',
@@ -148,6 +166,8 @@ export async function createHttpServer(
 
   // 注册业务路由
   await registerTaskRoutes(fastify, taskRepository);
+  await registerTaskChatRoutes(fastify, taskRepository, agentRuntimeManager, taskSessionStore, sessionTitleStore);
+  await registerProjectChatRoutes(fastify, taskRepository, agentRuntimeManager, sessionTitleStore);
   await registerSSERoutes(fastify, eventBus);
   await registerUploadRoutes(fastify, uploadsDir);
   await registerProjectRoutes(fastify);
@@ -157,8 +177,31 @@ export async function createHttpServer(
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerVocabRoutes(fastify, vocabService);
-  await registerSystemRoutes(fastify);
+  await registerMaimemoRoutes(fastify, maimemoService);
+  await registerMindmapRoutes(fastify, mindmapService);
+  await registerSystemRoutes(fastify, agentRuntimeManager);
   await registerUsageRoutes(fastify, usageService);
+  await registerClaudeProfileRoutes(fastify, claudeProfileService);
+  // graceful 关闭:dispose 所有常驻 runtime(杀 claude 子进程);sweeper 已 unref,SIGINT 直退靠 OS 清理
+  fastify.addHook('onClose', async () => {
+    await agentRuntimeManager.shutdown();
+  });
+
+  // 全局错误处理(P1-16):未捕获的抛错统一转 JSON,避免 Fastify 默认吐 HTML/堆栈到前端。
+  // statusCode 沿用 Fastify 自带(4xx 校验错误已带 statusCode;业务 throw Error 默认 500)。
+  // TODO(P2-20):引入 DomainError 基类后,按 error.code/httpStatus 精准映射 4xx。
+  fastify.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+    const statusCode =
+      typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
+        ? error.statusCode
+        : 500;
+    if (statusCode >= 500) {
+      fastify.log.error(error, `未处理错误 ${request.method} ${request.url}`);
+    } else {
+      fastify.log.warn({ statusCode, url: request.url }, error.message);
+    }
+    reply.status(statusCode).send({ error: error.message || 'Internal Server Error', statusCode });
+  });
 
   // 生产模式:单端口托管前端 SPA(可选)
   if (config.frontendDist && fs.existsSync(path.join(config.frontendDist, 'index.html'))) {
@@ -225,12 +268,14 @@ export async function startHttpServer(
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
   vocabService: VocabService,
+  maimemoService: MaimemoService,
+  mindmapService: MindmapService,
 ) {
   // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

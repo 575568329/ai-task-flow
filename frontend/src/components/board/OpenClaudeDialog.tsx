@@ -14,7 +14,7 @@
 // 为什么不用 RadioGroup:项目未安装 @radix-ui/react-radio-group,前端装包是 Windows 专属
 // (见 memory),不为此新增依赖。改用可点击列表项 + selected-state 样式实现单选语义。
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, RotateCcw, Terminal } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, ShieldOff, Terminal } from 'lucide-react';
 import type { TaskEnv, ClaudeSessionMeta } from '@ai-task-flow/shared';
 import {
   Dialog,
@@ -34,6 +34,8 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/toaster';
 import { systemApi } from '@/api/task';
+import { useTaskStore } from '@/stores/taskStore';
+import { useUIStore } from '@/stores/uiStore';
 import { RepoPathPicker } from './RepoPathPicker';
 import { relativeTime } from '@/lib/taskMeta';
 import { cn } from '@/lib/utils';
@@ -79,6 +81,17 @@ export function OpenClaudeDialog({
       setSelectedId(null);
     }
   }, [open]);
+
+  // 关联任务标题反查:session.usage.taskId(scanner 从 jsonl 埋点扫出)→ 任务标题,
+  // 让历史列表标注每个会话处理过哪个任务(与项目悬浮窗对话列表一致)
+  const tasks = useTaskStore((s) => s.tasks);
+  // 夜间模式:开启时「打开终端」启动的 claude 跳过所有权限确认,弹窗顶部展示警告条
+  const nightMode = useUIStore((s) => s.nightMode);
+  const taskTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tasks) m.set(t.id, t.title);
+    return m;
+  }, [tasks]);
 
   // 按 selectedEnv 过滤会话:wsl↔Windows 两个 home 来源(cmd/pwsh 同属 Windows home)
   const filteredSessions = useMemo(
@@ -131,7 +144,7 @@ export function OpenClaudeDialog({
       return;
     }
     systemApi
-      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv })
+      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv, bypassPermissions: nightMode })
       .then(({ claudeCommand }) => {
         // 把命令复制到剪贴板便于用户核对/手动粘贴
         navigator.clipboard.writeText(claudeCommand).catch(() => {});
@@ -151,7 +164,7 @@ export function OpenClaudeDialog({
     }
     const sessionId = selectedId;
     systemApi
-      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv, sessionId })
+      .openClaudeSession({ repoPath: effectiveRepo, env: selectedEnv, sessionId, bypassPermissions: nightMode })
       .then(() => {
         toast.success('已恢复会话,可继续选择下一个');
       })
@@ -169,6 +182,14 @@ export function OpenClaudeDialog({
             在 <span className="font-mono text-xs break-all">{effectiveRepo || '(未选择项目)'}</span> 下新建或恢复 Claude 会话
           </DialogDescription>
         </DialogHeader>
+
+        {/* 夜间模式开启时顶部红色警告条:避免用户忘记开关还开着就派发(即时反馈) */}
+        {nightMode && (
+          <div className="border-destructive/30 bg-destructive/5 text-destructive flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
+            <ShieldOff className="size-3.5 shrink-0" />
+            <span>夜间模式已开启:本次启动的 Claude 将跳过所有权限确认(可执行任意操作)。</span>
+          </div>
+        )}
 
         {/* 中间区:flex-1 可收缩;项目路径/执行环境/新建会话/历史标题 shrink-0 固定,
             只有历史会话列表滚动 → 标题与底部按钮永不随内容滚走 */}
@@ -231,6 +252,9 @@ export function OpenClaudeDialog({
               <div className="flex flex-col gap-1">
                 {filteredSessions.map((s) => {
                   const active = s.sessionId === selectedId;
+                  const taskTitle = s.usage?.taskId
+                    ? taskTitleById.get(s.usage.taskId)
+                    : undefined;
                   return (
                     <button
                       key={s.sessionId}
@@ -246,6 +270,14 @@ export function OpenClaudeDialog({
                         <span className="flex-1 truncate text-sm font-medium">
                           {s.title || '(无标题)'}
                         </span>
+                        {taskTitle && (
+                          <span
+                            className="bg-primary/10 text-primary max-w-[35%] shrink-0 truncate rounded px-1 text-[10px]"
+                            title={`关联任务:${taskTitle}`}
+                          >
+                            {taskTitle}
+                          </span>
+                        )}
                         <span
                           className={cn(
                             'shrink-0 rounded px-1 py-0 text-[10px]',

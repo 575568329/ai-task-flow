@@ -20,6 +20,7 @@ import {
   Save,
   Printer,
   Download,
+  Copy,
 } from 'lucide-react';
 import {
   ResizablePanelGroup,
@@ -39,6 +40,9 @@ import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { MdEditor } from '../knowledge/MdEditor';
 import { exportElementToPdf, downloadText } from '@/lib/docExport';
+import { copyDiskPath } from '@/lib/copyPath';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildTaskDocItems, type TaskDocMenuCtx } from './taskDocsContextMenu';
 import { FileTree } from './FileTree';
 
 type Mode = 'tasks' | 'files';
@@ -93,6 +97,12 @@ export function TaskDocsView() {
   // 任务文档
   const [query, setQuery] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const taskDocMenuCtx: TaskDocMenuCtx = {
+    open: (id) => setSelectedTaskId(id),
+    copyPath: (taskFilePath) => {
+      if (taskFilePath) void copyDiskPath(taskFilePath);
+    },
+  };
 
   // 项目文件:多 root(挂载的文件夹)
   const [roots, setRoots] = useState<string[]>(() => loadRoots());
@@ -162,6 +172,13 @@ export function TaskDocsView() {
     mode === 'tasks'
       ? `${safeName(selectedTask?.title || selectedTask?.id || 'task')}.md`
       : (basename(selectedFilePath) || 'file.md');
+  /** 「复制磁盘路径」取值:任务文档用落盘的 taskFilePath,项目文件拼 root + 相对路径 */
+  const copyPathValue =
+    mode === 'tasks'
+      ? (selectedTask?.taskFilePath ?? '')
+      : selectedFilePath
+        ? `${activeRoot}/${selectedFilePath}`
+        : '';
 
   const previewEmpty =
     (mode === 'tasks' && !selectedTaskId) ||
@@ -340,21 +357,22 @@ export function TaskDocsView() {
                     </div>
                   ) : (
                     filtered.map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        className={cn(
-                          'w-full rounded-md px-2 py-1.5 text-left transition-colors',
-                          selectedTaskId === t.id ? 'bg-accent' : 'hover:bg-accent/50',
-                        )}
-                        onClick={() => setSelectedTaskId(t.id)}
-                      >
-                        <div className="truncate text-sm">{t.title || '(无标题)'}</div>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
-                          <span className="text-muted-foreground">{t.status}</span>
-                          <span className="text-muted-foreground/60">{t.id}</span>
-                        </div>
-                      </button>
+                      <ContextMenuHost key={t.id} items={buildTaskDocItems} target={t} ctx={taskDocMenuCtx}>
+                        <button
+                          type="button"
+                          className={cn(
+                            'w-full rounded-md px-2 py-1.5 text-left transition-colors',
+                            selectedTaskId === t.id ? 'bg-accent' : 'hover:bg-accent/50',
+                          )}
+                          onClick={() => setSelectedTaskId(t.id)}
+                        >
+                          <div className="truncate text-sm">{t.title || '(无标题)'}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+                            <span className="text-muted-foreground">{t.status}</span>
+                            <span className="text-muted-foreground/60">{t.id}</span>
+                          </div>
+                        </button>
+                      </ContextMenuHost>
                     ))
                   )}
                 </div>
@@ -488,6 +506,21 @@ export function TaskDocsView() {
                     <Save className="size-3.5" />
                   </Button>
                 </>
+              )}
+
+              {/* 复制磁盘路径(任务文档用 taskFilePath;项目文件拼 root+path) */}
+              {!previewEmpty && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground size-7"
+                  onClick={() => void copyDiskPath(copyPathValue)}
+                  disabled={!copyPathValue}
+                  aria-label="复制磁盘路径"
+                  title={copyPathValue ? '复制磁盘路径' : '无可用路径'}
+                >
+                  <Copy className="size-3.5" />
+                </Button>
               )}
 
               {/* 导出 PDF / 下载 md(预览态可用;PDF 依赖预览 DOM) */}

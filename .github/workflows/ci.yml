@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# lockfile 不入库(决策 4A),CI 用 npm install 而非 npm ci;依赖范围由各 package.json 声明保证
+jobs:
+  test:
+    name: Test & Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      # shared 必须先 build:backend/frontend 的 tsc 依赖 shared 的 .d.ts
+      - name: Build shared
+        run: npm run build:shared
+
+      - name: Typecheck backend
+        run: cd backend && npx tsc --noEmit
+
+      - name: Typecheck frontend
+        run: cd frontend && npx tsc --noEmit
+
+      - name: Test backend
+        run: cd backend && npx vitest run
+
+      - name: Test frontend
+        run: cd frontend && npm test
+
+      - name: Test extension
+        run: cd extension && npm test
+
+      - name: Build all
+        run: npm run build

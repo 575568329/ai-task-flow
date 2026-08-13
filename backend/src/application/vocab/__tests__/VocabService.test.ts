@@ -12,11 +12,19 @@ function createMockRepo(): VocabRepository {
   const store = new Map<string, Vocab>();
   return {
     async save(v) { store.set(v.id, v); },
+    async saveMany(vocabs) { for (const v of vocabs) store.set(v.id, v); },
     async findById(id) { return store.get(id) ?? null; },
     async findAll() { return [...store.values()]; },
     async findByWordAndLang(word, targetLang) {
       const key = `${word.trim().toLowerCase()}|${targetLang}`;
       return [...store.values()].find(v => v.uniqueKey() === key) ?? null;
+    },
+    async findByStudySyncStatus(status) {
+      return [...store.values()].filter(v => v.studySyncStatus === status);
+    },
+    async findByStudySyncStatuses(statuses) {
+      const set = new Set(statuses);
+      return [...store.values()].filter(v => v.studySyncStatus != null && set.has(v.studySyncStatus));
     },
     async delete(id) { store.delete(id); },
   };
@@ -158,3 +166,59 @@ describe('VocabService.translate', () => {
     await expect(service.translate('hi')).rejects.toThrow(/API Key|设置/);
   });
 });
+
+/** 构造仿 .bin buffer：[4字节小端长度 N][N×UTF-16LE][0x0000 终止符]，段间插二进制元数据 */
+function buildBin(parts: Array<string | Uint8Array>): Buffer {
+  const chunks: Buffer[] = [];
+  const META = Buffer.from([0x7e, 0x7e, 0x7e, 0x7e, 0x7e, 0x7e, 0x7e, 0x7e]);
+  for (const p of parts) {
+    if (typeof p === 'string') {
+      const lenBuf = Buffer.allocUnsafe(4);
+      lenBuf.writeUInt32LE(p.length, 0);
+      chunks.push(lenBuf, Buffer.from(p, 'utf16le'), Buffer.from([0, 0]));
+    } else {
+      chunks.push(Buffer.from(p === META ? p : p));
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
+describe('VocabService.importFromYoudaoBin', () => {
+  it('导入新词并去重：首次新增、二次全重复', async () => {
+    const service = new VocabService(createMockRepo(), mockLlmConfig);
+    const bin = buildBin([
+      'en', 'zh-CHS', 'rollback', '[ˈrəʊlbæk]', 'n. 卷回;', '未分组单词',
+      'en', 'zh-CHS', 'handler', '[ˈhændlə(r)]', '未分组单词',
+    ]);
+    const r1 = await service.importFromYoudaoBin(bin);
+    expect(r1.added).toBe(2);
+    expect(r1.duplicates).toBe(0);
+    expect(r1.parsed).toBe(2);
+
+    // 二次导入相同文件：全重复
+    const r2 = await service.importFromYoudaoBin(bin);
+    expect(r2.added).toBe(0);
+    expect(r2.duplicates).toBe(2);
+  });
+
+  it('导入强制 targetLang=zh 且分离 pos', async () => {
+    const service = new VocabService(createMockRepo(), mockLlmConfig);
+    const bin = buildBin(['en', 'zh-CHS', 'summarize', '[ˈsʌməraɪz]', 'v. 总结;', '未分组单词']);
+    await service.importFromYoudaoBin(bin);
+    const list = await service.listVocab({});
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0].targetLang).toBe('zh');
+    expect(list.items[0].pos).toBe('v.');
+    expect(list.items[0].translation).toBe('总结;');
+  });
+
+  it('无释义词条也能导入（translation 兜底为 word）', async () => {
+    const service = new VocabService(createMockRepo(), mockLlmConfig);
+    const bin = buildBin(['en', 'zh-CHS', 'handler', '[ˈhændlə(r)]', '未分组单词']);
+    const r = await service.importFromYoudaoBin(bin);
+    expect(r.added).toBe(1);
+    const list = await service.listVocab({});
+    expect(list.items[0].word).toBe('handler');
+  });
+});
+

@@ -8,12 +8,28 @@ import askdialog from 'node-file-dialog';
 import { StorageService } from '../../../application/system/StorageService.js';
 import { ClaudeSessionScanner } from '../../../infrastructure/system/ClaudeSessionScanner.js';
 import { TerminalLauncher } from '../../../infrastructure/system/TerminalLauncher.js';
+import { AgentRuntimeManager } from '../../../application/agent/AgentRuntimeManager.js';
+import { isLocalAccess } from '../../../utils/localAccess.js';
+import { isValidRepoPath } from './projectChatHelpers.js';
 import type {
   StorageClearRequest,
   OpenClaudeRequest,
 } from '@ai-task-flow/shared';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * 校验 repoPath 是合法仓库绝对路径且不含 shell 元字符。
+ * TerminalLauncher 把 repoPath 拼进 `start cmd /k "cd /d "${repoPath}"..."`
+ * (pwsh/wsl 分支同理),含 " ; & | ` $ 等元字符会注入命令。复用 projectChatHelpers.isValidRepoPath
+ * 做 Windows 盘符 / Unix 绝对路径形态判断,再叠加 shell 元字符黑名单堵注入。
+ * 与 projectChatRoutes 的「已登记项目白名单」相比更弱(不查 tasks.json),但 system 路由
+ * 不持有 taskRepository,本地字符校验是成本最低的命令注入防御。
+ */
+export function isSafeRepoPath(p: string): boolean {
+  if (!isValidRepoPath(p)) return false;
+  return !/[;&|`$<>^()\n\r"']/.test(p);
+}
 
 /**
  * Windows 原生文件夹选择对话框。
@@ -65,6 +81,7 @@ async function selectDirectoryFallback(): Promise<string | null> {
 
 export async function registerSystemRoutes(
   fastify: FastifyInstance,
+  agentRuntimeManager: AgentRuntimeManager,
 ) {
   // 选择文件夹
   fastify.post('/api/system/select-directory', async (req, reply) => {
@@ -113,6 +130,9 @@ export async function registerSystemRoutes(
       if (!repoPath) {
         return reply.status(400).send({ error: 'repoPath 必填' });
       }
+      if (!isSafeRepoPath(repoPath)) {
+        return reply.status(400).send({ error: 'repoPath 不是合法的仓库绝对路径' });
+      }
       try {
         const sessions = await ClaudeSessionScanner.scan(repoPath);
         return { sessions };
@@ -127,12 +147,31 @@ export async function registerSystemRoutes(
   fastify.post<{ Body: OpenClaudeRequest }>(
     '/api/system/claude-sessions/open',
     async (request, reply) => {
-      const { repoPath, env, sessionId } = request.body ?? {};
+      const { repoPath, env, sessionId, bypassPermissions } = request.body ?? {};
       if (!repoPath || !env) {
         return reply.status(400).send({ error: 'repoPath 与 env 必填' });
       }
+      if (!isSafeRepoPath(repoPath)) {
+        return reply.status(400).send({ error: 'repoPath 不是合法的仓库绝对路径' });
+      }
+      // 纵深防御:spawn 终端是危险操作(repoPath 拼进 shell 命令),仅限本机访问。
+      // host 默认已收敛到 127.0.0.1,此处再兜一道:若用户显式 HOST=0.0.0.0,非本机请求直接拒绝。
+      if (!isLocalAccess(request.ip)) {
+        fastify.log.warn({ ip: request.ip, repoPath }, '非本机访问请求打开终端,已拒绝');
+        return reply.status(403).send({ error: '打开终端仅限本机访问' });
+      }
       try {
-        const { claudeCommand } = await TerminalLauncher.openClaude({ repoPath, env, sessionId });
+        // 夜间模式(bypass)是危险能力,留痕便于事后排查"为什么我的终端没弹权限"
+        fastify.log.info(
+          { repoPath, env, bypass: !!bypassPermissions },
+          'Open claude terminal',
+        );
+        const { claudeCommand } = await TerminalLauncher.openClaude({
+          repoPath,
+          env,
+          sessionId,
+          bypassPermissions,
+        });
         return { ok: true, claudeCommand };
       } catch (error) {
         fastify.log.error(error, 'Failed to open claude terminal');
@@ -163,5 +202,10 @@ export async function registerSystemRoutes(
         output: `${e.stdout || ''}${e.stderr || ''}${e.message || ''}`,
       };
     }
+  });
+
+  // GET /api/system/agent-runtime/snapshot — 常驻 runtime 池状态(诊断:windows/wsl/total 在池数)
+  fastify.get('/api/system/agent-runtime/snapshot', async () => {
+    return agentRuntimeManager.getSnapshot();
   });
 }

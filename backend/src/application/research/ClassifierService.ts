@@ -1,6 +1,19 @@
 // backend/src/application/research/ClassifierService.ts
+import { z } from 'zod';
 import type { LlmProvider, LlmMessage } from '../../infrastructure/llm/LlmProvider.js';
 import type { ClassificationResult } from '@ai-task-flow/shared';
+import { FileLogger } from '../../infrastructure/logging/FileLogger.js';
+
+const logger = new FileLogger('classifier');
+
+// ClassificationResult 的 zod schema:补运行时校验。generateObject 实现仅 JSON.parse,
+// 上游返回畸形结构({skipSearch:"yes"} 等)会静默产出非法对象污染下游检索,故在调用方 parse。
+const classificationSchema = z.object({
+  skipSearch: z.boolean(),
+  academicSearch: z.boolean(),
+  standaloneQuery: z.string(),
+  searchQueries: z.array(z.string()),
+});
 
 /**
  * 分类+改写服务（抄 Perplexica classifier.ts）
@@ -31,10 +44,11 @@ export class ClassifierService {
     ];
 
     try {
-      // generateObject 返回 JSON 结构化输出
-      const result = await this.llm.generateObject<ClassificationResult>(messages, {
-        /* zod schema 后续补充 */
-      });
+      // generateObject 仅 JSON.parse,不校验结构(其 schema 参数当前是摆设);传 schema 表意图,
+      // 实际靠下方 zod.parse 兜底运行时校验。
+      const raw = await this.llm.generateObject<ClassificationResult>(messages, classificationSchema);
+      // 上游返回畸形结构在此抛 → 进 catch 降级,而非静默产出非法对象污染下游检索
+      const result = classificationSchema.parse(raw) as ClassificationResult;
 
       // 保底：searchQueries 为空时用 standaloneQuery 兜底
       if (result.searchQueries.length === 0 && !result.skipSearch) {
@@ -42,8 +56,9 @@ export class ClassifierService {
       }
 
       return result;
-    } catch (error: any) {
-      console.error('Classification failed, degrading:', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('Classification failed, degrading', { message });
       // 降级：默认需检索，用原话当 query
       return {
         skipSearch: false,

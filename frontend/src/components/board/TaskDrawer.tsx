@@ -10,6 +10,7 @@ import {
   Copy,
   ChevronRight,
   ChevronLeft,
+  MessageSquare,
 } from 'lucide-react';
 import {
   Priority,
@@ -42,6 +43,7 @@ import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { useProjectChatStore } from '@/stores/projectChatStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { StepEditor } from './StepEditor';
 import { RepoPathPicker } from './RepoPathPicker';
@@ -114,6 +116,7 @@ export function TaskDrawer() {
   const createTask = useTaskStore((s) => s.create);
   const updateTask = useTaskStore((s) => s.update);
   const removeTask = useTaskStore((s) => s.remove);
+  const openForRepo = useProjectChatStore((s) => s.openForRepo);
 
   const task = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined;
   const isCreate = creatingTask || !task;
@@ -304,8 +307,10 @@ export function TaskDrawer() {
     }
   };
 
+  // modal=false: 编辑器是工作面板,不需要 focus trap。
+  // modal=true 的 overflow:hidden 滚动锁会阻塞 portal 到 body 的悬浮窗滚轮/点击。
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && close()}>
+    <Sheet open={open} modal={false} onOpenChange={(isOpen) => !isOpen && close()}>
       <SheetContent
         side="right"
         className="flex w-[80vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"
@@ -314,7 +319,12 @@ export function TaskDrawer() {
         // 会被 Radix 误判为"操作抽屉外部"而连带关闭抽屉(只关了抽屉、预览没关)。
         // 预览打开期间吞掉这两个事件,交由 YARL 自行关闭;预览关闭后抽屉恢复正常行为。
         onInteractOutside={(e) => {
-          if (previewOpen) e.preventDefault();
+          // 图片预览(YARL)打开时吞掉外部点击;
+          // 点击悬浮球/悬浮窗也不应关闭抽屉——它们 portal 到 body,不在抽屉 content 树内,
+          // Radix 会误判为"操作抽屉外部"而连带关闭(用户感知"点悬浮按钮,详情没了")。
+          // 命中 [data-floating-chat] 的点击交给悬浮窗自己处理,抽屉保持打开。
+          const target = e.target as HTMLElement | null;
+          if (previewOpen || target?.closest('[data-floating-chat]')) e.preventDefault();
         }}
         onEscapeKeyDown={(e) => {
           if (previewOpen) e.preventDefault();
@@ -438,22 +448,22 @@ export function TaskDrawer() {
             </div>
           </div>
 
-          {/* 栏3:预览(实时 Markdown;与步骤平分剩余宽度) */}
+          {/* 栏3:预览(Markdown 实时反映草稿;对话已移至悬浮窗,详情不再内嵌对话) */}
           {showPreview && (
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l">
-              <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-3 py-2">
+              <div className="flex min-h-11 shrink-0 items-center gap-1 border-b px-2 py-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-7"
                   onClick={() => setShowPreview(false)}
-                  aria-label="收起预览"
+                  aria-label="收起右侧栏"
                 >
                   <ChevronRight className="size-4" />
                 </Button>
                 <span className="text-sm font-semibold">预览</span>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-3">
+              <div className="h-full overflow-y-auto px-3 py-3">
                 <MessageContent content={markdown} />
               </div>
             </div>
@@ -461,8 +471,19 @@ export function TaskDrawer() {
         </div>
 
         {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
-            打开终端基于 draft.repoPath 可用,复制指令/删除依赖已保存任务,未保存时禁用 */}
+            对话→开悬浮窗;打开终端基于 draft.repoPath;复制指令/删除依赖已保存任务 */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
+          <Button
+            size="sm"
+            onClick={() => {
+              if (task?.repoPath) openForRepo(task.repoPath);
+            }}
+            disabled={!task?.repoPath}
+            title={!task?.repoPath ? '需填写仓库路径才能在悬浮窗对话' : '在悬浮窗中对话'}
+          >
+            <MessageSquare className="size-4" />
+            对话
+          </Button>
           <Button
             size="sm"
             onClick={onOpenClaude}
@@ -485,6 +506,7 @@ export function TaskDrawer() {
             {saving && <Loader2 className="size-4 animate-spin" />}
             保存
           </Button>
+          {/* 删除移至最右(ml-auto),与主操作区拉开,降低误触 */}
           <Button
             variant="ghost"
             size="sm"

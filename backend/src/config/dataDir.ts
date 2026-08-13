@@ -117,6 +117,11 @@ export function vocabFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'vocab.json');
 }
 
+/** mindmaps.json 路径(思维导图文档集合,单文件多文档),与 vocab.json 同级 */
+export function mindmapsFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'mindmaps.json');
+}
+
 /** 上传图片目录 */
 export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');
@@ -147,6 +152,16 @@ export function uploadsDirWindowsPath(): string | null {
   return cachedWinUploads;
 }
 
+/** Claude Code settings.json 多套配置(profile)存储,与 llm-config.json 同级 */
+export function claudeProfilesFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'claude-profiles.json');
+}
+
+/** 切换 profile 前的 settings.json 备份目录(覆盖不可逆,必须留退路) */
+export function claudeSettingsBackupDirPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'claude-settings-backups');
+}
+
 /** 任务 markdown 存档目录(派发时落盘,供 Claude Code 读取 + 用户存档) */
 export function taskDocsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'tasks');
@@ -157,9 +172,24 @@ export function taskDocPath(taskId: string, dataDir?: string): string {
   return path.join(taskDocsDirPath(dataDir), `${taskId}.md`);
 }
 
+/** 任务对话 sessionId 存储( taskId → claude session_id,用于 --resume 续接) */
+export function taskSessionsFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'task-sessions.json');
+}
+
+/** 会话自定义标题存储( sessionId → 用户命名,看板历史列表显示用;不碰 Claude jsonl) */
+export function sessionTitlesFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'session-titles.json');
+}
+
 /** 日志目录(后端运行日志,如聊天链路全量日志) */
 export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');
+}
+
+/** 墨墨背单词配置(含 token 明文),与 llm-config.json / claude-profiles.json 同级敏感 */
+export function maimemoConfigFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'maimemo-config.json');
 }
 
 /** 知识库目录(项目内,进 git,相对项目根) */

@@ -5,7 +5,10 @@ import {
   VocabAlreadyExistsError,
   VocabNotFoundError,
 } from '../../../application/vocab/VocabService.js';
+import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 import type { VocabCreateDTO, VocabListQuery, VocabUpdateDTO, TranslateRequest } from '@ai-task-flow/shared';
+
+const logger = new FileLogger('vocab-route');
 
 /** 把 Fastify 的 string query 转成 VocabListQuery（boolean/number 字段显式转换） */
 function parseListQuery(raw: Record<string, string | undefined>): VocabListQuery {
@@ -16,10 +19,14 @@ function parseListQuery(raw: Record<string, string | undefined>): VocabListQuery
     sourceLang: raw.sourceLang,
     mastered: toBool(raw.mastered),
     starred: toBool(raw.starred),
+    studySyncStatus: raw.studySyncStatus as VocabListQuery['studySyncStatus'],
     page: raw.page ? Number(raw.page) : undefined,
     pageSize: raw.pageSize ? Number(raw.pageSize) : undefined,
   };
 }
+
+/** 导入文件大小上限 5MB（覆盖千词级 .bin，留足余量） */
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
 
 export async function registerVocabRoutes(fastify: FastifyInstance, vocabService: VocabService) {
   // POST /api/vocab - 新增生词（重复返回 409）
@@ -59,6 +66,35 @@ export async function registerVocabRoutes(fastify: FastifyInstance, vocabService
   // GET /api/vocab - 列表（搜索/筛选/分页）
   fastify.get<{ Querystring: Record<string, string | undefined> }>('/api/vocab', async (request) => {
     return vocabService.listVocab(parseListQuery(request.query as Record<string, string | undefined>));
+  });
+
+  // POST /api/vocab/import-youdao - 导入有道 .bin 生词本（multipart 单文件）
+  fastify.post('/api/vocab/import-youdao', async (request, reply) => {
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: '未上传文件' });
+    }
+    // 校验扩展名（兼容某些客户端无扩展名/mimetype 的情况，主要看内容）
+    const filename = data.filename ?? '';
+    const extOk = /\.bin$/i.test(filename) || !filename;
+    if (!extOk) {
+      return reply.status(400).send({ error: '仅支持有道导出的 .bin 文件' });
+    }
+    const buffer = await data.toBuffer();
+    if (buffer.length === 0) {
+      return reply.status(400).send({ error: '文件为空' });
+    }
+    if (buffer.length > IMPORT_MAX_BYTES) {
+      return reply.status(413).send({ error: `文件过大（>${IMPORT_MAX_BYTES / 1024 / 1024}MB）` });
+    }
+    try {
+      const result = await vocabService.importFromYoudaoBin(buffer);
+      return reply.status(201).send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '导入失败';
+      logger.error('import-youdao 失败', { error: message, size: buffer.length });
+      return reply.status(500).send({ error: message });
+    }
   });
 
   // GET /api/vocab/:id

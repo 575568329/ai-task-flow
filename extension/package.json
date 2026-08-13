@@ -1,6 +1,6 @@
 {
   "name": "@ai-task-flow/extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "AI Task Flow 网页剪藏浏览器扩展（MV3）",

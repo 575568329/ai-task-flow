@@ -26,6 +26,9 @@ export interface OpenClaudeRequest {
   repoPath: string;
   env: TaskEnv;
   sessionId?: string;      // 有则 resume, 无则新建
+  /** 夜间模式:启动交互式 claude 时拼 --permission-mode bypassPermissions,跳过所有权限确认。
+   *  仅限可信隔离环境(本机 worktree),默认关闭。前端从 uiStore.nightMode 透传。 */
+  bypassPermissions?: boolean;
 }
 
 /** POST /api/system/claude-sessions/open 响应 */

@@ -7,6 +7,7 @@ import type {
   VocabCreateDTO,
   VocabListQuery,
   TranslateResponse,
+  YoudaoImportResultDTO,
 } from '@ai-task-flow/shared';
 import { vocabApi } from '@/api/vocab';
 import { toast } from '@/components/ui/toaster';
@@ -20,6 +21,10 @@ interface VocabState {
   translating: boolean;
   /** 最近一次翻译结果(供「存入生词本」复用) */
   lastTranslate: { text: string; result: TranslateResponse } | null;
+  /** 导入有道 .bin 进行中 */
+  importing: boolean;
+  /** 最近一次导入结果(供页面行内卡展示) */
+  importResult: YoudaoImportResultDTO | null;
   query: VocabListQuery;
 
   translate: (text: string, targetLang?: string) => Promise<TranslateResponse | null>;
@@ -30,6 +35,10 @@ interface VocabState {
   toggleStar: (vocab: VocabDTO) => Promise<void>;
   toggleMastered: (vocab: VocabDTO) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** 导入有道 .bin 生词本，成功后刷新列表 */
+  importYoudaoBin: (file: File) => Promise<YoudaoImportResultDTO | null>;
+  /** 清除导入结果卡 */
+  clearImportResult: () => void;
   upsert: (vocab: VocabDTO) => void;
 }
 
@@ -39,6 +48,8 @@ export const useVocabStore = create<VocabState>((set, get) => ({
   loading: false,
   translating: false,
   lastTranslate: null,
+  importing: false,
+  importResult: null,
   query: { page: 1, pageSize: PAGE_SIZE },
 
   translate: async (text, targetLang) => {
@@ -71,7 +82,11 @@ export const useVocabStore = create<VocabState>((set, get) => ({
     set((s) => {
       // 筛选/搜索条件变化时回到第 1 页,仅翻页(page)不变更页
       const resetPage =
-        'kw' in patch || 'mastered' in patch || 'starred' in patch || 'sourceLang' in patch;
+        'kw' in patch ||
+        'mastered' in patch ||
+        'starred' in patch ||
+        'sourceLang' in patch ||
+        'studySyncStatus' in patch;
       return {
         query: {
           ...s.query,
@@ -141,6 +156,30 @@ export const useVocabStore = create<VocabState>((set, get) => ({
       /* http toast */
     }
   },
+
+  importYoudaoBin: async (file) => {
+    set({ importing: true });
+    try {
+      const result = await vocabApi.importYoudao(file);
+      set({ importResult: result });
+      // 导入后回到第 1 页刷新，让新增词（默认 studySyncStatus=pending）可见
+      await get().fetchList({ page: 1 });
+      if (result.added > 0) {
+        toast.success(`已导入 ${result.added} 词${result.duplicates ? `·跳过 ${result.duplicates} 重复` : ''}`);
+      } else if (result.duplicates > 0) {
+        toast.info(`全部 ${result.duplicates} 词已存在，无新增`);
+      } else {
+        toast.info('未解析到任何词条');
+      }
+      return result;
+    } catch {
+      return null; // api 层已 toast
+    } finally {
+      set({ importing: false });
+    }
+  },
+
+  clearImportResult: () => set({ importResult: null }),
 
   upsert: (vocab) => {
     set((s) => {

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@xyflow/react/dist/base.css";
 @import "./styles/animations.css";
 
 /* shadcn/ui v4 单变量体系(slate baseColor)
@@ -148,4 +149,151 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+/* ============ React Flow 思维导图主题（OKLCH，映射到 shadcn token） ============
+ * 关键：项目用 OKLCH（非 HSL），直接用 var(--card)，禁止 hsl() 包裹。
+ * 用 base.css（只含结构），覆盖 --xy-* 变量融入 shadcn 主题，深浅色自动跟随。
+ */
+.react-flow {
+  --xy-node-background-color-default: var(--card);
+  --xy-node-color-default: var(--card-foreground);
+  --xy-node-border-default: var(--border);
+  --xy-node-boxshadow-selected-default: 0 0 0 2px var(--ring);
+  --xy-edge-stroke-default: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  --xy-edge-stroke-width-default: 2;
+  --xy-edge-stroke-selected-default: var(--ring);
+  --xy-connectionline-stroke-default: var(--ring);
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-selection-background-color-default: color-mix(in oklch, var(--ring) 15%, transparent);
+  --xy-controls-button-background-color-default: var(--background);
+  --xy-controls-button-background-color-hover-default: var(--accent);
+  --xy-controls-button-color-default: var(--foreground);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-minimap-background-color-default: var(--card);
+}
+
+/* 选中态用 ring 替代默认蓝光 */
+.react-flow__node.selected {
+  box-shadow: none;
+}
+.react-flow__node.selected .mm-card {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  /* 彩色发光（ring 色晕染），比单纯 outline 更有质感 */
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent),
+    0 4px 16px color-mix(in oklch, var(--ring) 25%, transparent);
+}
+
+/* 思维导图隐藏默认 handle，hover/选中时显示 */
+.react-flow__handle {
+  opacity: 0;
+  transition: opacity 0.15s;
+  width: 8px;
+  height: 8px;
+  background: var(--ring);
+  border: 2px solid var(--background);
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle {
+  opacity: 1;
+}
+
+/* Controls 贴 shadcn 风格（避免被 Tailwind preflight 裸化） */
+.react-flow__controls {
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 4px 16px color-mix(in oklch, var(--foreground) 12%, transparent);
+  border: 1px solid var(--border);
+}
+.react-flow__controls-button {
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+}
+.react-flow__controls-button:hover {
+  background: var(--accent);
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* 节点视觉：统一漂浮阴影 + hover 上浮 + 拖拽加重（作用于内层 .mm-card，
+   不动 RF 节点 wrapper 的 transform.translate，避免定位冲突） */
+.mm-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease, opacity 0.2s ease;
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 5%, transparent),
+    0 4px 12px color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+/* 入场动画：mount 时淡入+放大（作用于内层 .mm-card，不动 RF 定位 transform） */
+.mm-card.mm-entering {
+  opacity: 0;
+  transform: scale(0.88);
+}
+/* hover 轻微上浮 + 阴影加深（交互反馈；排除选中/拖拽态避免冲突） */
+.react-flow__node:not(.dragging):not(.selected) .mm-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px color-mix(in oklch, var(--foreground) 9%, transparent),
+    0 8px 20px color-mix(in oklch, var(--foreground) 11%, transparent);
+}
+.react-flow__node.dragging .mm-card {
+  box-shadow: 0 12px 28px color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+/* ============ 分支配色色板（OKLCH，8 色，深浅两套） ============
+ * 每个主分支一种色，node.data.branch 决定取色。
+ * 色相差 ~45-60°，区分度高不刺眼。超出 8 个分支按 index % 8 循环。
+ */
+:root {
+  --branch-blue-line: oklch(0.62 0.17 255);
+  --branch-blue-bg: oklch(0.96 0.02 255);
+  --branch-blue-fg: oklch(0.35 0.13 255);
+  --branch-teal-line: oklch(0.6 0.1 195);
+  --branch-teal-bg: oklch(0.95 0.02 195);
+  --branch-teal-fg: oklch(0.34 0.08 195);
+  --branch-emerald-line: oklch(0.6 0.12 155);
+  --branch-emerald-bg: oklch(0.95 0.02 155);
+  --branch-emerald-fg: oklch(0.34 0.1 155);
+  --branch-amber-line: oklch(0.7 0.14 80);
+  --branch-amber-bg: oklch(0.96 0.03 80);
+  --branch-amber-fg: oklch(0.4 0.11 80);
+  --branch-orange-line: oklch(0.65 0.16 55);
+  --branch-orange-bg: oklch(0.95 0.03 55);
+  --branch-orange-fg: oklch(0.38 0.12 55);
+  --branch-rose-line: oklch(0.62 0.18 15);
+  --branch-rose-bg: oklch(0.95 0.03 15);
+  --branch-rose-fg: oklch(0.36 0.13 15);
+  --branch-violet-line: oklch(0.6 0.17 305);
+  --branch-violet-bg: oklch(0.96 0.02 305);
+  --branch-violet-fg: oklch(0.38 0.13 305);
+  --branch-indigo-line: oklch(0.55 0.18 275);
+  --branch-indigo-bg: oklch(0.96 0.02 275);
+  --branch-indigo-fg: oklch(0.35 0.13 275);
+}
+
+.dark {
+  --branch-blue-line: oklch(0.72 0.15 255);
+  --branch-blue-bg: oklch(0.25 0.04 255);
+  --branch-blue-fg: oklch(0.82 0.1 255);
+  --branch-teal-line: oklch(0.7 0.1 195);
+  --branch-teal-bg: oklch(0.24 0.04 195);
+  --branch-teal-fg: oklch(0.8 0.08 195);
+  --branch-emerald-line: oklch(0.7 0.11 155);
+  --branch-emerald-bg: oklch(0.24 0.04 155);
+  --branch-emerald-fg: oklch(0.8 0.09 155);
+  --branch-amber-line: oklch(0.78 0.13 80);
+  --branch-amber-bg: oklch(0.27 0.05 80);
+  --branch-amber-fg: oklch(0.85 0.1 80);
+  --branch-orange-line: oklch(0.72 0.15 55);
+  --branch-orange-bg: oklch(0.26 0.05 55);
+  --branch-orange-fg: oklch(0.82 0.11 55);
+  --branch-rose-line: oklch(0.72 0.16 15);
+  --branch-rose-bg: oklch(0.26 0.05 15);
+  --branch-rose-fg: oklch(0.82 0.11 15);
+  --branch-violet-line: oklch(0.72 0.15 305);
+  --branch-violet-bg: oklch(0.26 0.05 305);
+  --branch-violet-fg: oklch(0.82 0.11 305);
+  --branch-indigo-line: oklch(0.7 0.15 275);
+  --branch-indigo-bg: oklch(0.25 0.05 275);
+  --branch-indigo-fg: oklch(0.8 0.11 275);
 }

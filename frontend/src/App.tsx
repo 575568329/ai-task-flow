@@ -10,10 +10,12 @@ import { ChatView } from '@/components/views/ChatView';
 import { DocsView } from '@/components/views/DocsView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
 import { VocabView } from '@/components/views/VocabView';
+import { MindmapView } from '@/components/views/MindmapView';
 import { UsageView } from '@/components/views/UsageView';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/toaster';
 import { ImagePreviewOverlay } from '@/components/ui/image-preview';
+import { FloatingChatRoot } from '@/components/floating/FloatingChatRoot';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
 import { sseClient } from '@/api/sse';
@@ -25,12 +27,15 @@ const VIEWS: Record<ViewKey, ComponentType> = {
   docs: DocsView,
   knowledge: KnowledgeView,
   vocab: VocabView,
+  mindmap: MindmapView,
   usage: UsageView,
 };
 
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('board');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+  const settingsTab = useUIStore((s) => s.settingsTab);
   // 视图切换淡入:keep-alive 架构下视图不卸载(保留聊天/分栏等状态),
   // 故只对主内容区整体做 opacity 淡入,而非逐视图进退场(那会丢失各视图状态)。
   const viewControls = useAnimationControls();
@@ -78,9 +83,11 @@ function App() {
           })}
         </motion.div>
       </main>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab ?? undefined} />
       <Toaster />
       <ImagePreviewOverlay />
+      {/* 任务对话悬浮窗(Portal 到 body,无 tab 时不渲染) */}
+      <FloatingChatRoot />
     </div>
   );
 }

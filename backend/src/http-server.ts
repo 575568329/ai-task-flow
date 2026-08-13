@@ -23,6 +23,11 @@ import { WebClipService } from './application/webclip/WebClipService.js';
 import { KnowledgeService } from './application/knowledge/KnowledgeService.js';
 import { JsonVocabRepository } from './infrastructure/persistence/JsonVocabRepository.js';
 import { VocabService } from './application/vocab/VocabService.js';
+import { JsonMaimemoConfigRepository } from './infrastructure/persistence/JsonMaimemoConfigRepository.js';
+import { MaimemoClient } from './infrastructure/maimemo/MaimemoClient.js';
+import { MaimemoService } from './application/maimemo/MaimemoService.js';
+import { JsonMindmapRepository } from './infrastructure/persistence/JsonMindmapRepository.js';
+import { MindmapService } from './application/mindmap/MindmapService.js';
 import { knowledgeDirPath } from './config/dataDir.js';
 
 export interface StartAppOptions {
@@ -90,6 +95,17 @@ export async function startApp(options: StartAppOptions = {}) {
   const vocabRepository = new JsonVocabRepository();
   const vocabService = new VocabService(vocabRepository, llmConfigService);
 
+  // 墨墨同步：configRepo + service 先建（client 的 getToken 闭包引用 service），init 后再注入 client
+  const maimemoConfigRepo = new JsonMaimemoConfigRepository();
+  const maimemoService = new MaimemoService(maimemoConfigRepo, vocabRepository);
+  await maimemoService.init();
+  const maimemoClient = new MaimemoClient(() => maimemoService.getActiveToken());
+  maimemoService.useClient(maimemoClient);
+
+  // 思维导图服务（无外部依赖，repo + service 直接装配）
+  const mindmapRepository = new JsonMindmapRepository();
+  const mindmapService = new MindmapService(mindmapRepository);
+
   // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
   // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
   try {
@@ -105,7 +121,14 @@ export async function startApp(options: StartAppOptions = {}) {
   }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '3000', 10);
-  const host = options.host ?? process.env.HOST ?? '0.0.0.0';
+  // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口(含 spawn 终端)。
+  // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
+  const host = options.host ?? process.env.HOST ?? '127.0.0.1';
+  if (host === '0.0.0.0' || host === '::') {
+    console.warn(
+      `⚠️  监听 ${host}:服务无鉴权,同网段可访问全部接口(含 spawn 终端/bypass 权限)。仅限隔离网络。`,
+    );
+  }
 
   // 自动查找可用端口（开发模式需要，CLI 已在外层处理）
   const actualPort = await findAvailablePort(preferredPort, host);
@@ -122,7 +145,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService);
+  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,
@@ -156,8 +179,28 @@ const isDirectRun = import.meta.url === `file://${process.argv[1]?.replace(/\\/g
   || process.argv[1]?.endsWith('http-server.js');
 
 if (isDirectRun) {
-  startApp().catch((error) => {
-    console.error('Failed to start HTTP server:', error);
-    process.exit(1);
-  });
+  startApp()
+    .then((server) => {
+      // 优雅关闭(P1-16):Ctrl+C / kill 时先 server.close()(触发 onClose → dispose 常驻 runtime,
+      // 杀 claude 子进程防孤儿),再 exit。Node 默认硬退会跳过 onClose,留下僵尸 claude 进程。
+      let closing = false;
+      const shutdown = async (sig: string) => {
+        if (closing) return; // 防 Ctrl+C 连按重复触发
+        closing = true;
+        console.log(`\n${sig} 收到,正在优雅关闭...`);
+        try {
+          await server.close();
+          console.log('✓ 已关闭(常驻 runtime 已 dispose)');
+        } catch (e) {
+          console.error('关闭过程出错:', e);
+        }
+        process.exit(0);
+      };
+      process.on('SIGINT', () => void shutdown('SIGINT'));
+      process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    })
+    .catch((error) => {
+      console.error('Failed to start HTTP server:', error);
+      process.exit(1);
+    });
 }

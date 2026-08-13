@@ -28,3 +28,13 @@ pnpm-lock.yaml
 
 # 看板程序(kanban-code)误把绝对路径当文件名写进项目目录的 hook-events 日志,反复出现
 *hook-events.jsonl
+
+# spike 验证脚本(Phase 2 等一次性地基/封装验证用,不入库;提交时手动精确 add 业务代码)
+spike/
+
+# 个人知识笔记(与"AI 任务编排"产品定位无关 + 含个人内容 + 增大仓库体积),不进版本库;
+# 本地保留(git rm --cached 仅移除索引)。如需共享知识,放 docs/ 并面向产品。
+knowledge-base/
+
+# IDE/工具临时目录(ZCode agent 会话、计划、执行日志),不进版本库
+.zcode/

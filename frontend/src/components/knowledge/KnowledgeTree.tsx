@@ -32,7 +32,11 @@ import { Collapse } from '@/components/ui/collapse';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStore, isRecentMtime } from '@/stores/knowledgeStore';
 import { formatRelativeTime } from '@/lib/formatDate';
-import { createDoc, fetchManifest } from '@/api/knowledge';
+import { createDoc, fetchManifest, deleteDoc } from '@/api/knowledge';
+import { copyDiskPath } from '@/lib/copyPath';
+import { useConfirm } from '@/components/ui/confirm';
+import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
+import { buildKnowledgeNodeItems, type KnowledgeNodeMenuCtx } from './knowledgeTreeContextMenu';
 import { toast } from '@/components/ui/toaster';
 
 /** 递归收集所有目录节点 name(用于默认全收起 / 全部收起) */
@@ -63,6 +67,36 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
   const getFilteredDocs = useKnowledgeStore((s) => s.getFilteredDocs);
   const favorites = useKnowledgeStore((s) => s.favorites);
   const toggleFavorite = useKnowledgeStore((s) => s.toggleFavorite);
+  const { confirm } = useConfirm();
+  const basePath = manifest?.basePath ?? '';
+  const menuCtx: KnowledgeNodeMenuCtx = {
+    open: (path) => setCurrentPath(path),
+    toggleFav: (path) => toggleFavorite(path),
+    copyPath: (path) => void copyDiskPath(`${basePath}/${path}`),
+    edit: (path) => {
+      setCurrentPath(path);
+      setMode('edit');
+    },
+    remove: async (path) => {
+      if (
+        !(await confirm({
+          title: '删除文档',
+          description: `确认删除「${path}」?此操作不可撤销。`,
+          confirmText: '删除',
+          variant: 'destructive',
+        }))
+      )
+        return;
+      deleteDoc(path).then(
+        () => {
+          toast.success('已删除');
+          onRefresh?.();
+        },
+        (e: unknown) => toast.error(e instanceof Error ? e.message : '删除失败'),
+      );
+    },
+    isFavorite: (path) => favorites.includes(path),
+  };
   const filterFavorites = useKnowledgeStore((s) => s.filterFavorites);
   const setFilterFavorites = useKnowledgeStore((s) => s.setFilterFavorites);
   const filterRecent = useKnowledgeStore((s) => s.filterRecent);
@@ -199,13 +233,13 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     const active = currentPath === node.path;
     const fav = favorites.includes(node.path);
     return (
-      <button
-        type="button"
-        key={node.path}
-        className={cn(
-          'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
-          active && 'bg-accent'
-        )}
+      <ContextMenuHost key={node.path} items={buildKnowledgeNodeItems} target={node} ctx={menuCtx}>
+        <button
+          type="button"
+          className={cn(
+            'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+            active && 'bg-accent'
+          )}
         style={{ paddingLeft: depth * 12 + 20 }}
         onClick={() => setCurrentPath(node.path)}
       >
@@ -236,7 +270,8 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
         >
           <Star className={cn('size-3', fav && 'fill-amber-400 text-amber-400')} />
         </span>
-      </button>
+        </button>
+      </ContextMenuHost>
     );
   };
 
