@@ -5,22 +5,38 @@ import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
 import type { MenuContext } from '@/components/context-menu/types';
 
 describe('buildCanvasItems', () => {
-  function setup() {
+  function setup(showGrid = true) {
     const ctx: MindmapCanvasCtx = {
       autoLayout: vi.fn(),
       fitView: vi.fn(),
       exportPng: vi.fn(),
+      showGrid,
+      toggleGrid: vi.fn(),
     };
     const mc = { target: null, ctx } as MenuContext<null, MindmapCanvasCtx>;
     return { ctx, mc };
   }
 
-  it('包含 自动布局 / 适应视图 / 导出PNG + 1 分隔符', () => {
+  it('包含 自动布局 / 适应视图 / 网格开关 / 导出PNG + 1 分隔符', () => {
     const { mc } = setup();
     const items = buildCanvasItems(mc);
-    expect(items.map((i) => i.key)).toEqual(['layout', 'fit', 's1', 'export']);
-    expect(items.filter((i) => i.type === 'action')).toHaveLength(3);
-    expect(items.filter((i) => i.type === 'separator')).toHaveLength(1);
+    expect(items.map((i) => i.key)).toEqual(['layout', 'fit', 'grid', 's1', 'export']);
+    expect(items.filter((i) => i.type === 'action')).toHaveLength(4);
+    expect(items.filter((i) =>i.type === 'separator')).toHaveLength(1);
+  });
+
+  it('网格开关 label 随 showGrid 切换且 onSelect 调 ctx.toggleGrid', () => {
+    const { ctx, mc } = setup(true);
+    const gridItem = buildCanvasItems(mc).find((i) => i.key === 'grid');
+    if (gridItem?.type === 'action') {
+      expect(gridItem.label).toBe('隐藏网格');
+      gridItem.onSelect(mc);
+    }
+    expect(ctx.toggleGrid).toHaveBeenCalledTimes(1);
+
+    const off = setup(false);
+    const offItem = buildCanvasItems(off.mc).find((i) => i.key === 'grid');
+    if (offItem?.type === 'action') expect(offItem.label).toBe('显示网格');
   });
 
   it('自动布局 onSelect 调 ctx.autoLayout', () => {

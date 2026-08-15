@@ -2,11 +2,18 @@
 // 自定义思维导图节点：三层级样式（根/一级/叶子）+ 分支色 + 双击编辑 + note 图标 + 右键菜单。
 // React.memo 包裹 + data 稳定引用 + 回调走 Context → 拖拽时只重渲染被拖节点。
 // 右键菜单用通用 ContextMenuHost，菜单项工厂在 nodeContextMenu.ts。
+//
+// 自由画布改造：
+// - 单 source handle + ConnectionMode.Loose（任意方向连线，浮边忽略 handle 位置）
+// - 文本自动换行（whitespace-normal + max-w，修复单行无限宽）
+// - data-style 透传（shadcn 语义 tint 着色，见 index.css）
+// - 双击空白创建的节点 mount 时自动进入编辑（autoEditQueue），失焦仍为空则删除
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import type { MindmapNodeData } from '@ai-task-flow/shared';
 import { useMindmapEditor } from './mindmapContext';
+import { consumeAutoEdit } from './autoEditQueue';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildMindmapNodeItems, type MindmapMenuCtx } from './nodeContextMenu';
 import { cn } from '@/lib/utils';
@@ -35,36 +42,46 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     moveSibling,
     hasChildren,
   } = useMindmapEditor();
-  const [editing, setEditing] = useState(false);
+  // 双击空白创建的节点自动进入编辑（模块队列，一次性消费）
+  const [autoCreated] = useState(() => consumeAutoEdit(id));
+  const [editing, setEditing] = useState(autoCreated);
   // 入场动画：mount 时 opacity 0 + scale 0.88，下一帧过渡到正常（新增节点淡入）
   const [entered, setEntered] = useState(false);
   useEffect(() => {
     const raf = requestAnimationFrame(() => setEntered(true));
     return () => cancelAnimationFrame(raf);
   }, []);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const level = data.level ?? 1;
   const isRoot = level === 0;
   const isBranch = level === 1;
 
-  // 进入编辑态：focus + 光标定位到末尾（新建节点后自动进入编辑的关键体验）
+  // 进入编辑态：focus + 光标定位到末尾 + 高度自适应（新建节点后自动进入编辑的关键体验）
   useEffect(() => {
     if (editing && inputRef.current) {
       const el = inputRef.current;
       el.focus();
       const len = el.value.length;
       el.setSelectionRange(len, len);
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
     }
   }, [editing]);
 
   const commitLabel = useCallback(() => {
     const val = inputRef.current?.value ?? '';
     const trimmed = val.trim();
+    // 双击空白创建的节点未输入内容 → 删除（避免留空白卡片）
+    if (!trimmed && autoCreated) {
+      deleteNode(id);
+      setEditing(false);
+      return;
+    }
     if (trimmed && trimmed !== data.label) {
       updateNodeData(id, { label: trimmed });
     }
     setEditing(false);
-  }, [id, data.label, updateNodeData]);
+  }, [id, data.label, updateNodeData, autoCreated, deleteNode]);
 
   const startEdit = useCallback(() => setEditing(true), []);
 
@@ -113,32 +130,45 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
       <div
         className={cn('mm-card group flex items-center gap-1.5', cardClass, !entered && 'mm-entering')}
         style={branchBgStyle}
+        data-style={data.style?.fill || undefined}
         onDoubleClick={(e) => {
           e.stopPropagation();
           setEditing(true);
         }}
         onContextMenu={(e) => e.stopPropagation()}
       >
-        <Handle type="target" position={Position.Left} />
         {editing ? (
-          <input
+          <textarea
             ref={inputRef}
             defaultValue={data.label}
+            rows={1}
             onBlur={commitLabel}
+            onInput={(e) => {
+              // 高度自适应（回车换行时撑开）
+              const el = e.currentTarget;
+              el.style.height = 'auto';
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 commitLabel();
               } else if (e.key === 'Escape') {
                 setEditing(false);
               }
             }}
-            className={cn('nodrag nopan bg-transparent outline-none min-w-[40px]', textClass)}
-            // 粗略自适应宽度（ch 估算）；RF 内置 ResizeObserver 会重测节点尺寸更新 handle
-            style={{ width: `${Math.max(data.label.length + 1, 4)}ch` }}
+            className={cn(
+              'nodrag nopan bg-transparent outline-none resize-none whitespace-pre-wrap break-words',
+              'min-w-[60px] max-w-[280px]',
+              textClass,
+            )}
+            // 初宽按内容估算；RF ResizeObserver 会重测节点尺寸更新浮边
+            style={{ width: `${Math.min(Math.max(data.label.length + 1, 8), 36)}ch` }}
           />
         ) : (
-          <span className={cn('select-none whitespace-nowrap', textClass)}>{data.label}</span>
+          <span className={cn('select-none whitespace-normal break-words max-w-[280px]', textClass)}>
+            {data.label}
+          </span>
         )}
         {data.note && <FileText className="size-3 shrink-0 opacity-50" />}
         {hasChildren(id) && (
@@ -157,6 +187,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
             )}
           </button>
         )}
+        {/* 浮边 + Loose 模式：单 source handle 即可任意方向连出/连入 */}
         <Handle type="source" position={Position.Right} />
       </div>
     </ContextMenuHost>

@@ -240,6 +240,56 @@ body,
   box-shadow: 0 12px 28px color-mix(in oklch, var(--foreground) 18%, transparent);
 }
 
+/* ============ 自由画布节点标记色（data-style，shadcn 语义 tint） ============
+ * 与 Badge/Alert 同源的着色策略：半透明底 + 实色边 + 前景不变，主题自动跟随。
+ * 语义色（primary/destructive 等）表达强调；chart-1~5 表达中性分类。
+ * 渲染优先级：data-style > data.branch（树形分支色）> 默认 card。
+ */
+.mm-card[data-style='primary'] {
+  background: color-mix(in oklch, var(--primary) 10%, var(--card));
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+}
+.mm-card[data-style='secondary'] {
+  background: color-mix(in oklch, var(--secondary) 60%, var(--card));
+  border-color: color-mix(in oklch, var(--secondary-foreground) 25%, var(--border));
+}
+.mm-card[data-style='destructive'] {
+  background: color-mix(in oklch, var(--destructive) 10%, var(--card));
+  border-color: color-mix(in oklch, var(--destructive) 35%, var(--border));
+}
+.mm-card[data-style='muted'] {
+  background: var(--muted);
+  border-color: color-mix(in oklch, var(--muted-foreground) 25%, var(--border));
+  color: var(--muted-foreground);
+}
+.mm-card[data-style='chart-1'] {
+  background: color-mix(in oklch, var(--chart-1) 14%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-1) 40%, var(--border));
+}
+.mm-card[data-style='chart-2'] {
+  background: color-mix(in oklch, var(--chart-2) 14%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-2) 40%, var(--border));
+}
+.mm-card[data-style='chart-3'] {
+  background: color-mix(in oklch, var(--chart-3) 14%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-3) 40%, var(--border));
+}
+.mm-card[data-style='chart-4'] {
+  background: color-mix(in oklch, var(--chart-4) 14%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-4) 40%, var(--border));
+}
+.mm-card[data-style='chart-5'] {
+  background: color-mix(in oklch, var(--chart-5) 14%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-5) 40%, var(--border));
+}
+
+/* 对齐辅助线（Figma 式红色参考线，pointer-events none 见 HelperLines 组件） */
+.mm-helperline {
+  stroke: var(--destructive);
+  stroke-width: 1;
+  stroke-opacity: 0.75;
+}
+
 /* ============ 分支配色色板（OKLCH，8 色，深浅两套） ============
  * 每个主分支一种色，node.data.branch 决定取色。
  * 色相差 ~45-60°，区分度高不刺眼。超出 8 个分支按 index % 8 循环。
