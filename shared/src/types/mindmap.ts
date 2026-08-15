@@ -42,6 +42,7 @@ export interface MindmapNodeData {
   branch?: BranchKey; // 所属分支色（决定节点/连线配色，树形模式用；自由画布用 style.fill）
   level?: number; // 层级深度，0=根（用于字号/字重/线宽递减，树形模式用）
   imageUrl?: string; // image 节点：/api/uploads/xxx.png（相对路径）
+  images?: string[]; // 文字节点内嵌图片（编辑态粘贴追加，label 下方缩略图展示）
   href?: string; // link 节点：外链 URL
   width?: number; // 可调尺寸节点（image/link/group）的自然宽
   height?: number; // 可调尺寸节点的自然高

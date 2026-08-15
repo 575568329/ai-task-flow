@@ -50,6 +50,7 @@ import { useMindmapActions } from './useMindmapActions';
 import { useCanvasActions, isTreeDocument, normalizeEdgeHandles } from './useCanvasActions';
 import { useAlignmentSnap } from './useAlignmentSnap';
 import { HelperLines } from './HelperLines';
+import { NodeStylePanel } from './NodeStylePanel';
 import { uploadImageFile } from './uploadImage';
 import { useUndoRedo } from './useUndoRedo';
 import { OutlinePanel } from './OutlinePanel';
@@ -564,6 +565,7 @@ function EditorCanvas() {
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable className="bg-card" />
           <OutlinePanel />
+          <NodeStylePanel />
           <HelperLines lines={helperLines} />
         </ReactFlow>
         {editingEdge && (
