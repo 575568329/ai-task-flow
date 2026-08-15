@@ -59,7 +59,8 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
           alt={data.label || '画布图片'}
           draggable={false}
           style={{ width: data.width ?? 240, height: data.height ?? 160 }}
-          className="nodrag rounded-md object-contain"
+          // 不加 nodrag：图片占节点主体，禁拖会导致整节点拖不动；原生拖拽由 draggable=false 防
+          className="rounded-md object-contain"
         />
       ) : uploading ? (
         <div className="flex h-[120px] w-[200px] items-center justify-center rounded-md border border-dashed">

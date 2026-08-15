@@ -224,17 +224,17 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
         {data.images && data.images.length > 0 && (
           <div className="flex max-w-[280px] flex-wrap gap-1">
             {data.images.map((url) => (
-              <img
-                key={url}
-                src={url}
-                alt=""
-                draggable={false}
-                className="nodrag h-20 max-w-[240px] cursor-zoom-in rounded-md border object-cover"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(url, '_blank');
-                }}
-              />
+            <img
+              key={url}
+              src={url}
+              alt=""
+              draggable={false}
+              className="h-20 max-w-[240px] cursor-zoom-in rounded-md border object-cover"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(url, '_blank');
+              }}
+            />
             ))}
           </div>
         )}
