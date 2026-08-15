@@ -52,6 +52,8 @@ import { useAlignmentSnap } from './useAlignmentSnap';
 import { HelperLines } from './HelperLines';
 import { NodeStylePanel } from './NodeStylePanel';
 import { uploadImageFile } from './uploadImage';
+import { parseMermaidFlowchart, toCanvasDraft } from './mermaidImport';
+import { MermaidImportDialog } from './MermaidImportDialog';
 import { useUndoRedo } from './useUndoRedo';
 import { OutlinePanel } from './OutlinePanel';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
@@ -376,7 +378,28 @@ function EditorCanvas() {
         screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
       );
     },
+    openMermaidImport: () => setMermaidDialogOpen(true),
   };
+
+  // Mermaid 导入：解析 → DFS 布局 → 整体平移到视口中心 → 追加到当前画布（不覆盖现有内容）
+  const [mermaidDialogOpen, setMermaidDialogOpen] = useState(false);
+  const handleMermaidImport = useCallback(
+    (text: string): boolean => {
+      const parsed = parseMermaidFlowchart(text);
+      if (!parsed) return false;
+      takeSnapshot();
+      const anchor = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      const draft = toCanvasDraft(parsed, anchor);
+      const { nodes: curNodes, edges: curEdges } = latestRef.current;
+      const cleared = curNodes.map((n) => ({ ...n, selected: false }));
+      setNodes([...cleared, ...(draft.nodes as MindmapRFNode[])]);
+      setEdges([...curEdges.map((e) => ({ ...e, selected: false })), ...(draft.edges as MindmapRFEdge[])]);
+      markDirty();
+      triggerSave();
+      return true;
+    },
+    [screenToFlowPosition, setNodes, setEdges, markDirty, triggerSave, takeSnapshot],
+  );
 
   // 节点操作（加子/加同级/删子树/折叠展开）
   const actions = useMindmapActions({
@@ -588,6 +611,11 @@ function EditorCanvas() {
             placeholder="连线标签…"
           />
         )}
+        <MermaidImportDialog
+          open={mermaidDialogOpen}
+          onOpenChange={setMermaidDialogOpen}
+          onImport={handleMermaidImport}
+        />
         </div>
       </ContextMenuHost>
     </MindmapEditorContext.Provider>

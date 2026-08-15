@@ -15,17 +15,25 @@ describe('buildCanvasItems', () => {
       isTree,
       toggleMode: vi.fn(),
       createImageNode: vi.fn(),
+      openMermaidImport: vi.fn(),
     };
     const mc = { target: null, ctx } as MenuContext<null, MindmapCanvasCtx>;
     return { ctx, mc };
   }
 
-  it('包含 模式切换 / 插入图片 / 自动布局 / 适应视图 / 网格开关 / 导出PNG + 2 分隔符', () => {
+  it('包含 模式切换 / 插入图片 / 导入Mermaid / 自动布局 / 适应视图 / 网格开关 / 导出PNG', () => {
     const { mc } = setup();
     const items = buildCanvasItems(mc);
-    expect(items.map((i) => i.key)).toEqual(['mode', 's0', 'image', 'layout', 'fit', 'grid', 's1', 'export']);
-    expect(items.filter((i) => i.type === 'action')).toHaveLength(6);
+    expect(items.map((i) => i.key)).toEqual(['mode', 's0', 'image', 'mermaid', 'layout', 'fit', 'grid', 's1', 'export']);
+    expect(items.filter((i) => i.type === 'action')).toHaveLength(7);
     expect(items.filter((i) => i.type === 'separator')).toHaveLength(2);
+  });
+
+  it('导入 Mermaid onSelect 调 ctx.openMermaidImport', () => {
+    const { ctx, mc } = setup();
+    const mermaid = buildCanvasItems(mc).find((i) => i.key === 'mermaid');
+    if (mermaid?.type === 'action') mermaid.onSelect(mc);
+    expect(ctx.openMermaidImport).toHaveBeenCalledTimes(1);
   });
 
   it('插入图片 onSelect 调 ctx.createImageNode', () => {

@@ -1,6 +1,6 @@
 // frontend/src/components/mindmap/canvasContextMenu.ts
-// 画布右键菜单（右键画布空白处）：模式切换 / 插入图片 / 自动布局 / 适应视图 / 网格开关 / 导出 PNG。
-import { Sparkles, Maximize, Download, Grid3x3, EyeOff, LayoutGrid, Network, ImagePlus } from 'lucide-react';
+// 画布右键菜单（右键画布空白处）：模式切换 / 插入图片 / 导入 Mermaid / 自动布局 / 适应视图 / 网格开关 / 导出 PNG。
+import { Sparkles, Maximize, Download, Grid3x3, EyeOff, LayoutGrid, Network, ImagePlus, FileCode2 } from 'lucide-react';
 import type { MenuItemBuilder } from '@/components/context-menu/types';
 
 /** 画布右键上下文（由 MindmapEditor 注入） */
@@ -16,6 +16,8 @@ export interface MindmapCanvasCtx {
   toggleMode: () => void;
   /** 在视口中心建图片节点（无图占位，点占位上传） */
   createImageNode: () => void;
+  /** 打开 Mermaid 导入对话框 */
+  openMermaidImport: () => void;
 }
 
 /** 画布右键菜单项工厂（无特定 target，target 固定 null） */
@@ -34,6 +36,13 @@ export const buildCanvasItems: MenuItemBuilder<null, MindmapCanvasCtx> = ({ ctx 
     label: '插入图片',
     icon: ImagePlus,
     onSelect: () => ctx.createImageNode(),
+  },
+  {
+    type: 'action',
+    key: 'mermaid',
+    label: '导入 Mermaid',
+    icon: FileCode2,
+    onSelect: () => ctx.openMermaidImport(),
   },
   {
     type: 'action',
