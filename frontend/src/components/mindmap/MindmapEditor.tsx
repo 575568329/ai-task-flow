@@ -56,6 +56,7 @@ import { useUndoRedo } from './useUndoRedo';
 import { OutlinePanel } from './OutlinePanel';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
+import { cn } from '@/lib/utils';
 
 // 必须在组件外（否则每次渲染新引用 → RF 重注册所有类型 → 全部节点重渲染）
 const nodeTypes = { mindmap: MindmapNode, image: ImageNode, link: LinkNode };
@@ -103,6 +104,10 @@ function EditorCanvas() {
       (current?.edges ?? []) as MindmapRFEdge[],
     );
   });
+
+  // 空格平移模式（Figma 式）：按住空格 → 抓手拖画布、节点不可交互；平时左键框选/双击建节点
+  const [spacePressed, setSpacePressed] = useState(false);
+  const isPanning = spacePressed && !isTree;
 
   // 撤销/重做（事务粒度快照，上限 50 步）。所有变更操作前调 takeSnapshot。
   const undoApi = useUndoRedo({
@@ -388,6 +393,13 @@ function EditorCanvas() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
 
+      // 空格：按住进入平移模式（抓手拖画布，节点不可交互）；松开退出（见 handleKeyUp）
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (!isTree) setSpacePressed(true);
+        return;
+      }
+
       // Delete/Backspace：树形=删选中子树（根不可删）或选中边；自由画布=删选中节点+选中边
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (isTree) {
@@ -433,6 +445,11 @@ function EditorCanvas() {
     },
     [selectedNode, isTree, edges, actions, canvasActions, saveNow, takeSnapshot, undoAction, redoAction],
   );
+
+  // 空格松开退出平移模式（失焦兜底：编辑框抢焦点/切视图时 keyup 可能丢失）
+  const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === ' ') setSpacePressed(false);
+  }, []);
 
   const hasChildren = useCallback(
     (id: string) => latestRef.current.edges.some((e) => e.source === id),
@@ -486,9 +503,11 @@ function EditorCanvas() {
       <ContextMenuHost items={buildCanvasItems} target={null} ctx={canvasCtx}>
         <div
           ref={containerRef}
-          className="relative h-full w-full outline-none"
+          className={cn('relative h-full w-full outline-none', isPanning && 'mm-space-pan')}
           tabIndex={0}
           onKeyDown={handleKeyDown}
+          onKeyUp={handleKeyUp}
+          onBlur={() => setSpacePressed(false)}
           onDoubleClick={onCanvasDoubleClick}
           onDrop={onDrop}
           onDragOver={(e) => {
@@ -514,8 +533,9 @@ function EditorCanvas() {
           onMove={onMove}
           deleteKeyCode={null}
           zoomOnDoubleClick={isTree}
-          selectionOnDrag={!isTree}
-          panOnDrag={isTree ? true : [1, 2]}
+          selectionOnDrag={!isTree && !isPanning}
+          panOnDrag={isTree ? true : isPanning}
+          panActivationKeyCode={null}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           minZoom={0.2}

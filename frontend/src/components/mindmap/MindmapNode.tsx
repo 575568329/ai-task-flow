@@ -198,8 +198,11 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
             )}
           </button>
         )}
-        {/* 浮边 + Loose 模式：单 source handle 即可任意方向连出/连入 */}
-        <Handle type="source" position={Position.Right} />
+        {/* 四向连接点（Obsidian 式）：浮边渲染忽略具体 handle，连线从包围盒交点出发 */}
+        <Handle type="source" position={Position.Top} id="top" />
+        <Handle type="source" position={Position.Right} id="right" />
+        <Handle type="source" position={Position.Bottom} id="bottom" />
+        <Handle type="source" position={Position.Left} id="left" />
       </div>
     </ContextMenuHost>
   );

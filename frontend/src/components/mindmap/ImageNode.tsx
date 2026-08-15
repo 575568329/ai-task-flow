@@ -48,7 +48,11 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
       onContextMenu={(e) => e.stopPropagation()}
     >
       <NodeResizer keepAspectRatio minWidth={60} minHeight={40} isVisible={selected} />
-      <Handle type="source" position={Position.Right} />
+      {/* 四向连接点：浮边渲染忽略具体 handle，连线从包围盒交点出发 */}
+      <Handle type="source" position={Position.Top} id="top" />
+      <Handle type="source" position={Position.Right} id="right" />
+      <Handle type="source" position={Position.Bottom} id="bottom" />
+      <Handle type="source" position={Position.Left} id="left" />
       {data.imageUrl ? (
         <img
           src={data.imageUrl}

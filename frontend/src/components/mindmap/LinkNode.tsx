@@ -27,7 +27,11 @@ export const LinkNode = memo(function LinkNode({ id, data }: NodeProps<LinkRFNod
       }}
       onContextMenu={(e) => e.stopPropagation()}
     >
-      <Handle type="source" position={Position.Right} />
+      {/* 四向连接点：浮边渲染忽略具体 handle，连线从包围盒交点出发 */}
+      <Handle type="source" position={Position.Top} id="top" />
+      <Handle type="source" position={Position.Right} id="right" />
+      <Handle type="source" position={Position.Bottom} id="bottom" />
+      <Handle type="source" position={Position.Left} id="left" />
       <div className="flex items-center gap-1.5">
         <Link2 className="size-3.5 shrink-0 text-primary" />
         {editingLabel ? (
