@@ -1,38 +1,33 @@
 // frontend/src/components/mindmap/BranchEdge.tsx
-// 自定义连线：浮边（floating edge）+ 分支色 + 无箭头。
+// 自定义连线：贝塞尔曲线 + 分支色 + 无箭头 + 连线标签。
 //
-// 浮边：忽略固定 handle 方向，从 nodeLookup 读 source/target 节点，
-// 用中心连线与包围盒的交点作为端点（见 floatingEdgeUtils），
-// 节点任意摆放/缩放时连线自动跟随且从最近的边出发。
-// measured 未就绪（新节点首帧）时跳过渲染一帧，避免 NaN 路径。
+// 端点锚定 handle（Obsidian 式）：直接用 RF 传入的 source/target 坐标与朝向
+// （由 sourceHandle/targetHandle + 节点位置计算），线连在连接点上、随节点移动跟随。
+// 四向 handle（top/right/bottom/left）+ Loose 模式下，从哪个点拖出就连哪个点，
+// 落点吸附目标节点最近的 handle。
 import { memo } from 'react';
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, useStore, type EdgeProps, type Edge } from '@xyflow/react';
-import { getFloatingEdgeParams, toFloatingBox } from './floatingEdgeUtils';
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps, type Edge } from '@xyflow/react';
 
 export type MindmapRFEdge = Edge<{ branch?: string; label?: string }, 'mindmap'>;
 
 export const BranchEdge = memo(function BranchEdge({
   id,
-  source,
-  target,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
   data,
   selected,
 }: EdgeProps<MindmapRFEdge>) {
-  // 精确订阅两端节点（引用不变则本边不重渲染；拖动时只有相关边重算）
-  const sourceNode = useStore((s) => s.nodeLookup.get(source));
-  const targetNode = useStore((s) => s.nodeLookup.get(target));
-
-  if (!sourceNode || !targetNode) return null;
-  const params = getFloatingEdgeParams(toFloatingBox(sourceNode), toFloatingBox(targetNode));
-  if (!params) return null; // measured 未就绪，跳过本帧
-
   const [path, labelX, labelY] = getBezierPath({
-    sourceX: params.sx,
-    sourceY: params.sy,
-    sourcePosition: params.sourcePos,
-    targetX: params.tx,
-    targetY: params.ty,
-    targetPosition: params.targetPos,
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
     curvature: 0.5,
   });
 

@@ -44,11 +44,10 @@ import { MindmapNode, type MindmapRFNode } from './MindmapNode';
 import { ImageNode } from './ImageNode';
 import { LinkNode } from './LinkNode';
 import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
-import { FloatingConnectionLine } from './FloatingConnectionLine';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
 import { getLayoutedElements } from './layout';
 import { useMindmapActions } from './useMindmapActions';
-import { useCanvasActions, isTreeDocument } from './useCanvasActions';
+import { useCanvasActions, isTreeDocument, normalizeEdgeHandles } from './useCanvasActions';
 import { useAlignmentSnap } from './useAlignmentSnap';
 import { HelperLines } from './HelperLines';
 import { uploadImageFile } from './uploadImage';
@@ -80,7 +79,7 @@ function EditorCanvas() {
     (current?.nodes ?? []) as MindmapRFNode[],
   );
   const [edges, setEdges] = useState<MindmapRFEdge[]>(() =>
-    (current?.edges ?? []) as MindmapRFEdge[],
+    normalizeEdgeHandles((current?.edges ?? []) as MindmapRFEdge[]),
   );
   const [viewport, setViewport] = useState<MindmapViewport>(
     () => current?.viewport ?? { x: 0, y: 0, zoom: 1 },
@@ -522,7 +521,6 @@ function EditorCanvas() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          connectionLineComponent={FloatingConnectionLine}
           connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}

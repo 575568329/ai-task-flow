@@ -29,6 +29,19 @@ export function isTreeDocument(nodes: MindmapRFNode[], edges: MindmapRFEdge[]): 
   return nodes.some((n) => !inDegree.has(n.id));
 }
 
+/**
+ * 旧文档边数据归一化：四向 handle 之前的边没有 sourceHandle/targetHandle，
+ * 按"右出左进"（原树形约定）补齐，保证线锚定在连接点上而非节点中心。
+ * 导出供测试。
+ */
+export function normalizeEdgeHandles(edges: MindmapRFEdge[]): MindmapRFEdge[] {
+  return edges.map((e) => ({
+    ...e,
+    sourceHandle: e.sourceHandle ?? 'right',
+    targetHandle: e.targetHandle ?? 'left',
+  }));
+}
+
 /** 删除节点集合 + 连带边（自由画布语义：只删选中，不删子树）。导出供测试。 */
 export function removeNodesWithEdges(
   nodes: MindmapRFNode[],

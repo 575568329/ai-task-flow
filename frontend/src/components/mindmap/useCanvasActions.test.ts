@@ -1,7 +1,7 @@
 // frontend/src/components/mindmap/useCanvasActions.test.ts
 // 自由画布操作纯函数单测：模式判定 + 删除语义（不依赖 RF 运行时）
 import { describe, it, expect } from 'vitest';
-import { isTreeDocument, removeNodesWithEdges } from './useCanvasActions';
+import { isTreeDocument, removeNodesWithEdges, normalizeEdgeHandles } from './useCanvasActions';
 import type { MindmapRFNode } from './MindmapNode';
 import type { MindmapRFEdge } from './BranchEdge';
 
@@ -77,5 +77,21 @@ describe('removeNodesWithEdges', () => {
     const result = removeNodesWithEdges(nodes, edges, []);
     expect(result.nodes).toHaveLength(1);
     expect(result.edges).toHaveLength(1);
+  });
+});
+
+describe('normalizeEdgeHandles', () => {
+  it('should fill right/left handles for legacy edges without them', () => {
+    const edges = [e('e1', 'a', 'b')];
+    const result = normalizeEdgeHandles(edges);
+    expect(result[0].sourceHandle).toBe('right');
+    expect(result[0].targetHandle).toBe('left');
+  });
+
+  it('should keep existing handles untouched', () => {
+    const edges = [{ ...e('e1', 'a', 'b'), sourceHandle: 'top', targetHandle: 'bottom' }];
+    const result = normalizeEdgeHandles(edges);
+    expect(result[0].sourceHandle).toBe('top');
+    expect(result[0].targetHandle).toBe('bottom');
   });
 });
