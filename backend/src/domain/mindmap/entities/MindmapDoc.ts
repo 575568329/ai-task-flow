@@ -27,7 +27,7 @@ export class MindmapDoc {
   constructor(
     public readonly id: string,
     public title: string,
-    public readonly docMode: MindmapDocMode,
+    public docMode: MindmapDocMode,
     public version: number,
     public nodeCount: number,
     public nodes: MindmapFlowNode[],
@@ -91,6 +91,12 @@ export class MindmapDoc {
    */
   applyUpdate(dto: MindmapUpdateDTO): void {
     if (dto.title !== undefined) this.rename(dto.title);
+    if (dto.docMode !== undefined) {
+      if (dto.docMode !== 'tree' && dto.docMode !== 'canvas') {
+        throw new Error(`非法 docMode：${String(dto.docMode)}`);
+      }
+      this.docMode = dto.docMode;
+    }
     if (dto.nodes !== undefined || dto.edges !== undefined) {
       // 整图替换：任一缺省则沿用当前值，保证校验时 nodes/edges 引用一致
       this.updateGraph(dto.nodes ?? this.nodes, dto.edges ?? this.edges);

@@ -36,7 +36,7 @@ import {
   type OnMove,
   type Edge,
 } from '@xyflow/react';
-import type { MindmapFlowEdge, MindmapFlowNode, MindmapViewport } from '@ai-task-flow/shared';
+import type { MindmapDocMode, MindmapFlowEdge, MindmapFlowNode, MindmapViewport } from '@ai-task-flow/shared';
 import { mindmapApi } from '@/api/mindmap';
 import { toPng } from 'html-to-image';
 import { useMindmapStore } from '@/stores/mindmapStore';
@@ -94,19 +94,25 @@ function EditorCanvas() {
   const latestRef = useRef({ nodes, edges, viewport });
   latestRef.current = { nodes, edges, viewport };
 
-  // 文档形态：docMode 优先（创建时确定、持久化、不可变）；
-  // 旧文档缺省时用启发式推断（挂载时一次性判定，编辑过程不漂移——避免模式随图形状来回翻转）。
-  const [isTree] = useState(() => {
+  // 文档形态：docMode 优先（创建时确定、持久化）；旧文档缺省时用启发式推断。
+  // 可运行时切换（右键菜单），切换值随下次保存 PATCH 落库（pendingDocMode）。
+  const [isTree, setIsTree] = useState(() => {
     if (current?.docMode) return current.docMode === 'tree';
     return isTreeDocument(
       (current?.nodes ?? []) as MindmapRFNode[],
       (current?.edges ?? []) as MindmapRFEdge[],
     );
   });
+  // 待落库的模式切换值（与 nodes/edges 同一次 PATCH 提交，避免乐观锁冲突）
+  const [pendingDocMode, setPendingDocMode] = useState<MindmapDocMode | null>(null);
+  // ref 供 debounce 保存闭包读取最新值（避免捕获过期 state）
+  const pendingDocModeRef = useRef<MindmapDocMode | null>(null);
+  pendingDocModeRef.current = pendingDocMode;
 
-  // 空格平移模式（Figma 式）：按住空格 → 抓手拖画布、节点不可交互；平时左键框选/双击建节点
+  // 空格平移模式（Figma 式，全模式统一）：按住空格 → 抓手拖画布、节点不可交互；
+  // 平时左键框选/双击建节点
   const [spacePressed, setSpacePressed] = useState(false);
-  const isPanning = spacePressed && !isTree;
+  const isPanning = spacePressed;
 
   // 撤销/重做（事务粒度快照，上限 50 步）。所有变更操作前调 takeSnapshot。
   const undoApi = useUndoRedo({
@@ -132,9 +138,12 @@ function EditorCanvas() {
         nodes: cleanNodes,
         edges: cleanEdges,
         viewport: vp,
+        // 模式切换值随本次一起提交（单独 PATCH 会与 pending 保存互相 409）
+        ...(pendingDocModeRef.current ? { docMode: pendingDocModeRef.current } : {}),
         expectedVersion: current.version, // 乐观锁基准
       });
       onSaved(updated.version);
+      setPendingDocMode(null);
     } catch {
       setSaveStatus('error');
       // http 拦截器已 toast（含 409 冲突提示）
@@ -356,6 +365,14 @@ function EditorCanvas() {
     exportPng,
     showGrid,
     toggleGrid: () => setShowGrid((v) => !v),
+    isTree,
+    toggleMode: () => {
+      const next: MindmapDocMode = isTree ? 'canvas' : 'tree';
+      setIsTree(!isTree);
+      setPendingDocMode(next);
+      markDirty();
+      triggerSave();
+    },
   };
 
   // 节点操作（加子/加同级/删子树/折叠展开）
@@ -395,7 +412,7 @@ function EditorCanvas() {
       // 空格：按住进入平移模式（抓手拖画布，节点不可交互）；松开退出（见 handleKeyUp）
       if (e.key === ' ') {
         e.preventDefault();
-        if (!isTree) setSpacePressed(true);
+        setSpacePressed(true);
         return;
       }
 
@@ -531,8 +548,8 @@ function EditorCanvas() {
           onMove={onMove}
           deleteKeyCode={null}
           zoomOnDoubleClick={isTree}
-          selectionOnDrag={!isTree && !isPanning}
-          panOnDrag={isTree ? true : isPanning}
+          selectionOnDrag={!isPanning}
+          panOnDrag={isPanning}
           panActivationKeyCode={null}
           fitView
           fitViewOptions={{ padding: 0.3 }}

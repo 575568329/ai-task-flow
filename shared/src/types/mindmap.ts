@@ -140,6 +140,7 @@ export interface MindmapCreateDTO {
  */
 export interface MindmapUpdateDTO {
   title?: string;
+  docMode?: MindmapDocMode; // 模式切换（右键菜单切换，随下次保存提交）
   nodes?: MindmapFlowNode[];
   edges?: MindmapFlowEdge[];
   viewport?: MindmapViewport;
