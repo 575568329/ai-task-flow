@@ -128,7 +128,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
   return (
     <ContextMenuHost items={buildMindmapNodeItems} target={{ id, data }} ctx={menuCtx}>
       <div
-        className={cn('mm-card group flex items-center gap-1.5', cardClass, !entered && 'mm-entering')}
+        className={cn('mm-card nopan group flex items-center gap-1.5', cardClass, !entered && 'mm-entering')}
         style={branchBgStyle}
         data-style={data.style?.fill || undefined}
         onDoubleClick={(e) => {
@@ -150,10 +150,16 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
               el.style.height = `${el.scrollHeight}px`;
             }}
             onKeyDown={(e) => {
+              // IME 组合输入中不响应快捷键（中文拼音按 Enter 选词不触发提交）
+              if (e.nativeEvent.isComposing) return;
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 commitLabel();
               } else if (e.key === 'Escape') {
+                // R3：Escape 不触发 onBlur，自动创建的空节点需显式删除（防永久空壳）
+                if (autoCreated && !inputRef.current?.value.trim()) {
+                  deleteNode(id);
+                }
                 setEditing(false);
               }
             }}

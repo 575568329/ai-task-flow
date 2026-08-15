@@ -2,6 +2,7 @@
 import { MINDMAP_LIMITS } from '@ai-task-flow/shared';
 import type {
   MindmapDocDTO,
+  MindmapDocMode,
   MindmapFlowEdge,
   MindmapFlowNode,
   MindmapUpdateDTO,
@@ -19,11 +20,14 @@ const ROOT_NODE_LABEL = '中心主题';
  *
  * 图结构以 React Flow 原生 nodes/edges 结构存储（经 shared 的结构同构 interface 传递），
  * 聚合根对其按整体 blob 校验引用完整性，不关心单个节点的渲染态字段。
+ *
+ * docMode：文档形态（tree/canvas），创建时确定、持久化、不可变（PATCH 不改）。
  */
 export class MindmapDoc {
   constructor(
     public readonly id: string,
     public title: string,
+    public readonly docMode: MindmapDocMode,
     public version: number,
     public nodeCount: number,
     public nodes: MindmapFlowNode[],
@@ -33,26 +37,32 @@ export class MindmapDoc {
     public updatedAt: Date,
   ) {}
 
-  /** 工厂：新建一张图，含一个默认根节点（level 0）。 */
-  static create(title?: string): MindmapDoc {
+  /** 工厂：tree 模式含一个默认根节点（level 0）；canvas 模式空画布（双击建节点）。 */
+  static create(title?: string, docMode: MindmapDocMode = 'tree'): MindmapDoc {
     const now = new Date();
     const resolvedTitle = MindmapDoc.normalizeTitle(title);
-    const root: MindmapFlowNode = {
-      id: crypto.randomUUID(),
-      type: 'mindmap',
-      position: { x: 0, y: 0 },
-      data: {
-        label: resolvedTitle === DEFAULT_TITLE ? ROOT_NODE_LABEL : resolvedTitle,
-        level: 0,
-        expanded: true,
-      },
-    };
+    const nodes: MindmapFlowNode[] =
+      docMode === 'canvas'
+        ? []
+        : [
+            {
+              id: crypto.randomUUID(),
+              type: 'mindmap',
+              position: { x: 0, y: 0 },
+              data: {
+                label: resolvedTitle === DEFAULT_TITLE ? ROOT_NODE_LABEL : resolvedTitle,
+                level: 0,
+                expanded: true,
+              },
+            },
+          ];
     return new MindmapDoc(
       crypto.randomUUID(),
       resolvedTitle,
+      docMode,
       0, // version
-      1, // nodeCount
-      [root],
+      nodes.length, // nodeCount
+      nodes,
       [],
       null, // viewport（首次创建未保存视口）
       now,
@@ -118,6 +128,7 @@ export class MindmapDoc {
     return {
       id: this.id,
       title: this.title,
+      docMode: this.docMode,
       version: this.version,
       nodeCount: this.nodeCount,
       nodes: this.nodes,
@@ -132,6 +143,7 @@ export class MindmapDoc {
     return new MindmapDoc(
       dto.id,
       dto.title,
+      dto.docMode ?? 'tree', // 旧文档缺省视为树形（由树形流程创建）
       dto.version,
       dto.nodeCount,
       dto.nodes,

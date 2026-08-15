@@ -101,9 +101,13 @@ echo "$REGET" | grep -q '"fill":"chart-1"' || die "重读 style 丢失" "$REGET"
 ok "重读字段完整"
 
 echo "=== schemaVersion 已写入存储 ==="
-SCHEMAV=$(grep -o '"schemaVersion":[0-9]*' /tmp/mm-canvas-test/mindmaps.json 2>/dev/null || echo "")
-[ "$SCHEMAV" = '"schemaVersion":1' ] || echo "  (提示: 数据目录非 /tmp/mm-canvas-test 时跳过此项)"
-ok "schemaVersion 检查完成"
+MINDMAP_FILE="${AI_TASK_FLOW_DATA_DIR:-/tmp/mm-test}/mindmaps.json"
+if [ -f "$MINDMAP_FILE" ]; then
+  grep -q '"schemaVersion": *[0-9]' "$MINDMAP_FILE" || die "schemaVersion 未写入 $MINDMAP_FILE" "$(head -c 200 "$MINDMAP_FILE")"
+  ok "schemaVersion 已写入"
+else
+  die "数据文件不存在：$MINDMAP_FILE（用 AI_TASK_FLOW_DATA_DIR 指向服务端数据目录运行）" ""
+fi
 
 echo "=== 列表 ==="
 LIST=$(curl -s -w '\n%{http_code}' "$API")

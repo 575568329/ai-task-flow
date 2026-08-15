@@ -80,7 +80,7 @@ export class MindmapService {
     if (count >= MINDMAP_LIMITS.MAX_DOCS) {
       throw new MindmapLimitExceededError(`思维导图数量已达上限 ${MINDMAP_LIMITS.MAX_DOCS}`);
     }
-    const doc = MindmapDoc.create(dto.title);
+    const doc = MindmapDoc.create(dto.title, dto.docMode ?? 'tree');
     await this.repository.save(doc);
     logger.info('createMindmap 成功', { id: doc.id, title: doc.title });
     return doc.toJSON();
@@ -134,11 +134,12 @@ export class MindmapService {
     }
     const source = await this.repository.findById(id);
     if (!source) throw new MindmapNotFoundError(id);
-    const copy = MindmapDoc.create(`${source.title} 副本`);
-    // 用源图内容整体替换（applyUpdate 会校验 + version++）
+    const copy = MindmapDoc.create(`${source.title} 副本`, source.docMode);
+    // 用源图内容整体替换（applyUpdate 会校验 + version++）。
+    // structuredClone 深拷贝嵌套 data（style 等嵌套对象不与源共享引用）
     copy.applyUpdate({
-      nodes: source.nodes.map(n => ({ ...n, data: { ...n.data } })),
-      edges: source.edges.map(e => ({ ...e, data: e.data ? { ...e.data } : undefined })),
+      nodes: source.nodes.map(n => ({ ...n, data: structuredClone(n.data) })),
+      edges: source.edges.map(e => ({ ...e, data: e.data ? structuredClone(e.data) : undefined })),
     });
     await this.repository.save(copy);
     logger.info('duplicateMindmap 成功', { from: id, to: copy.id });

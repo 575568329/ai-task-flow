@@ -52,18 +52,26 @@ export function getLayoutedElements<T extends LayoutNode>(
 
   const positions = new Map<string, { x: number; y: number }>();
   let yCursor = 0;
+  // 访问标记：自由画布允许环（a→b→c→a），无标记会死递归栈溢出（R5）。
+  // 环上/未达节点保留旧坐标（只排有根的主树分量）。
+  const visited = new Set<string>();
 
   // DFS：叶子按顺序占 y，父居中于首尾子的 y 中点
+  // 环处理：已访问节点直接 return（不占 y）；若某节点的子全部是环回边（yCursor 未推进），
+  // 该节点按叶子布局——避免用负的 lastY 算出越界坐标。
   const dfs = (id: string, depth: number) => {
+    if (visited.has(id)) return;
+    visited.add(id);
     const children = childrenOf.get(id) ?? [];
     const h = nodeHeightOf(id);
-    if (children.length === 0) {
+    const firstY = yCursor;
+    for (const child of children) dfs(child, depth + 1);
+    if (yCursor === firstY) {
+      // 无有效子（环回边或空子列表）：按叶子占位
       positions.set(id, { x: depth * RANKSEP, y: yCursor });
       yCursor += h + NODESEP;
       return;
     }
-    const firstY = yCursor;
-    for (const child of children) dfs(child, depth + 1);
     const lastY = yCursor - NODESEP - nodeHeightOf(children[children.length - 1]);
     positions.set(id, { x: depth * RANKSEP, y: (firstY + lastY) / 2 });
   };

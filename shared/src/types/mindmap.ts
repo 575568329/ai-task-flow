@@ -24,6 +24,9 @@ export interface MindmapViewport {
   zoom: number;
 }
 
+/** 文档形态：树形思维导图 / 自由画布。创建时确定并持久化（消除模式漂移）。 */
+export type MindmapDocMode = 'tree' | 'canvas';
+
 /**
  * 节点业务数据（存于 React Flow node.data，随 toObject() 序列化）。
  * index signature 满足 React Flow 的 Node<T> 约束（T extends Record<string, unknown>），
@@ -100,10 +103,11 @@ export interface MindmapFlowEdge {
   [key: string]: unknown;
 }
 
-/** 一张完整的思维导图文档 */
+/** 一张完整的思维导图/画布文档 */
 export interface MindmapDocDTO {
   id: string;
   title: string;
+  docMode?: MindmapDocMode; // 文档形态（旧文档缺省由前端启发式推断）
   version: number; // 乐观锁版本号，每次 PATCH 自增
   nodeCount: number; // 冗余字段，列表接口直接读取、不解析 nodes
   nodes: MindmapFlowNode[];
@@ -117,6 +121,7 @@ export interface MindmapDocDTO {
 export interface MindmapMetaDTO {
   id: string;
   title: string;
+  docMode?: MindmapDocMode;
   nodeCount: number;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +130,7 @@ export interface MindmapMetaDTO {
 /** 新建文档入参（title 可选，缺省走默认标题） */
 export interface MindmapCreateDTO {
   title?: string;
+  docMode?: MindmapDocMode; // 缺省 'tree'（API 兼容）；前端新建画布时显式传 'canvas'
 }
 
 /**

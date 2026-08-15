@@ -99,7 +99,12 @@ export class JsonMindmapRepository implements MindmapRepository {
 
   private async saveAll(data: MindmapStorageData): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const withVersion = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
+    // 版本取 max：未来版本数据（如 v99）不被降级盖章——降级会让再升级时
+    // 迁移链把高版本形状的数据当低版本跑全套迁移，损坏数据（R4）
+    const withVersion = {
+      ...data,
+      schemaVersion: Math.max(data.schemaVersion ?? 0, CURRENT_SCHEMA_VERSION),
+    };
     // 原子写：先写 .tmp 再 rename 替换。rename 是原子操作，写崩不会损坏主文件。
     const tmp = `${this.filePath}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(withVersion, null, 2), 'utf-8');

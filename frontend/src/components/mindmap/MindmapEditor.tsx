@@ -88,9 +88,15 @@ function EditorCanvas() {
   const latestRef = useRef({ nodes, edges, viewport });
   latestRef.current = { nodes, edges, viewport };
 
-  // 文档形态：树形（单根、无多父）用树形操作语义，否则自由画布语义。
-  // 每次变更重算（O(n+e) 纯坐标计算，成本可忽略）。
-  const isTree = useMemo(() => isTreeDocument(nodes, edges), [nodes, edges]);
+  // 文档形态：docMode 优先（创建时确定、持久化、不可变）；
+  // 旧文档缺省时用启发式推断（挂载时一次性判定，编辑过程不漂移——避免模式随图形状来回翻转）。
+  const [isTree] = useState(() => {
+    if (current?.docMode) return current.docMode === 'tree';
+    return isTreeDocument(
+      (current?.nodes ?? []) as MindmapRFNode[],
+      (current?.edges ?? []) as MindmapRFEdge[],
+    );
+  });
 
   // 撤销/重做（事务粒度快照，上限 50 步）。所有变更操作前调 takeSnapshot。
   const undoApi = useUndoRedo({
@@ -108,9 +114,13 @@ function EditorCanvas() {
     setSaveStatus('saving');
     try {
       const { nodes: n, edges: e, viewport: vp } = latestRef.current;
+      // 剥离瞬态渲染字段（selected/dragging 是 UI 态不应落库；hidden 有折叠语义、
+      // measured 由 RF 重测，均保留）
+      const cleanNodes = (n as MindmapFlowNode[]).map(({ selected: _s, dragging: _d, ...rest }) => rest);
+      const cleanEdges = (e as MindmapFlowEdge[]).map(({ selected: _s, ...rest }) => rest);
       const updated = await mindmapApi.update(current.id, {
-        nodes: n as MindmapFlowNode[],
-        edges: e as MindmapFlowEdge[],
+        nodes: cleanNodes,
+        edges: cleanEdges,
         viewport: vp,
         expectedVersion: current.version, // 乐观锁基准
       });
@@ -329,14 +339,19 @@ function EditorCanvas() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
 
-      // Delete/Backspace：树形=删选中子树（根不可删）；自由画布=删选中节点+选中边
+      // Delete/Backspace：树形=删选中子树（根不可删）或选中边；自由画布=删选中节点+选中边
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (isTree) {
-          if (!selectedNode) return;
-          if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
-          e.preventDefault();
-          takeSnapshot();
-          actions.deleteNode(selectedNode.id);
+          if (selectedNode) {
+            if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
+            e.preventDefault();
+            takeSnapshot();
+            actions.deleteNode(selectedNode.id);
+          } else if (edges.some((ed) => ed.selected)) {
+            // 恢复旧版"删选中边"能力（R6 回归修复）
+            e.preventDefault();
+            canvasActions.deleteSelection();
+          }
         } else {
           e.preventDefault();
           canvasActions.deleteSelection();
@@ -356,7 +371,7 @@ function EditorCanvas() {
         actions.addSiblingNode(selectedNode.id);
       }
     },
-    [selectedNode, isTree, actions, canvasActions, saveNow, takeSnapshot, undoAction, redoAction],
+    [selectedNode, isTree, edges, actions, canvasActions, saveNow, takeSnapshot, undoAction, redoAction],
   );
 
   const hasChildren = useCallback(
@@ -453,6 +468,7 @@ function EditorCanvas() {
             onChange={(e) => setEditingEdge({ ...editingEdge, value: e.target.value })}
             onBlur={commitEdgeLabel}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return; // IME 组合输入中不提交
               if (e.key === 'Enter') {
                 e.preventDefault();
                 commitEdgeLabel();
