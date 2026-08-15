@@ -241,46 +241,47 @@ body,
 }
 
 /* ============ 自由画布节点标记色（data-style，shadcn 语义 tint） ============
- * 与 Badge/Alert 同源的着色策略：半透明底 + 实色边 + 前景不变，主题自动跟随。
- * 语义色（primary/destructive 等）表达强调；chart-1~5 表达中性分类。
+ * 着色策略：半透明底 + 实色边 + 前景不变，主题自动跟随。
+ * 混入比例 22%（语义深色系 16%）——太淡没有标记效果，太浓文字对比度崩。
+ * 色板 swatch 用同款 color-mix 渲染（NodeStylePanel），保证选中即所见。
  * 渲染优先级：data-style > data.branch（树形分支色）> 默认 card。
  */
 .mm-card[data-style='primary'] {
-  background: color-mix(in oklch, var(--primary) 10%, var(--card));
-  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  background: color-mix(in oklch, var(--primary) 16%, var(--card));
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
 }
 .mm-card[data-style='secondary'] {
-  background: color-mix(in oklch, var(--secondary) 60%, var(--card));
-  border-color: color-mix(in oklch, var(--secondary-foreground) 25%, var(--border));
+  background: color-mix(in oklch, var(--secondary) 70%, var(--card));
+  border-color: color-mix(in oklch, var(--secondary-foreground) 30%, var(--border));
 }
 .mm-card[data-style='destructive'] {
-  background: color-mix(in oklch, var(--destructive) 10%, var(--card));
-  border-color: color-mix(in oklch, var(--destructive) 35%, var(--border));
+  background: color-mix(in oklch, var(--destructive) 16%, var(--card));
+  border-color: color-mix(in oklch, var(--destructive) 40%, var(--border));
 }
 .mm-card[data-style='muted'] {
   background: var(--muted);
-  border-color: color-mix(in oklch, var(--muted-foreground) 25%, var(--border));
+  border-color: color-mix(in oklch, var(--muted-foreground) 28%, var(--border));
   color: var(--muted-foreground);
 }
 .mm-card[data-style='chart-1'] {
-  background: color-mix(in oklch, var(--chart-1) 14%, var(--card));
-  border-color: color-mix(in oklch, var(--chart-1) 40%, var(--border));
+  background: color-mix(in oklch, var(--chart-1) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-1) 48%, var(--border));
 }
 .mm-card[data-style='chart-2'] {
-  background: color-mix(in oklch, var(--chart-2) 14%, var(--card));
-  border-color: color-mix(in oklch, var(--chart-2) 40%, var(--border));
+  background: color-mix(in oklch, var(--chart-2) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-2) 48%, var(--border));
 }
 .mm-card[data-style='chart-3'] {
-  background: color-mix(in oklch, var(--chart-3) 14%, var(--card));
-  border-color: color-mix(in oklch, var(--chart-3) 40%, var(--border));
+  background: color-mix(in oklch, var(--chart-3) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-3) 48%, var(--border));
 }
 .mm-card[data-style='chart-4'] {
-  background: color-mix(in oklch, var(--chart-4) 14%, var(--card));
-  border-color: color-mix(in oklch, var(--chart-4) 40%, var(--border));
+  background: color-mix(in oklch, var(--chart-4) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-4) 48%, var(--border));
 }
 .mm-card[data-style='chart-5'] {
-  background: color-mix(in oklch, var(--chart-5) 14%, var(--card));
-  border-color: color-mix(in oklch, var(--chart-5) 40%, var(--border));
+  background: color-mix(in oklch, var(--chart-5) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-5) 48%, var(--border));
 }
 
 /* 样式维度：边框样式/圆角/字号（data-style 同源属性控制） */

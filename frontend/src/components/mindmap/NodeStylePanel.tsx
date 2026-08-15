@@ -8,18 +8,19 @@ import type { CanvasFill, CanvasNodeStyle, MindmapNodeData } from '@ai-task-flow
 import { useMindmapEditor } from './mindmapContext';
 import { cn } from '@/lib/utils';
 
-/** 色板：语义强调色 + chart 中性分类色 */
+/** 色板：语义强调色 + chart 中性分类色。
+ *  swatch 用与节点渲染完全一致的 color-mix（选中即所见，不显示纯色造成预期落差）。 */
 const FILLS: Array<{ key: CanvasFill; title: string; swatch: string }> = [
   { key: 'default', title: '默认', swatch: 'transparent' },
-  { key: 'primary', title: '重点', swatch: 'var(--primary)' },
-  { key: 'secondary', title: '次要', swatch: 'var(--secondary-foreground)' },
-  { key: 'destructive', title: '警示', swatch: 'var(--destructive)' },
-  { key: 'muted', title: '弱化', swatch: 'var(--muted-foreground)' },
-  { key: 'chart-1', title: '分类 1', swatch: 'var(--chart-1)' },
-  { key: 'chart-2', title: '分类 2', swatch: 'var(--chart-2)' },
-  { key: 'chart-3', title: '分类 3', swatch: 'var(--chart-3)' },
-  { key: 'chart-4', title: '分类 4', swatch: 'var(--chart-4)' },
-  { key: 'chart-5', title: '分类 5', swatch: 'var(--chart-5)' },
+  { key: 'primary', title: '重点', swatch: 'color-mix(in oklch, var(--primary) 16%, var(--card))' },
+  { key: 'secondary', title: '次要', swatch: 'color-mix(in oklch, var(--secondary) 70%, var(--card))' },
+  { key: 'destructive', title: '警示', swatch: 'color-mix(in oklch, var(--destructive) 16%, var(--card))' },
+  { key: 'muted', title: '弱化', swatch: 'var(--muted)' },
+  { key: 'chart-1', title: '分类 1', swatch: 'color-mix(in oklch, var(--chart-1) 22%, var(--card))' },
+  { key: 'chart-2', title: '分类 2', swatch: 'color-mix(in oklch, var(--chart-2) 22%, var(--card))' },
+  { key: 'chart-3', title: '分类 3', swatch: 'color-mix(in oklch, var(--chart-3) 22%, var(--card))' },
+  { key: 'chart-4', title: '分类 4', swatch: 'color-mix(in oklch, var(--chart-4) 22%, var(--card))' },
+  { key: 'chart-5', title: '分类 5', swatch: 'color-mix(in oklch, var(--chart-5) 22%, var(--card))' },
 ];
 
 const FONT_SIZES: Array<{ key: NonNullable<CanvasNodeStyle['fontSize']>; label: string }> = [
