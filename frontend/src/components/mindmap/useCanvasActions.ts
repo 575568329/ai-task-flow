@@ -66,6 +66,8 @@ export interface CanvasActions {
   ) => void;
   /** 拖拽 URL 后在落点建 link 节点 */
   createLinkAt: (position: { x: number; y: number }, href: string) => void;
+  /** 建 image 节点（无图占位，点占位按钮上传；右键菜单入口用） */
+  createImageNodeAt: (position: { x: number; y: number }) => void;
   /** 删除节点集合 + 连带边 */
   deleteNodes: (ids: string[]) => void;
   /** 删除选中的节点 + 选中的连线（单事务：一次快照一次保存） */
@@ -169,6 +171,26 @@ export function useCanvasActions(params: {
     [getLatest, setNodes, markDirty, triggerSave, takeSnapshot],
   );
 
+  /** 建 image 节点（无图占位，ImageNode 显示"点击上传"按钮） */
+  const createImageNodeAt = useCallback(
+    (position: { x: number; y: number }) => {
+      takeSnapshot();
+      const { nodes } = getLatest();
+      const node: MindmapRFNode = {
+        id: crypto.randomUUID(),
+        type: 'image',
+        position,
+        data: { label: '', width: 200, height: 120 },
+        selected: true,
+      };
+      const cleared = nodes.map((n) => ({ ...n, selected: false }));
+      setNodes([...cleared, node]);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, markDirty, triggerSave, takeSnapshot],
+  );
+
   const deleteSelection = useCallback(() => {
     const { nodes, edges } = getLatest();
     const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
@@ -182,5 +204,5 @@ export function useCanvasActions(params: {
     triggerSave();
   }, [getLatest, setNodes, setEdges, markDirty, triggerSave, takeSnapshot]);
 
-  return { createTextAt, createImageAt, createLinkAt, deleteNodes, deleteSelection };
+  return { createTextAt, createImageAt, createLinkAt, createImageNodeAt, deleteNodes, deleteSelection };
 }

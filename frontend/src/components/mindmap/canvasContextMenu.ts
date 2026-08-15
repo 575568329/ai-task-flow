@@ -1,6 +1,6 @@
 // frontend/src/components/mindmap/canvasContextMenu.ts
-// 画布右键菜单（右键画布空白处）：模式切换 / 自动布局 / 适应视图 / 网格开关 / 导出 PNG。
-import { Sparkles, Maximize, Download, Grid3x3, EyeOff, LayoutGrid, Network } from 'lucide-react';
+// 画布右键菜单（右键画布空白处）：模式切换 / 插入图片 / 自动布局 / 适应视图 / 网格开关 / 导出 PNG。
+import { Sparkles, Maximize, Download, Grid3x3, EyeOff, LayoutGrid, Network, ImagePlus } from 'lucide-react';
 import type { MenuItemBuilder } from '@/components/context-menu/types';
 
 /** 画布右键上下文（由 MindmapEditor 注入） */
@@ -14,6 +14,8 @@ export interface MindmapCanvasCtx {
   /** 文档形态（树形/画布），决定可用操作集与切换项文案 */
   isTree: boolean;
   toggleMode: () => void;
+  /** 在视口中心建图片节点（无图占位，点占位上传） */
+  createImageNode: () => void;
 }
 
 /** 画布右键菜单项工厂（无特定 target，target 固定 null） */
@@ -26,6 +28,13 @@ export const buildCanvasItems: MenuItemBuilder<null, MindmapCanvasCtx> = ({ ctx 
     onSelect: () => ctx.toggleMode(),
   },
   { type: 'separator', key: 's0' },
+  {
+    type: 'action',
+    key: 'image',
+    label: '插入图片',
+    icon: ImagePlus,
+    onSelect: () => ctx.createImageNode(),
+  },
   {
     type: 'action',
     key: 'layout',

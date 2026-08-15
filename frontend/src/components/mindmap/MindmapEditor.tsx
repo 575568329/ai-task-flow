@@ -258,10 +258,9 @@ function EditorCanvas() {
     [screenToFlowPosition, canvasActions],
   );
 
-  // 拖拽创建（P1a）：图片文件 → 上传后建 image 节点；URL 文本 → 建 link 节点
+  // 拖拽创建：图片文件 → 上传后建 image 节点；URL 文本 → 建 link 节点（全模式生效）
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
-      if (isTree) return;
       e.preventDefault();
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const dt = e.dataTransfer;
@@ -277,13 +276,12 @@ function EditorCanvas() {
         canvasActions.createLinkAt(pos, urlText);
       }
     },
-    [isTree, screenToFlowPosition, canvasActions],
+    [screenToFlowPosition, canvasActions],
   );
 
-  // 粘贴图片（P1a）：剪贴板含图片项 → 上传后在视口中心建 image 节点
+  // 粘贴图片：剪贴板含图片项 → 上传后在视口中心建 image 节点（全模式生效）
   const onPaste = useCallback(
     async (e: React.ClipboardEvent) => {
-      if (isTree) return;
       const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
       if (!item) return;
       const file = item.getAsFile();
@@ -297,7 +295,7 @@ function EditorCanvas() {
       });
       canvasActions.createImageAt(pos, up, file.name);
     },
-    [isTree, screenToFlowPosition, canvasActions],
+    [screenToFlowPosition, canvasActions],
   );
 
   // 连线标签编辑：双击边 → 浮层输入框 → Enter/失焦提交（data.label，空则清除）
@@ -371,6 +369,11 @@ function EditorCanvas() {
       setPendingDocMode(next);
       markDirty();
       triggerSave();
+    },
+    createImageNode: () => {
+      canvasActions.createImageNodeAt(
+        screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
+      );
     },
   };
 

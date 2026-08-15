@@ -14,17 +14,25 @@ describe('buildCanvasItems', () => {
       toggleGrid: vi.fn(),
       isTree,
       toggleMode: vi.fn(),
+      createImageNode: vi.fn(),
     };
     const mc = { target: null, ctx } as MenuContext<null, MindmapCanvasCtx>;
     return { ctx, mc };
   }
 
-  it('包含 模式切换 / 自动布局 / 适应视图 / 网格开关 / 导出PNG + 2 分隔符', () => {
+  it('包含 模式切换 / 插入图片 / 自动布局 / 适应视图 / 网格开关 / 导出PNG + 2 分隔符', () => {
     const { mc } = setup();
     const items = buildCanvasItems(mc);
-    expect(items.map((i) => i.key)).toEqual(['mode', 's0', 'layout', 'fit', 'grid', 's1', 'export']);
-    expect(items.filter((i) => i.type === 'action')).toHaveLength(5);
+    expect(items.map((i) => i.key)).toEqual(['mode', 's0', 'image', 'layout', 'fit', 'grid', 's1', 'export']);
+    expect(items.filter((i) => i.type === 'action')).toHaveLength(6);
     expect(items.filter((i) => i.type === 'separator')).toHaveLength(2);
+  });
+
+  it('插入图片 onSelect 调 ctx.createImageNode', () => {
+    const { ctx, mc } = setup();
+    const image = buildCanvasItems(mc).find((i) => i.key === 'image');
+    if (image?.type === 'action') image.onSelect(mc);
+    expect(ctx.createImageNode).toHaveBeenCalledTimes(1);
   });
 
   it('模式切换 label 随 isTree 切换且 onSelect 调 ctx.toggleMode', () => {
