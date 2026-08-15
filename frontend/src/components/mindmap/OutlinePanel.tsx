@@ -49,6 +49,8 @@ export const OutlinePanel = memo(function OutlinePanel() {
   const edges = useStore((s) => s.edges);
   const { setCenter, getNode } = useReactFlow();
   const [activeId, setActiveId] = useState<string | null>(null);
+  // 默认收起：大纲是辅助导航，不占画布空间；点标题栏展开
+  const [open, setOpen] = useState(false);
   const tree = useMemo(() => buildOutlineTree(nodes as Node[], edges as Edge[]), [nodes, edges]);
 
   const handleLocate = (id: string) => {
@@ -64,14 +66,21 @@ export const OutlinePanel = memo(function OutlinePanel() {
 
   return (
     <Panel position="top-left" className="!m-2">
-      <div className="bg-popover/95 w-60 overflow-hidden rounded-lg border shadow-lg backdrop-blur-sm">
-        <div className="text-muted-foreground flex items-center gap-1.5 border-b px-2.5 py-2 text-xs font-semibold">
+      <div className="bg-popover/70 w-60 overflow-hidden rounded-lg border shadow-lg backdrop-blur-md transition-opacity hover:bg-popover/90">
+        <button
+          className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-colors"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+        >
+          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           <Network className="size-3.5" />
           大纲
-        </div>
-        <div className="max-h-[52vh] overflow-y-auto p-1">
-          <OutlineRow node={tree} depth={0} activeId={activeId} onLocate={handleLocate} />
-        </div>
+        </button>
+        {open && (
+          <div className="max-h-[52vh] overflow-y-auto border-t p-1">
+            <OutlineRow node={tree} depth={0} activeId={activeId} onLocate={handleLocate} />
+          </div>
+        )}
       </div>
     </Panel>
   );

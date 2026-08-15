@@ -246,17 +246,16 @@ function EditorCanvas() {
     takeSnapshot,
   });
 
-  // 双击空白建节点：仅自由画布模式（树形保留双击放大）；节点双击已 stopPropagation
+  // 双击空白建节点：全模式统一（不再限定画布模式）；节点双击已 stopPropagation
   const onCanvasDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (isTree) return;
       // 只响应画布空白（pane）的双击，排除节点/边/控件冒泡
       const cls = (e.target as HTMLElement)?.classList;
       if (!cls?.contains('react-flow__pane')) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       canvasActions.createTextAt(pos);
     },
-    [isTree, screenToFlowPosition, canvasActions],
+    [screenToFlowPosition, canvasActions],
   );
 
   // 拖拽创建（P1a）：图片文件 → 上传后建 image 节点；URL 文本 → 建 link 节点
@@ -547,7 +546,7 @@ function EditorCanvas() {
           onEdgeDoubleClick={onEdgeDoubleClick}
           onMove={onMove}
           deleteKeyCode={null}
-          zoomOnDoubleClick={isTree}
+          zoomOnDoubleClick={false}
           selectionOnDrag={!isPanning}
           panOnDrag={isPanning}
           panActivationKeyCode={null}
