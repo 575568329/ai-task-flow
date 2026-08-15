@@ -70,6 +70,34 @@ describe('getLayoutedElements', () => {
     expect(c.position.x).toBeGreaterThan(0);
   });
 
+  it('宽节点列距自适应（防横向重叠）：子列 x ≥ 父列 x + 父宽', () => {
+    // 父节点换行后宽 300px（max-w 280 + padding），固定列距 240 会压住子列
+    const r = getLayoutedElements(
+      [n('parent', { measured: { width: 300, height: 40 } }), n('child', { measured: { width: 100, height: 40 } })] as never,
+      [e('parent', 'child')] as never,
+    );
+    const parent = r.nodes.find((x) => x.id === 'parent')!;
+    const child = r.nodes.find((x) => x.id === 'child')!;
+    expect(child.position.x).toBeGreaterThanOrEqual(parent.position.x + 300);
+  });
+
+  it('父节点垂直居中于子树跨度（防纵向盖住子节点）', () => {
+    // 父高 80（多行换行），两个子各高 40：父盒应居中于 [0,96]，
+    // top = 48 - 40 = 8，底 = 88——不再把顶部顶到子跨度中点盖住子节点
+    const r = getLayoutedElements(
+      [n('p', { measured: { width: 100, height: 80 } }), n('c1', { measured: { width: 100, height: 40 } }), n('c2', { measured: { width: 100, height: 40 } })] as never,
+      [e('p', 'c1'), e('p', 'c2')] as never,
+    );
+    const p = r.nodes.find((x) => x.id === 'p')!;
+    const c1 = r.nodes.find((x) => x.id === 'c1')!;
+    const c2 = r.nodes.find((x) => x.id === 'c2')!;
+    // 子树跨度中心 = (0 + 96) / 2 = 48；父 top = 48 - 80/2 = 8
+    expect(p.position.y).toBe(8);
+    // 父子不同列（横向不重叠）→ 纵向允许父与子行交错，但父不应超出子树跨度之外
+    expect(c1.position.y).toBe(0);
+    expect(c2.position.y).toBeGreaterThanOrEqual(56);
+  });
+
   it('纯环（无根）不崩溃，节点全保留旧坐标', () => {
     const r = getLayoutedElements(
       [n('a', { position: { x: 5, y: 5 } }), n('b', { position: { x: 9, y: 9 } })] as never,
