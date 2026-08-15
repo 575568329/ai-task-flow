@@ -45,6 +45,14 @@ export function removeNodesWithEdges(
 export interface CanvasActions {
   /** 双击空白建文字节点（自动进入编辑） */
   createTextAt: (position: { x: number; y: number }) => void;
+  /** 拖拽/粘贴图片后在落点建 image 节点 */
+  createImageAt: (
+    position: { x: number; y: number },
+    uploaded: { url: string; width: number; height: number },
+    name?: string,
+  ) => void;
+  /** 拖拽 URL 后在落点建 link 节点 */
+  createLinkAt: (position: { x: number; y: number }, href: string) => void;
   /** 删除节点集合 + 连带边 */
   deleteNodes: (ids: string[]) => void;
   /** 删除选中的节点 + 选中的连线（单事务：一次快照一次保存） */
@@ -97,6 +105,57 @@ export function useCanvasActions(params: {
     [getLatest, setNodes, setEdges, markDirty, triggerSave, takeSnapshot],
   );
 
+  /** 拖拽/粘贴图片建 image 节点（尺寸已由上传助手按自然尺寸播种） */
+  const createImageAt = useCallback(
+    (position: { x: number; y: number }, uploaded: { url: string; width: number; height: number }, name?: string) => {
+      takeSnapshot();
+      const { nodes } = getLatest();
+      const node: MindmapRFNode = {
+        id: crypto.randomUUID(),
+        type: 'image',
+        position,
+        data: {
+          label: name?.replace(/\.[^.]+$/, '') ?? '',
+          imageUrl: uploaded.url,
+          width: uploaded.width,
+          height: uploaded.height,
+        },
+        selected: true,
+      };
+      const cleared = nodes.map((n) => ({ ...n, selected: false }));
+      setNodes([...cleared, node]);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, markDirty, triggerSave, takeSnapshot],
+  );
+
+  /** 拖拽 URL 建 link 节点（标题取域名） */
+  const createLinkAt = useCallback(
+    (position: { x: number; y: number }, href: string) => {
+      takeSnapshot();
+      const { nodes } = getLatest();
+      let label = href;
+      try {
+        label = new URL(href).hostname;
+      } catch {
+        /* 非法 URL 时用原文 */
+      }
+      const node: MindmapRFNode = {
+        id: crypto.randomUUID(),
+        type: 'link',
+        position,
+        data: { label, href },
+        selected: true,
+      };
+      const cleared = nodes.map((n) => ({ ...n, selected: false }));
+      setNodes([...cleared, node]);
+      markDirty();
+      triggerSave();
+    },
+    [getLatest, setNodes, markDirty, triggerSave, takeSnapshot],
+  );
+
   const deleteSelection = useCallback(() => {
     const { nodes, edges } = getLatest();
     const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
@@ -110,5 +169,5 @@ export function useCanvasActions(params: {
     triggerSave();
   }, [getLatest, setNodes, setEdges, markDirty, triggerSave, takeSnapshot]);
 
-  return { createTextAt, deleteNodes, deleteSelection };
+  return { createTextAt, createImageAt, createLinkAt, deleteNodes, deleteSelection };
 }

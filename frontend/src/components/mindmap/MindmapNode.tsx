@@ -18,7 +18,8 @@ import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildMindmapNodeItems, type MindmapMenuCtx } from './nodeContextMenu';
 import { cn } from '@/lib/utils';
 
-export type MindmapRFNode = Node<MindmapNodeData, 'mindmap'>;
+// 类型参数含全部画布节点种类：状态容器里混合存放（组件各自按 NodeProps<XxxRFNode> 收窄）
+export type MindmapRFNode = Node<MindmapNodeData, 'mindmap' | 'image' | 'link' | 'group'>;
 
 /** 按 data.branch 取分支色 CSS 变量 */
 function branchStyle(branch?: string): React.CSSProperties | undefined {
@@ -41,6 +42,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     demoteNode,
     moveSibling,
     hasChildren,
+    focusCanvas,
   } = useMindmapEditor();
   // 双击空白创建的节点自动进入编辑（模块队列，一次性消费）
   const [autoCreated] = useState(() => consumeAutoEdit(id));
@@ -75,13 +77,15 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
     if (!trimmed && autoCreated) {
       deleteNode(id);
       setEditing(false);
+      focusCanvas();
       return;
     }
     if (trimmed && trimmed !== data.label) {
       updateNodeData(id, { label: trimmed });
     }
     setEditing(false);
-  }, [id, data.label, updateNodeData, autoCreated, deleteNode]);
+    focusCanvas(); // 焦点回画布容器，Delete/Tab 等快捷键立即可用（Q1）
+  }, [id, data.label, updateNodeData, autoCreated, deleteNode, focusCanvas]);
 
   const startEdit = useCallback(() => setEditing(true), []);
 
@@ -161,6 +165,7 @@ export const MindmapNode = memo(function MindmapNode({ id, data }: NodeProps<Min
                   deleteNode(id);
                 }
                 setEditing(false);
+                focusCanvas();
               }
             }}
             className={cn(

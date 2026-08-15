@@ -41,6 +41,8 @@ import { mindmapApi } from '@/api/mindmap';
 import { toPng } from 'html-to-image';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { MindmapNode, type MindmapRFNode } from './MindmapNode';
+import { ImageNode } from './ImageNode';
+import { LinkNode } from './LinkNode';
 import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
 import { FloatingConnectionLine } from './FloatingConnectionLine';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
@@ -49,13 +51,14 @@ import { useMindmapActions } from './useMindmapActions';
 import { useCanvasActions, isTreeDocument } from './useCanvasActions';
 import { useAlignmentSnap } from './useAlignmentSnap';
 import { HelperLines } from './HelperLines';
+import { uploadImageFile } from './uploadImage';
 import { useUndoRedo } from './useUndoRedo';
 import { OutlinePanel } from './OutlinePanel';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
 
 // 必须在组件外（否则每次渲染新引用 → RF 重注册所有类型 → 全部节点重渲染）
-const nodeTypes = { mindmap: MindmapNode };
+const nodeTypes = { mindmap: MindmapNode, image: ImageNode, link: LinkNode };
 const edgeTypes = { mindmap: BranchEdge };
 const defaultEdgeOptions = { type: 'mindmap' };
 
@@ -83,6 +86,9 @@ function EditorCanvas() {
   );
   // 网格显示开关（右键菜单切换；对齐 snapGrid 的视觉参照）
   const [showGrid, setShowGrid] = useState(true);
+  // 画布容器 ref：焦点锚点（节点编辑失焦后 refocus，恢复快捷键）
+  const containerRef = useRef<HTMLDivElement>(null);
+  const focusCanvas = useCallback(() => containerRef.current?.focus(), []);
 
   // 最新编辑态的 ref（供 debounce 保存的闭包读取，避免捕获过期 state）
   const latestRef = useRef({ nodes, edges, viewport });
@@ -240,6 +246,48 @@ function EditorCanvas() {
     [isTree, screenToFlowPosition, canvasActions],
   );
 
+  // 拖拽创建（P1a）：图片文件 → 上传后建 image 节点；URL 文本 → 建 link 节点
+  const onDrop = useCallback(
+    async (e: React.DragEvent) => {
+      if (isTree) return;
+      e.preventDefault();
+      const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const dt = e.dataTransfer;
+
+      const file = Array.from(dt.files).find((f) => f.type.startsWith('image/'));
+      if (file) {
+        const up = await uploadImageFile(file);
+        if (up) canvasActions.createImageAt(pos, up, file.name);
+        return;
+      }
+      const urlText = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').trim();
+      if (/^https?:\/\//i.test(urlText)) {
+        canvasActions.createLinkAt(pos, urlText);
+      }
+    },
+    [isTree, screenToFlowPosition, canvasActions],
+  );
+
+  // 粘贴图片（P1a）：剪贴板含图片项 → 上传后在视口中心建 image 节点
+  const onPaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      if (isTree) return;
+      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      const up = await uploadImageFile(file);
+      if (!up) return;
+      const pos = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      canvasActions.createImageAt(pos, up, file.name);
+    },
+    [isTree, screenToFlowPosition, canvasActions],
+  );
+
   // 连线标签编辑：双击边 → 浮层输入框 → Enter/失焦提交（data.label，空则清除）
   const [editingEdge, setEditingEdge] = useState<{ id: string; x: number; y: number; value: string } | null>(null);
   const onEdgeDoubleClick = useCallback((e: React.MouseEvent, edge: Edge) => {
@@ -258,6 +306,7 @@ function EditorCanvas() {
     markDirty();
     triggerSave();
     setEditingEdge(null);
+    containerRef.current?.focus();
   }, [editingEdge, takeSnapshot, markDirty, triggerSave]);
 
   // 画布右键菜单上下文（自动布局 + 适应视图 + 网格开关 + 导出 PNG）
@@ -359,16 +408,27 @@ function EditorCanvas() {
         return;
       }
 
-      // Tab=加子 / Enter=加同级：树形语义，自由画布不响应（建节点用双击）
-      if (!isTree || !selectedNode) return;
+      // Tab：树形=加子节点；画布=选中节点旁建新文字节点（键盘入口，Q8）
       if (e.key === 'Tab') {
         e.preventDefault();
-        takeSnapshot();
-        actions.addChildNode(selectedNode.id);
-      } else if (e.key === 'Enter') {
+        if (isTree && selectedNode) {
+          takeSnapshot();
+          actions.addChildNode(selectedNode.id);
+        } else if (!isTree && selectedNode) {
+          canvasActions.createTextAt({
+            x: selectedNode.position.x + (selectedNode.width ?? 260),
+            y: selectedNode.position.y,
+          });
+        }
+        return;
+      }
+      // Enter：树形=加同级；画布不响应（建节点用双击/Tab）
+      if (e.key === 'Enter') {
+        if (!(isTree && selectedNode)) return;
         e.preventDefault();
         takeSnapshot();
         actions.addSiblingNode(selectedNode.id);
+        return;
       }
     },
     [selectedNode, isTree, edges, actions, canvasActions, saveNow, takeSnapshot, undoAction, redoAction],
@@ -414,8 +474,9 @@ function EditorCanvas() {
         actions.moveSibling(id, direction);
       },
       hasChildren,
+      focusCanvas,
     }),
-    [updateNodeData, actions, hasChildren, takeSnapshot],
+    [updateNodeData, actions, hasChildren, takeSnapshot, focusCanvas],
   );
 
   if (!current) return null;
@@ -424,10 +485,17 @@ function EditorCanvas() {
     <MindmapEditorContext.Provider value={ctxValue}>
       <ContextMenuHost items={buildCanvasItems} target={null} ctx={canvasCtx}>
         <div
+          ref={containerRef}
           className="relative h-full w-full outline-none"
           tabIndex={0}
           onKeyDown={handleKeyDown}
           onDoubleClick={onCanvasDoubleClick}
+          onDrop={onDrop}
+          onDragOver={(e) => {
+            // 允许 drop（默认浏览器打开文件）
+            e.preventDefault();
+          }}
+          onPaste={onPaste}
         >
         <ReactFlow
           nodes={nodes}
@@ -447,7 +515,7 @@ function EditorCanvas() {
           deleteKeyCode={null}
           zoomOnDoubleClick={isTree}
           selectionOnDrag={!isTree}
-          panOnDrag={isTree ? true : [1]}
+          panOnDrag={isTree ? true : [1, 2]}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           minZoom={0.2}
