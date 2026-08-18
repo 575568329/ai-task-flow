@@ -18,7 +18,7 @@ ai-task-flow — 个人 AI 任务编排看板 + MCP Server
   start                启动 Web 服务(默认)
 
 选项:
-  -p, --port <port>    HTTP 端口 (默认 3000)
+  -p, --port <port>    HTTP 端口 (默认 47821)
       --host <host>    监听地址 (默认 0.0.0.0)
       --data-dir <dir> 数据存储目录 (默认 ~/.ai-task-flow)
       --no-open        不自动打开浏览器
@@ -27,7 +27,7 @@ ai-task-flow — 个人 AI 任务编排看板 + MCP Server
   -h, --help           显示帮助
 
 示例:
-  ai-task-flow                       # 在 :3000 启动并自动打开
+  ai-task-flow                       # 在 :47821 启动并自动打开
   ai-task-flow start -p 8080         # 用 8080 端口
   ai-task-flow --data-dir D:/atf     # 数据存到 D:/atf
   ai-task-flow --no-open             # 不自动打开浏览器
@@ -190,7 +190,7 @@ async function main() {
     process.exit(2);
   }
 
-  const preferredPort = opts.port ?? 3000;
+  const preferredPort = opts.port ?? 47821;
   const userSpecifiedPort = opts.port !== undefined;
   const host = opts.host ?? '0.0.0.0';
   const frontendDist = resolveFrontendDist(opts.frontend);

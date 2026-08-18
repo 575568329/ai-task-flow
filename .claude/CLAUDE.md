@@ -658,7 +658,7 @@ Good luck! 🚀
 
 - **统一 npm**，禁用 pnpm / cnpm / yarn（pnpm 不支持 `workspaces`，子包依赖装不上）。
 - **非内网环境装前删 `package-lock.json`**（含科大讯飞内网源，公网 ENOTFOUND，报误导性的 `Exit handler never called!`）。
-- 前端固定 `5678`、backend 默认 `3000`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
+- 前端固定 `5678`、backend 默认 `47821`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
 - MCP 的 `TaskRepository` 必须 `useFactory` 注册（否则启动 DI 崩溃）。
 - 任务**四态** `TODO` / `IN_PROGRESS` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
 - Claude 每完成一步调 MCP `complete_step`（`stepNumber` 1-based）回写：全步完成→自动转 `DONE`，否则→`IN_PROGRESS`。

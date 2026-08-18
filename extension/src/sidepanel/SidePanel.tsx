@@ -40,7 +40,7 @@ export function SidePanel() {
       <main className="sp-main">
         <Active />
       </main>
-      <footer className="sp-footer">AI Task Flow 剪藏 · 调用 localhost:3000</footer>
+      <footer className="sp-footer">AI Task Flow 剪藏 · 调用 localhost:47821</footer>
     </div>
   );
 }

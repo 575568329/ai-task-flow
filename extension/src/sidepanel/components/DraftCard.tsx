@@ -1,7 +1,7 @@
 // extension/src/sidepanel/components/DraftCard.tsx
 import type { ClipDraft, TaskStep } from '@ai-task-flow/shared';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'http://localhost:47821';
 
 interface DraftCardProps {
   draft: ClipDraft;

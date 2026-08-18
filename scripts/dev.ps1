@@ -42,7 +42,7 @@ $sharedProc = Start-Process -FilePath "cmd.exe" `
 
 # 等 shared 首次编译稳定(连续 2 秒 shared/dist 无新增/mtime 变化)再起 backend。
 # 否则 backend 的 tsx watch 会因 shared/dist 产物陆续生成而反复重启,
-# 启动瞬间 3000 端口空窗 → vite 代理 ECONNREFUSED(每次 dev 必现)。
+# 启动瞬间 47821 端口空窗 → vite 代理 ECONNREFUSED(每次 dev 必现)。
 Write-Host "Waiting for shared first build to stabilize..." -ForegroundColor DarkGray
 $sharedDist = "shared/dist"
 $maxWaitShared = 60
@@ -85,7 +85,7 @@ $backendProc = Start-Process -FilePath "cmd.exe" `
 $portFile = "$LOGS_DIR/backend-port.txt"
 Remove-Item $portFile -Force -ErrorAction SilentlyContinue
 
-# 阶段 1:等端口文件出现(拿到 backend 实际端口,可能因 3000 被占而顺延)
+# 阶段 1:等端口文件出现(拿到 backend 实际端口,可能因 47821 被占而顺延)
 $maxWaitPort = 30
 $waitedPort = 0
 while ($waitedPort -lt $maxWaitPort) {

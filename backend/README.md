@@ -10,7 +10,7 @@ HTTP + MCP backend server for [AI Task Flow](https://github.com/575568329/ai-tas
 import { startApp } from '@ai-task-flow/backend';
 
 await startApp({
-  port: 3000,
+  port: 47821,
   host: '0.0.0.0',
   // 单端口托管前端 SPA(必须是绝对路径,含 index.html)
   frontendDist: '/path/to/dist',

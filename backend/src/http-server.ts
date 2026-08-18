@@ -31,7 +31,7 @@ import { MindmapService } from './application/mindmap/MindmapService.js';
 import { knowledgeDirPath } from './config/dataDir.js';
 
 export interface StartAppOptions {
-  /** HTTP 监听端口,默认 3000 */
+  /** HTTP 监听端口,默认 47821 */
   port?: number;
   /** HTTP 监听地址,默认 0.0.0.0 */
   host?: string;
@@ -120,7 +120,7 @@ export async function startApp(options: StartAppOptions = {}) {
     console.warn(`! 任务 markdown 存档补齐失败(不影响启动): ${message}`);
   }
 
-  const preferredPort = options.port ?? parseInt(process.env.PORT || '3000', 10);
+  const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);
   // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口(含 spawn 终端)。
   // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
   const host = options.host ?? process.env.HOST ?? '127.0.0.1';

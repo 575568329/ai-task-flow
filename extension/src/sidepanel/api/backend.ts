@@ -13,7 +13,7 @@ import type {
 } from '@ai-task-flow/shared';
 import type { PageContext } from '../../types/pageContext.js';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'http://localhost:47821';
 
 /**
  * 经 background service worker 代理访问后端。

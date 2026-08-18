@@ -248,7 +248,7 @@ function reportListenError(code: string | undefined, config: HttpServerConfig, e
   if (code === 'EACCES') {
     console.error('');
     console.error(`✗ 没有权限监听端口 ${config.port}`);
-    console.error('  小于 1024 的端口需要管理员权限,建议换 3000 / 8080 等');
+    console.error('  小于 1024 的端口需要管理员权限,建议换 47821 / 8080 等');
     console.error('');
   } else {
     console.error('');

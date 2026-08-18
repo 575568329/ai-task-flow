@@ -5,25 +5,54 @@ import { fileURLToPath, URL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// 动态读取 backend 的实际端口
+// backend 默认端口(与 backend/src/http-server.ts 保持一致)
+const DEFAULT_BACKEND_PORT = 47821;
+const BACKEND_PORT_FILE = path.resolve(__dirname, '../.logs/backend-port.txt');
+
+// 动态读取 backend 的实际端口(每次代理请求时调用)。
+// Why:concurrently 版 dev 并发起 shared/backend/frontend,vite 启动瞬间 backend
+// 可能尚未就绪、端口文件还是上次运行的残留值;若只在启动时读一次,错误 target 会
+// 固化到底(残留 3000 时代理落到其他项目,/api 全 404)。改为请求时读取后,
+// backend 顺延端口/晚启动都不影响,代理自动跟随最新端口文件。
 function getBackendPort(): number {
-  const portFile = path.resolve(__dirname, '../.logs/backend-port.txt');
   try {
-    if (fs.existsSync(portFile)) {
-      const port = parseInt(fs.readFileSync(portFile, 'utf-8').trim(), 10);
-      if (port > 0) {
-        return port;
-      }
+    const port = parseInt(fs.readFileSync(BACKEND_PORT_FILE, 'utf-8').trim(), 10);
+    if (port > 0) {
+      return port;
     }
-  } catch (err) {
-    // 忽略错误，使用默认端口
+  } catch {
+    // 文件不存在或不可读,回退默认端口
   }
-  return 3000; // 默认端口
+  return DEFAULT_BACKEND_PORT;
 }
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: 'dynamic-backend-proxy-target',
+      configureServer(server) {
+        // 在 vite 内置 proxy 中间件之前注册:每个 /api 请求都按端口文件刷新代理 target。
+        // Why:vite 内置的 http-proxy 不支持 router 选项,且 options 被闭包进 createProxyServer;
+        // 但闭包对象与 config.server.proxy['/api'] 同引用,且 http-proxy 每请求浅拷贝后
+        // 重新 parse target 字符串,故请求前 mutate 该对象的 target 即可动态生效。
+        // 背景:concurrently 版 dev 并发起 shared/backend/frontend,vite 启动瞬间读到的
+        // 端口文件可能是上次运行的残留值,启动时读一次会把错误 target 固化到底
+        // (曾踩坑:残留 3000 时代理落到其他项目,/api 全 404)。
+        server.middlewares.use((req, _res, next) => {
+          if (req.url?.startsWith('/api')) {
+            const proxyOpts = server.config.server.proxy?.['/api'];
+            if (proxyOpts && typeof proxyOpts === 'object') {
+              proxyOpts.target = `http://127.0.0.1:${getBackendPort()}`;
+            }
+          }
+          next();
+        });
+      },
+    },
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -46,7 +75,8 @@ export default defineConfig({
         // Windows 上 localhost 优先解析为 IPv6 ::1,若 ::1:port 被其他服务占用,
         // 代理会错误转发到无关服务(曾踩坑:被某 Astro 服务占用导致 /api 全 404)。
         // 后端绑定 0.0.0.0(覆盖 IPv4),固定走 127.0.0.1 最稳。
-        target: `http://127.0.0.1:${getBackendPort()}`,
+        // target 是启动占位值,实际由上方插件在每个请求前按端口文件刷新。
+        target: `http://127.0.0.1:${DEFAULT_BACKEND_PORT}`,
         changeOrigin: true,
       },
     },

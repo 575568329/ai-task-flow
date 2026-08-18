@@ -66,7 +66,7 @@ describe('backend api', () => {
     expect(resp.drafts).toHaveLength(1);
     const call = lastCall();
     expect(call.type).toBe('PROXY_FETCH');
-    expect(call.request.url).toBe('http://localhost:3000/api/tasks/clip');
+    expect(call.request.url).toBe('http://localhost:47821/api/tasks/clip');
     expect(call.request.method).toBe('POST');
     expect(call.request.headers?.['Content-Type']).toBe('text/plain');
     const body = JSON.parse(call.request.body as string);
@@ -79,7 +79,7 @@ describe('backend api', () => {
     mockProxy({ ok: true, status: 200, statusText: '', json: { id: 'WEB-1' }, text: '' });
     await createTaskFromDraft({ title: 'T', description: 'D', steps: [] }, 'https://x.com/p', 'WEB');
     const call = lastCall();
-    expect(call.request.url).toBe('http://localhost:3000/api/tasks');
+    expect(call.request.url).toBe('http://localhost:47821/api/tasks');
     const body = JSON.parse(call.request.body as string);
     expect(body.source).toBe('web');
     expect(body.sourceUrl).toBe('https://x.com/p');
@@ -119,7 +119,7 @@ describe('vocab api', () => {
     const resp = await translateText('hello');
     expect(resp.translation).toBe('你好');
     const call = lastCall();
-    expect(call.request.url).toBe('http://localhost:3000/api/vocab/translate');
+    expect(call.request.url).toBe('http://localhost:47821/api/vocab/translate');
     expect(call.request.method).toBe('POST');
     expect(JSON.parse(call.request.body as string).text).toBe('hello');
   });
@@ -137,7 +137,7 @@ describe('vocab api', () => {
     });
     const v = await saveVocab({ word: 'hi', translation: '你好' });
     expect(v.id).toBe('v1');
-    expect(lastCall().request.url).toBe('http://localhost:3000/api/vocab');
+    expect(lastCall().request.url).toBe('http://localhost:47821/api/vocab');
   });
 
   it('saveVocab duplicate returns 409 error', async () => {
@@ -161,6 +161,6 @@ describe('vocab api', () => {
   it('listVocab without query GETs bare path', async () => {
     mockProxy({ ok: true, status: 200, statusText: '', json: { items: [], total: 0 }, text: '' });
     await listVocab();
-    expect(lastCall().request.url).toBe('http://localhost:3000/api/vocab');
+    expect(lastCall().request.url).toBe('http://localhost:47821/api/vocab');
   });
 });

@@ -28,11 +28,11 @@ ai-task-flow --no-open
 ai-task-flow --help
 ```
 
-启动后默认在 `http://localhost:3000` 提供:
+启动后默认在 `http://localhost:47821` 提供:
 
-- **Web UI** — `http://localhost:3000` 任务看板
-- **API**   — `http://localhost:3000/api/*` REST 接口
-- **SSE**   — `http://localhost:3000/api/events` 实时事件推送
+- **Web UI** — `http://localhost:47821` 任务看板
+- **API**   — `http://localhost:47821/api/*` REST 接口
+- **SSE**   — `http://localhost:47821/api/events` 实时事件推送
 
 ## 数据存储
 
@@ -48,7 +48,7 @@ ai-task-flow --help
 
 | 选项               | 说明                       | 默认值  |
 | ------------------ | -------------------------- | ------- |
-| `-p, --port <n>`   | HTTP 端口                  | `3000`  |
+| `-p, --port <n>`   | HTTP 端口                  | `47821`  |
 | `--host <addr>`    | 监听地址                   | `0.0.0.0` |
 | `--no-open`        | 启动后不自动打开浏览器     | -       |
 | `--frontend <dir>` | 自定义前端 dist 目录(开发者用) | -       |
