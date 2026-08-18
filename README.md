@@ -61,15 +61,15 @@ npm install
 
 ### 2. 启动(开发模式)
 ```bash
-# 同时启动前端(:5173)+ 后端 HTTP(:3000)
+# 同时启动前端(:5173)+ 后端 HTTP(:47821)
 npm run dev
 ```
-- 后端 HTTP API:http://localhost:3000
+- 后端 HTTP API:http://localhost:47821
 - 前端看板:http://localhost:5173
 
 也可分别启动:
 ```bash
-npm run dev:backend    # 仅后端 HTTP(:3000)
+npm run dev:backend    # 仅后端 HTTP(:47821)
 npm run dev:frontend   # 仅前端(:5173)
 ```
 

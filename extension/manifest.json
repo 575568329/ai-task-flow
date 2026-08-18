@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "抓取网页内容与图片，AI 拆解成任务草案，侧边栏确认后建到 AI Task Flow 看板。",
   "permissions": ["sidePanel", "activeTab", "storage", "scripting", "tabs"],
-  "host_permissions": ["http://localhost:3000/*"],
+  "host_permissions": ["http://localhost:47821/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "src/background/index.ts", "type": "module" },
   "side_panel": { "default_path": "src/sidepanel/index.html" },

@@ -68,7 +68,7 @@ async function main() {
   console.log('\n✅ 导入完成!');
   console.log(`\n运行以下命令验证:`);
   console.log(`  cd backend && npm run dev`);
-  console.log(`  curl http://localhost:3000/api/knowledge/manifest | jq '.flatDocs | length'`);
+  console.log(`  curl http://localhost:47821/api/knowledge/manifest | jq '.flatDocs | length'`);
 }
 
 main().catch(err => {

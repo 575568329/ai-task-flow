@@ -1,6 +1,6 @@
 # @ai-task-flow/extension
 
-AI Task Flow 浏览器扩展（Manifest V3），以**侧边栏（side panel）**形式提供「网页剪藏」与「划词翻译」两大能力，数据回传本地后端（`http://localhost:3000`），与看板/生词本联动。
+AI Task Flow 浏览器扩展（Manifest V3），以**侧边栏（side panel）**形式提供「网页剪藏」与「划词翻译」两大能力，数据回传本地后端（`http://localhost:47821`），与看板/生词本联动。
 
 ---
 
@@ -16,7 +16,7 @@ AI Task Flow 浏览器扩展（Manifest V3），以**侧边栏（side panel）**
 ## 前置条件
 
 - Node ≥ 18
-- 本地后端运行在 **`http://localhost:3000`**（`host_permissions` 锁定，端口必须是 3000）
+- 本地后端运行在 **`http://localhost:47821`**（`host_permissions` 锁定，端口必须是 47821）
 - Chrome / Edge（用到 MV3 `sidePanel` API）
 
 ---
@@ -41,7 +41,7 @@ npm run build:extension
 1. 打开 `chrome://extensions`（Edge：`edge://extensions`）
 2. 右上角开启 **「开发者模式」**
 3. 点 **「加载已解压的扩展程序」**，选择 **`extension/dist`** 目录
-4. 启动后端：`npm run dev:backend`（确认监听 3000 端口）
+4. 启动后端：`npm run dev:backend`（确认监听 47821 端口）
 5. 点浏览器工具栏的扩展图标 → 侧边栏打开 → 切换「剪藏」/「翻译」Tab 使用
 
 ---
@@ -79,7 +79,7 @@ npm run dev:extension   # crxjs vite-plugin，带 HMR
 
 ## 常见问题
 
-- **侧栏提示连不上后端**：确认 `npm run dev:backend` 在跑，且端口是 **3000**（不是前端的 5173/5678）。
+- **侧栏提示连不上后端**：确认 `npm run dev:backend` 在跑，且端口是 **47821**（不是前端的 5173/5678）。
 - **改代码后没生效**：`chrome://extensions` 里点扩展的「刷新」；改了 `shared` 要重新 `build:shared`。
 - **抓不到选区**：先在页面选中内容再抓取；iframe 内（如富文本编辑器）选区可能受限。
 - **工具栏图标点了没反应**：首次安装需 `onInstalled` 触发后才注册 `openPanelOnActionClick`，重载一次扩展即可。
@@ -94,4 +94,4 @@ npm run dev:extension   # crxjs vite-plugin，带 HMR
 | `activeTab` + `scripting` | 当前页抓取 / 动态注入脚本（不声明 `<all_urls>`，避免高权限警告） |
 | `storage` | 记忆侧栏 Tab |
 | `tabs` | 配合 activeTab 读取当前页信息 |
-| `host_permissions: localhost:3000` | 后端地址 |
+| `host_permissions: localhost:47821` | 后端地址 |

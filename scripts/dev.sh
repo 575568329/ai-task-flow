@@ -26,7 +26,7 @@ echo ""
 SHARED_PID=$!
 
 # 等 shared 首次编译稳定(连续 2 秒 shared/dist 无变化),避免 backend tsx watch 因 shared
-# 产物陆续生成而反复重启,启动瞬间 3000 端口空窗 → vite 代理 ECONNREFUSED。
+# 产物陆续生成而反复重启,启动瞬间 47821 端口空窗 → vite 代理 ECONNREFUSED。
 echo "Waiting for shared first build to stabilize..."
 shared_dist="shared/dist"
 prev_snapshot=""
@@ -78,7 +78,7 @@ echo "========================================="
 echo "✅ All services started"
 echo "========================================="
 echo "  Shared:   PID $SHARED_PID"
-echo "  Backend:  PID $BACKEND_PID  → http://localhost:3000"
+echo "  Backend:  PID $BACKEND_PID  → http://localhost:47821"
 echo "  Frontend: PID $FRONTEND_PID → http://localhost:5678"
 echo ""
 echo "Press Ctrl+C to stop all services"
