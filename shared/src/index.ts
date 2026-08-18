@@ -12,3 +12,4 @@ export * from './types/agent.js';
 export * from './types/claude-profile.js';
 export * from './utils/steps.js';
 export * from './utils/prompt.js';
+export * from './utils/treeLayout.js';

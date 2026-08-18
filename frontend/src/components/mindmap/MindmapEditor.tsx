@@ -5,6 +5,13 @@
 // re-render）。store 只管文档级（current/version/isDirty/saveStatus），通过回调双向同步。
 // nodeTypes/edgeTypes 定义在组件外（性能红线：否则每次渲染新引用 → 全部节点重渲染）。
 //
+// 【自由画布】（P0a）：
+// - 浮边（BranchEdge + FloatingConnectionLine）：任意方向连线，忽略 handle 位置
+// - ConnectionMode.Loose：任意 handle 互连；onConnect 拦截自环/重复边
+// - 双击空白建节点（autoEditQueue 自动进入编辑，失焦空内容则删除）
+// - 对齐辅助线（useAlignmentSnap，8px/zoom 阈值，本地 state 不进 store）
+// - 操作按文档形态分流：isTreeDocument → 树形语义（Tab/Enter/删子树），否则画布语义（删选中）
+//
 // 【keep-alive】键盘绑画布容器（tabIndex），不绑 window，切到其他视图不误触。
 // 导出 PNG 前需确保画布可见（hidden 下 bounds 脏）。
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
@@ -15,6 +22,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  ConnectionMode,
   useReactFlow,
   getNodesBounds,
   getViewportForBounds,
@@ -26,27 +34,40 @@ import {
   type EdgeChange,
   type Connection,
   type OnMove,
+  type Edge,
 } from '@xyflow/react';
-import type { MindmapFlowEdge, MindmapFlowNode, MindmapViewport } from '@ai-task-flow/shared';
+import type { MindmapDocMode, MindmapFlowEdge, MindmapFlowNode, MindmapViewport } from '@ai-task-flow/shared';
 import { mindmapApi } from '@/api/mindmap';
 import { toPng } from 'html-to-image';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { MindmapNode, type MindmapRFNode } from './MindmapNode';
+import { ImageNode } from './ImageNode';
+import { LinkNode } from './LinkNode';
 import { BranchEdge, type MindmapRFEdge } from './BranchEdge';
 import { MindmapEditorContext, type MindmapEditorContextValue } from './mindmapContext';
 import { getLayoutedElements } from './layout';
 import { useMindmapActions } from './useMindmapActions';
+import { useCanvasActions, isTreeDocument, normalizeEdgeHandles } from './useCanvasActions';
+import { useAlignmentSnap } from './useAlignmentSnap';
+import { HelperLines } from './HelperLines';
+import { NodeStylePanel } from './NodeStylePanel';
+import { uploadImageFile } from './uploadImage';
+import { parseMermaidFlowchart, toCanvasDraft } from './mermaidImport';
+import { MermaidImportDialog } from './MermaidImportDialog';
 import { useUndoRedo } from './useUndoRedo';
 import { OutlinePanel } from './OutlinePanel';
 import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildCanvasItems, type MindmapCanvasCtx } from './canvasContextMenu';
+import { cn } from '@/lib/utils';
 
 // 必须在组件外（否则每次渲染新引用 → RF 重注册所有类型 → 全部节点重渲染）
-const nodeTypes = { mindmap: MindmapNode };
+const nodeTypes = { mindmap: MindmapNode, image: ImageNode, link: LinkNode };
 const edgeTypes = { mindmap: BranchEdge };
 const defaultEdgeOptions = { type: 'mindmap' };
 
 const AUTOSAVE_DELAY = 2000;
+/** 对齐吸附阈值（屏幕像素恒定，画布单位 = 8 / zoom；Excalidraw/tldraw 同值） */
+const SNAP_THRESHOLD_PX = 8;
 
 function EditorCanvas() {
   // selector 精确订阅，避免不相关 store 变化触发 re-render
@@ -61,15 +82,40 @@ function EditorCanvas() {
     (current?.nodes ?? []) as MindmapRFNode[],
   );
   const [edges, setEdges] = useState<MindmapRFEdge[]>(() =>
-    (current?.edges ?? []) as MindmapRFEdge[],
+    normalizeEdgeHandles((current?.edges ?? []) as MindmapRFEdge[]),
   );
   const [viewport, setViewport] = useState<MindmapViewport>(
     () => current?.viewport ?? { x: 0, y: 0, zoom: 1 },
   );
+  // 网格显示开关（右键菜单切换；对齐 snapGrid 的视觉参照）
+  const [showGrid, setShowGrid] = useState(true);
+  // 画布容器 ref：焦点锚点（节点编辑失焦后 refocus，恢复快捷键）
+  const containerRef = useRef<HTMLDivElement>(null);
+  const focusCanvas = useCallback(() => containerRef.current?.focus(), []);
 
   // 最新编辑态的 ref（供 debounce 保存的闭包读取，避免捕获过期 state）
   const latestRef = useRef({ nodes, edges, viewport });
   latestRef.current = { nodes, edges, viewport };
+
+  // 文档形态：docMode 优先（创建时确定、持久化）；旧文档缺省时用启发式推断。
+  // 可运行时切换（右键菜单），切换值随下次保存 PATCH 落库（pendingDocMode）。
+  const [isTree, setIsTree] = useState(() => {
+    if (current?.docMode) return current.docMode === 'tree';
+    return isTreeDocument(
+      (current?.nodes ?? []) as MindmapRFNode[],
+      (current?.edges ?? []) as MindmapRFEdge[],
+    );
+  });
+  // 待落库的模式切换值（与 nodes/edges 同一次 PATCH 提交，避免乐观锁冲突）
+  const [pendingDocMode, setPendingDocMode] = useState<MindmapDocMode | null>(null);
+  // ref 供 debounce 保存闭包读取最新值（避免捕获过期 state）
+  const pendingDocModeRef = useRef<MindmapDocMode | null>(null);
+  pendingDocModeRef.current = pendingDocMode;
+
+  // 空格平移模式（Figma 式，全模式统一）：按住空格 → 抓手拖画布、节点不可交互；
+  // 平时左键框选/双击建节点
+  const [spacePressed, setSpacePressed] = useState(false);
+  const isPanning = spacePressed;
 
   // 撤销/重做（事务粒度快照，上限 50 步）。所有变更操作前调 takeSnapshot。
   const undoApi = useUndoRedo({
@@ -87,13 +133,20 @@ function EditorCanvas() {
     setSaveStatus('saving');
     try {
       const { nodes: n, edges: e, viewport: vp } = latestRef.current;
+      // 剥离瞬态渲染字段（selected/dragging 是 UI 态不应落库；hidden 有折叠语义、
+      // measured 由 RF 重测，均保留）
+      const cleanNodes = (n as MindmapFlowNode[]).map(({ selected: _s, dragging: _d, ...rest }) => rest);
+      const cleanEdges = (e as MindmapFlowEdge[]).map(({ selected: _s, ...rest }) => rest);
       const updated = await mindmapApi.update(current.id, {
-        nodes: n as MindmapFlowNode[],
-        edges: e as MindmapFlowEdge[],
+        nodes: cleanNodes,
+        edges: cleanEdges,
         viewport: vp,
+        // 模式切换值随本次一起提交（单独 PATCH 会与 pending 保存互相 409）
+        ...(pendingDocModeRef.current ? { docMode: pendingDocModeRef.current } : {}),
         expectedVersion: current.version, // 乐观锁基准
       });
       onSaved(updated.version);
+      setPendingDocMode(null);
     } catch {
       setSaveStatus('error');
       // http 拦截器已 toast（含 409 冲突提示）
@@ -115,13 +168,21 @@ function EditorCanvas() {
   // 卸载时清 timer，避免对已卸载组件 setState
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
+  // 对齐吸附：拦截拖动位置变更注入修正（helperLines 本地 state）
+  const { getViewport, screenToFlowPosition, fitView } = useReactFlow();
+  const { enhanceChanges, helperLines, clearLines } = useAlignmentSnap({
+    getNodes: () => latestRef.current.nodes,
+    getThreshold: () => SNAP_THRESHOLD_PX / getViewport().zoom,
+  });
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setNodes((nds) => applyNodeChanges(changes, nds) as MindmapRFNode[]);
+      const enhanced = enhanceChanges(changes);
+      setNodes((nds) => applyNodeChanges(enhanced, nds) as MindmapRFNode[]);
       markDirty();
       triggerSave();
     },
-    [markDirty, triggerSave],
+    [enhanceChanges, markDirty, triggerSave],
   );
 
   const onEdgesChange = useCallback(
@@ -135,6 +196,14 @@ function EditorCanvas() {
 
   const onConnect = useCallback(
     (conn: Connection) => {
+      // 自环/重复边拦截（自由画布 Loose 模式下允许任意连线，但无意义边不建）
+      if (conn.source === conn.target) return;
+      const dup = latestRef.current.edges.some(
+        (e) =>
+          (e.source === conn.source && e.target === conn.target) ||
+          (e.source === conn.target && e.target === conn.source),
+      );
+      if (dup) return;
       takeSnapshot();
       setEdges((eds) => addEdge({ ...conn, type: 'mindmap' }, eds) as MindmapRFEdge[]);
       markDirty();
@@ -145,10 +214,12 @@ function EditorCanvas() {
 
   const onMove: OnMove = useCallback((_evt, vp) => setViewport(vp), []);
 
-  // 拖拽结束记录一次快照（拖拽过程每帧不记录，只松手时记一次）
-  const onNodeDragStop = useCallback(() => takeSnapshot(), [takeSnapshot]);
+  // 拖拽事务：开始时拍快照（撤销回到拖前），结束时清辅助线。
+  // （修正：快照须在变更前拍——原先在 dragStop 拍的是拖后状态，该撤销步无效）
+  const onNodeDragStart = useCallback(() => takeSnapshot(), [takeSnapshot]);
+  const onNodeDragStop = useCallback(() => clearLines(), [clearLines]);
 
-  // 自动布局：Toolbar 触发信号（autoLayoutTick）→ effect 执行 dagre 重排
+  // 自动布局：Toolbar 触发信号（autoLayoutTick）→ effect 执行 DFS 重排
   const autoLayoutTick = useMindmapStore((s) => s.autoLayoutTick);
   const lastLayoutTick = useRef(0);
   useEffect(() => {
@@ -168,9 +239,91 @@ function EditorCanvas() {
     triggerSave();
   }, [markDirty, triggerSave]);
 
-  // 画布右键菜单上下文（自动布局 + 适应视图 + 导出 PNG）
+  // 自由画布操作（双击建节点 / 删选中）
+  const canvasActions = useCanvasActions({
+    setNodes,
+    setEdges,
+    getLatest: () => latestRef.current,
+    markDirty,
+    triggerSave,
+    takeSnapshot,
+  });
+
+  // 双击空白建节点：全模式统一（不再限定画布模式）；节点双击已 stopPropagation
+  const onCanvasDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      // 只响应画布空白（pane）的双击，排除节点/边/控件冒泡
+      const cls = (e.target as HTMLElement)?.classList;
+      if (!cls?.contains('react-flow__pane')) return;
+      const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      canvasActions.createTextAt(pos);
+    },
+    [screenToFlowPosition, canvasActions],
+  );
+
+  // 拖拽创建：图片文件 → 上传后建 image 节点；URL 文本 → 建 link 节点（全模式生效）
+  const onDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const dt = e.dataTransfer;
+
+      const file = Array.from(dt.files).find((f) => f.type.startsWith('image/'));
+      if (file) {
+        const up = await uploadImageFile(file);
+        if (up) canvasActions.createImageAt(pos, up, file.name);
+        return;
+      }
+      const urlText = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').trim();
+      if (/^https?:\/\//i.test(urlText)) {
+        canvasActions.createLinkAt(pos, urlText);
+      }
+    },
+    [screenToFlowPosition, canvasActions],
+  );
+
+  // 粘贴图片：剪贴板含图片项 → 上传后在视口中心建 image 节点（全模式生效）
+  const onPaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      const up = await uploadImageFile(file);
+      if (!up) return;
+      const pos = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      canvasActions.createImageAt(pos, up, file.name);
+    },
+    [screenToFlowPosition, canvasActions],
+  );
+
+  // 连线标签编辑：双击边 → 浮层输入框 → Enter/失焦提交（data.label，空则清除）
+  const [editingEdge, setEditingEdge] = useState<{ id: string; x: number; y: number; value: string } | null>(null);
+  const onEdgeDoubleClick = useCallback((e: React.MouseEvent, edge: Edge) => {
+    setEditingEdge({ id: edge.id, x: e.clientX, y: e.clientY, value: (edge.data as { label?: string })?.label ?? '' });
+  }, []);
+  const commitEdgeLabel = useCallback(() => {
+    if (!editingEdge) return;
+    const { id, value } = editingEdge;
+    const trimmed = value.trim();
+    takeSnapshot();
+    setEdges((eds) =>
+      eds.map((ed) =>
+        ed.id === id ? { ...ed, data: { ...ed.data, label: trimmed || undefined } } : ed,
+      ),
+    );
+    markDirty();
+    triggerSave();
+    setEditingEdge(null);
+    containerRef.current?.focus();
+  }, [editingEdge, takeSnapshot, markDirty, triggerSave]);
+
+  // 画布右键菜单上下文（自动布局 + 适应视图 + 网格开关 + 导出 PNG）
   const triggerAutoLayout = useMindmapStore((s) => s.triggerAutoLayout);
-  const { fitView } = useReactFlow();
 
   // 导出整张图为 PNG（白底，过滤 minimap/controls，按节点 bounds 计算导出范围）
   const exportPng = useCallback(() => {
@@ -210,7 +363,43 @@ function EditorCanvas() {
     autoLayout: triggerAutoLayout,
     fitView: () => fitView({ padding: 0.3 }),
     exportPng,
+    showGrid,
+    toggleGrid: () => setShowGrid((v) => !v),
+    isTree,
+    toggleMode: () => {
+      const next: MindmapDocMode = isTree ? 'canvas' : 'tree';
+      setIsTree(!isTree);
+      setPendingDocMode(next);
+      markDirty();
+      triggerSave();
+    },
+    createImageNode: () => {
+      canvasActions.createImageNodeAt(
+        screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
+      );
+    },
+    openMermaidImport: () => setMermaidDialogOpen(true),
   };
+
+  // Mermaid 导入：解析 → DFS 布局 → 整体平移到视口中心 → 追加到当前画布（不覆盖现有内容）
+  const [mermaidDialogOpen, setMermaidDialogOpen] = useState(false);
+  const handleMermaidImport = useCallback(
+    (text: string): boolean => {
+      const parsed = parseMermaidFlowchart(text);
+      if (!parsed) return false;
+      takeSnapshot();
+      const anchor = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      const draft = toCanvasDraft(parsed, anchor);
+      const { nodes: curNodes, edges: curEdges } = latestRef.current;
+      const cleared = curNodes.map((n) => ({ ...n, selected: false }));
+      setNodes([...cleared, ...(draft.nodes as MindmapRFNode[])]);
+      setEdges([...curEdges.map((e) => ({ ...e, selected: false })), ...(draft.edges as MindmapRFEdge[])]);
+      markDirty();
+      triggerSave();
+      return true;
+    },
+    [screenToFlowPosition, setNodes, setEdges, markDirty, triggerSave, takeSnapshot],
+  );
 
   // 节点操作（加子/加同级/删子树/折叠展开）
   const actions = useMindmapActions({
@@ -222,7 +411,7 @@ function EditorCanvas() {
   });
   const selectedNode = nodes.find((n) => n.selected);
 
-  // 键盘：Tab=加子 / Enter=加同级 / Delete=删子树（编辑态 input 内不拦截）
+  // 键盘：Ctrl+S/Ctrl+Z 全局；Tab/Enter/Delete 按文档形态分流（编辑态 input 内不拦截）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       // Ctrl+S / Cmd+S 立即保存（无需选中节点，拦截浏览器默认保存）
@@ -243,26 +432,66 @@ function EditorCanvas() {
         redoAction();
         return;
       }
-      if (!selectedNode) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // 文本编辑中不触发
+
+      // 空格：按住进入平移模式（抓手拖画布，节点不可交互）；松开退出（见 handleKeyUp）
+      if (e.key === ' ') {
+        e.preventDefault();
+        setSpacePressed(true);
+        return;
+      }
+
+      // Delete/Backspace：树形=删选中子树（根不可删）或选中边；自由画布=删选中节点+选中边
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (isTree) {
+          if (selectedNode) {
+            if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
+            e.preventDefault();
+            takeSnapshot();
+            actions.deleteNode(selectedNode.id);
+          } else if (edges.some((ed) => ed.selected)) {
+            // 恢复旧版"删选中边"能力（R6 回归修复）
+            e.preventDefault();
+            canvasActions.deleteSelection();
+          }
+        } else {
+          e.preventDefault();
+          canvasActions.deleteSelection();
+        }
+        return;
+      }
+
+      // Tab：树形=加子节点；画布=选中节点旁建新文字节点（键盘入口，Q8）
       if (e.key === 'Tab') {
         e.preventDefault();
-        takeSnapshot();
-        actions.addChildNode(selectedNode.id);
-      } else if (e.key === 'Enter') {
+        if (isTree && selectedNode) {
+          takeSnapshot();
+          actions.addChildNode(selectedNode.id);
+        } else if (!isTree && selectedNode) {
+          canvasActions.createTextAt({
+            x: selectedNode.position.x + (selectedNode.width ?? 260),
+            y: selectedNode.position.y,
+          });
+        }
+        return;
+      }
+      // Enter：树形=加同级；画布不响应（建节点用双击/Tab）
+      if (e.key === 'Enter') {
+        if (!(isTree && selectedNode)) return;
         e.preventDefault();
         takeSnapshot();
         actions.addSiblingNode(selectedNode.id);
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if ((selectedNode.data.level ?? 1) === 0) return; // 根节点不可删
-        e.preventDefault();
-        takeSnapshot();
-        actions.deleteNode(selectedNode.id);
+        return;
       }
     },
-    [selectedNode, actions, saveNow, takeSnapshot, undoAction, redoAction],
+    [selectedNode, isTree, edges, actions, canvasActions, saveNow, takeSnapshot, undoAction, redoAction],
   );
+
+  // 空格松开退出平移模式（失焦兜底：编辑框抢焦点/切视图时 keyup 可能丢失）
+  const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === ' ') setSpacePressed(false);
+  }, []);
 
   const hasChildren = useCallback(
     (id: string) => latestRef.current.edges.some((e) => e.source === id),
@@ -304,8 +533,9 @@ function EditorCanvas() {
         actions.moveSibling(id, direction);
       },
       hasChildren,
+      focusCanvas,
     }),
-    [updateNodeData, actions, hasChildren, takeSnapshot],
+    [updateNodeData, actions, hasChildren, takeSnapshot, focusCanvas],
   );
 
   if (!current) return null;
@@ -313,18 +543,40 @@ function EditorCanvas() {
   return (
     <MindmapEditorContext.Provider value={ctxValue}>
       <ContextMenuHost items={buildCanvasItems} target={null} ctx={canvasCtx}>
-        <div className="h-full w-full outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
+        <div
+          ref={containerRef}
+          className={cn('relative h-full w-full outline-none', isPanning && 'mm-space-pan')}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+          onKeyUp={handleKeyUp}
+          onBlur={() => setSpacePressed(false)}
+          onDoubleClick={onCanvasDoubleClick}
+          onDrop={onDrop}
+          onDragOver={(e) => {
+            // 允许 drop（默认浏览器打开文件）
+            e.preventDefault();
+          }}
+          onPaste={onPaste}
+        >
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
+          connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
+          onEdgeDoubleClick={onEdgeDoubleClick}
           onMove={onMove}
+          deleteKeyCode={null}
+          zoomOnDoubleClick={false}
+          selectionOnDrag={!isPanning}
+          panOnDrag={isPanning}
+          panActivationKeyCode={null}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           minZoom={0.2}
@@ -332,11 +584,38 @@ function EditorCanvas() {
           proOptions={{ hideAttribution: true }}
           className="bg-background"
         >
-          <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} />
+          {showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} />}
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable className="bg-card" />
           <OutlinePanel />
+          <NodeStylePanel />
+          <HelperLines lines={helperLines} />
         </ReactFlow>
+        {editingEdge && (
+          <input
+            autoFocus
+            defaultValue={editingEdge.value}
+            onChange={(e) => setEditingEdge({ ...editingEdge, value: e.target.value })}
+            onBlur={commitEdgeLabel}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return; // IME 组合输入中不提交
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitEdgeLabel();
+              } else if (e.key === 'Escape') {
+                setEditingEdge(null);
+              }
+            }}
+            className="fixed z-50 w-40 rounded-md border bg-card px-2 py-1 text-xs shadow-lg outline-none"
+            style={{ left: editingEdge.x + 8, top: editingEdge.y - 10 }}
+            placeholder="连线标签…"
+          />
+        )}
+        <MermaidImportDialog
+          open={mermaidDialogOpen}
+          onOpenChange={setMermaidDialogOpen}
+          onImport={handleMermaidImport}
+        />
         </div>
       </ContextMenuHost>
     </MindmapEditorContext.Provider>

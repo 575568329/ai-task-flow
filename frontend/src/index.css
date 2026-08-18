@@ -240,6 +240,88 @@ body,
   box-shadow: 0 12px 28px color-mix(in oklch, var(--foreground) 18%, transparent);
 }
 
+/* ============ 自由画布节点标记色（data-style，shadcn 语义 tint） ============
+ * 着色策略：半透明底 + 实色边 + 前景不变，主题自动跟随。
+ * 混入比例 22%（语义深色系 16%）——太淡没有标记效果，太浓文字对比度崩。
+ * 色板 swatch 用同款 color-mix 渲染（NodeStylePanel），保证选中即所见。
+ * 渲染优先级：data-style > data.branch（树形分支色）> 默认 card。
+ */
+.mm-card[data-style='primary'] {
+  background: color-mix(in oklch, var(--primary) 16%, var(--card));
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+}
+.mm-card[data-style='secondary'] {
+  background: color-mix(in oklch, var(--secondary) 70%, var(--card));
+  border-color: color-mix(in oklch, var(--secondary-foreground) 30%, var(--border));
+}
+.mm-card[data-style='destructive'] {
+  background: color-mix(in oklch, var(--destructive) 16%, var(--card));
+  border-color: color-mix(in oklch, var(--destructive) 40%, var(--border));
+}
+.mm-card[data-style='muted'] {
+  background: var(--muted);
+  border-color: color-mix(in oklch, var(--muted-foreground) 28%, var(--border));
+  color: var(--muted-foreground);
+}
+.mm-card[data-style='chart-1'] {
+  background: color-mix(in oklch, var(--chart-1) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-1) 48%, var(--border));
+}
+.mm-card[data-style='chart-2'] {
+  background: color-mix(in oklch, var(--chart-2) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-2) 48%, var(--border));
+}
+.mm-card[data-style='chart-3'] {
+  background: color-mix(in oklch, var(--chart-3) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-3) 48%, var(--border));
+}
+.mm-card[data-style='chart-4'] {
+  background: color-mix(in oklch, var(--chart-4) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-4) 48%, var(--border));
+}
+.mm-card[data-style='chart-5'] {
+  background: color-mix(in oklch, var(--chart-5) 22%, var(--card));
+  border-color: color-mix(in oklch, var(--chart-5) 48%, var(--border));
+}
+
+/* 样式维度：边框样式/圆角/字号（data-style 同源属性控制） */
+.mm-card[data-border='dashed'] {
+  border-style: dashed;
+}
+.mm-card[data-border='thick'] {
+  border-width: 2px;
+}
+.mm-card[data-rounded='off'] {
+  border-radius: 0;
+}
+.mm-card[data-font='sm'] {
+  font-size: 11px;
+}
+.mm-card[data-font='lg'] {
+  font-size: 15px;
+}
+
+/* 空格平移模式（Figma 式）：抓手光标 + 节点/边/连接点禁交互 */
+.mm-space-pan {
+  cursor: grab;
+}
+.mm-space-pan:active {
+  cursor: grabbing;
+}
+.mm-space-pan .react-flow__node,
+.mm-space-pan .react-flow__edge,
+.mm-space-pan .react-flow__handle {
+  pointer-events: none;
+}
+
+/* 对齐辅助线：弱化存在感——细虚线 + 品红（蓝湖/MasterGo 风格） */
+.mm-helperline {
+  stroke: oklch(0.68 0.27 330);
+  stroke-width: 1;
+  stroke-opacity: 0.55;
+  stroke-dasharray: 4 3;
+}
+
 /* ============ 分支配色色板（OKLCH，8 色，深浅两套） ============
  * 每个主分支一种色，node.data.branch 决定取色。
  * 色相差 ~45-60°，区分度高不刺眼。超出 8 个分支按 index % 8 循环。

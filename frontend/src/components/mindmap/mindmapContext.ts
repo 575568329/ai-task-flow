@@ -25,6 +25,8 @@ export interface MindmapEditorContextValue {
   moveSibling: (id: string, direction: 'up' | 'down') => void;
   /** 节点是否有子节点（折叠按钮显隐判断） */
   hasChildren: (id: string) => boolean;
+  /** 焦点回到画布容器（节点编辑失焦后调用，恢复快捷键可用性） */
+  focusCanvas: () => void;
 }
 
 export const MindmapEditorContext = createContext<MindmapEditorContextValue | null>(null);

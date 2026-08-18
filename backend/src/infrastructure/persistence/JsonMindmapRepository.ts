@@ -5,8 +5,10 @@ import type { MindmapDocDTO } from '@ai-task-flow/shared';
 import { mindmapsFilePath } from '../../config/dataDir.js';
 import type { MindmapRepository } from '../../domain/mindmap/repositories/MindmapRepository.js';
 import { MindmapDoc } from '../../domain/mindmap/entities/MindmapDoc.js';
+import { migrateToCurrent, CURRENT_SCHEMA_VERSION } from './migrations.js';
 
 interface MindmapStorageData {
+  schemaVersion?: number;
   documents: MindmapDocDTO[];
 }
 
@@ -86,7 +88,9 @@ export class JsonMindmapRepository implements MindmapRepository {
     try {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
       const content = await fs.readFile(this.filePath, 'utf-8');
-      return JSON.parse(content);
+      const raw = JSON.parse(content) as MindmapStorageData;
+      // 读时迁移：旧版本数据升到最新（schemaVersion 缺省视为 0）
+      return migrateToCurrent(raw);
     } catch (error: any) {
       if (error.code === 'ENOENT') return { documents: [] };
       throw error;
@@ -95,9 +99,15 @@ export class JsonMindmapRepository implements MindmapRepository {
 
   private async saveAll(data: MindmapStorageData): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    // 版本取 max：未来版本数据（如 v99）不被降级盖章——降级会让再升级时
+    // 迁移链把高版本形状的数据当低版本跑全套迁移，损坏数据（R4）
+    const withVersion = {
+      ...data,
+      schemaVersion: Math.max(data.schemaVersion ?? 0, CURRENT_SCHEMA_VERSION),
+    };
     // 原子写：先写 .tmp 再 rename 替换。rename 是原子操作，写崩不会损坏主文件。
     const tmp = `${this.filePath}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.writeFile(tmp, JSON.stringify(withVersion, null, 2), 'utf-8');
     await fs.rename(tmp, this.filePath);
   }
 }

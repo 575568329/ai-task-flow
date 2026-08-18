@@ -24,18 +24,52 @@ export interface MindmapViewport {
   zoom: number;
 }
 
+/** 文档形态：树形思维导图 / 自由画布。创建时确定并持久化（消除模式漂移）。 */
+export type MindmapDocMode = 'tree' | 'canvas';
+
 /**
  * 节点业务数据（存于 React Flow node.data，随 toObject() 序列化）。
  * index signature 满足 React Flow 的 Node<T> 约束（T extends Record<string, unknown>），
  * 后端当不透明 blob 存取不受影响。
+ *
+ * 节点种类由 node.type 判别（'mindmap'=text / 'image' / 'link' / 'group'），
+ * 不用 data.kind 双轨判别（KISS，node.type 是 RF 渲染分流主键）。
  */
 export interface MindmapNodeData {
-  label: string; // 节点文本
+  label: string; // 节点文本（text）/ 链接标题（link）/ 组名（group）
   note?: string; // 节点备注（纯文本，hover/点击展开）
-  expanded?: boolean; // 是否展开子节点（默认 true）
-  branch?: BranchKey; // 所属分支色（决定节点/连线配色）
-  level?: number; // 层级深度，0=根（用于字号/字重/线宽递减）
+  expanded?: boolean; // 是否展开子节点（默认 true，树形模式用）
+  branch?: BranchKey; // 所属分支色（决定节点/连线配色，树形模式用；自由画布用 style.fill）
+  level?: number; // 层级深度，0=根（用于字号/字重/线宽递减，树形模式用）
+  imageUrl?: string; // image 节点：/api/uploads/xxx.png（相对路径）
+  images?: string[]; // 文字节点内嵌图片（编辑态粘贴追加，label 下方缩略图展示）
+  href?: string; // link 节点：外链 URL
+  width?: number; // 可调尺寸节点（image/link/group）的自然宽
+  height?: number; // 可调尺寸节点的自然高
+  style?: CanvasNodeStyle; // 样式（语义 key，见 CanvasNodeStyle）
   [key: string]: unknown;
+}
+
+/** 节点标记色——shadcn 语义 key（强调）或 chart 分类 key（中性分类），非 hex */
+export type CanvasFill =
+  | 'default' // 缺省：纯 card 原样
+  | 'primary' // 重点
+  | 'secondary' // 次要
+  | 'destructive' // 警示
+  | 'muted' // 弱化
+  | 'chart-1'
+  | 'chart-2'
+  | 'chart-3'
+  | 'chart-4'
+  | 'chart-5'; // 中性分类色（技术/产品/运营等无语义负担的分类）
+
+/** 节点样式（语义 key，渲染时映射为 shadcn token tint，主题自动跟随） */
+export interface CanvasNodeStyle {
+  fill?: CanvasFill;
+  borderStyle?: 'solid' | 'dashed';
+  borderWidth?: 'thin' | 'thick';
+  rounded?: boolean;
+  fontSize?: 'sm' | 'md' | 'lg';
 }
 
 /**
@@ -64,16 +98,17 @@ export interface MindmapFlowEdge {
   type?: string | null;
   sourceHandle?: string | null;
   targetHandle?: string | null;
-  data?: { branch?: BranchKey };
+  data?: { branch?: BranchKey; label?: string }; // label：连线标签（可选）
   animated?: boolean;
   hidden?: boolean;
   [key: string]: unknown;
 }
 
-/** 一张完整的思维导图文档 */
+/** 一张完整的思维导图/画布文档 */
 export interface MindmapDocDTO {
   id: string;
   title: string;
+  docMode?: MindmapDocMode; // 文档形态（旧文档缺省由前端启发式推断）
   version: number; // 乐观锁版本号，每次 PATCH 自增
   nodeCount: number; // 冗余字段，列表接口直接读取、不解析 nodes
   nodes: MindmapFlowNode[];
@@ -87,6 +122,7 @@ export interface MindmapDocDTO {
 export interface MindmapMetaDTO {
   id: string;
   title: string;
+  docMode?: MindmapDocMode;
   nodeCount: number;
   createdAt: string;
   updatedAt: string;
@@ -95,6 +131,7 @@ export interface MindmapMetaDTO {
 /** 新建文档入参（title 可选，缺省走默认标题） */
 export interface MindmapCreateDTO {
   title?: string;
+  docMode?: MindmapDocMode; // 缺省 'tree'（API 兼容）；前端新建画布时显式传 'canvas'
 }
 
 /**
@@ -104,6 +141,7 @@ export interface MindmapCreateDTO {
  */
 export interface MindmapUpdateDTO {
   title?: string;
+  docMode?: MindmapDocMode; // 模式切换（右键菜单切换，随下次保存提交）
   nodes?: MindmapFlowNode[];
   edges?: MindmapFlowEdge[];
   viewport?: MindmapViewport;

@@ -116,6 +116,9 @@ export function useMindmapActions(params: {
         source: parentId,
         target: newId,
         type: 'mindmap',
+        // 右出左进（树形约定），线锚定在连接点上
+        sourceHandle: 'right',
+        targetHandle: 'left',
         data: { branch },
       };
       const cleared = nodes.map((n) => ({ ...n, selected: false }));
@@ -155,6 +158,8 @@ export function useMindmapActions(params: {
           source: parentEdge.source,
           target: newId,
           type: 'mindmap',
+          sourceHandle: 'right',
+          targetHandle: 'left',
           data: sibling.data.branch ? { branch: sibling.data.branch } : undefined,
         });
       }

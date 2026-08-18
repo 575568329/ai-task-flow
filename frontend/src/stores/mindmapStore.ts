@@ -81,7 +81,8 @@ export const useMindmapStore = create<MindmapState>((set, get) => ({
 
   createDoc: async (title) => {
     try {
-      const doc = await mindmapApi.create({ title });
+      // 新建默认自由画布（空画布，双击建节点）；树形流程不再是默认入口
+      const doc = await mindmapApi.create({ title, docMode: 'canvas' });
       set({ current: doc, draft: null, isDirty: false, saveStatus: 'idle' });
       await get().fetchList();
       return doc.id;
