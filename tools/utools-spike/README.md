@@ -47,13 +47,30 @@ cd ../tools/utools-spike && node downgrade-css.cjs orig.css lc108.css
 Electron 22 二进制安装方式(spike 临时,勿提交):
 `npm install --no-save --prefix .tmp-eton electron@22.3.27 --electron-mirror=https://npmmirror.com/mirrors/electron/`
 
+## 窗口适配(第二轮验证,2026-08-20)
+
+用户在 uTools 内确认:降级渲染样式无问题,但**窗口是主要问题**。实测数据(`winrect.ps1`):
+
+- uTools 主窗口宽 **802px 固定不可调**(`setExpendHeight` 只能调高度,无宽度 API),当前屏 1920x1200
+- 本应用按 >=1024 宽设计 → 内嵌主窗口形态不可用
+
+适配策略(已实现于 `plugin/preload.js`):`onPluginEnter` 即
+`utools.createBrowserWindow(当前页面URL, {width:1440, height:900, minWidth:1024, resizable/maximizable})`
+→ 加载完成后 `show + maximize` → `utools.hideMainWindow()`。独立窗口可自由调整/最大化。
+
+待实测风险:`createBrowserWindow` 文档标注 url 为相对路径 html,传入绝对 URL
+(serve-108)是否可行;失败则回退 plugin/ 内放 launcher.html 中转。
+已知限制:再次呼出会多开窗口(uTools 无单例 API),生产形态需防重入。
+
 ## 手动验证步骤(uTools 内最终确认)
 
 1. 确认 backend 在跑(默认 3000);若否:`cd backend && npm run dev`
 2. 启动降级版服务:`cd tools/utools-spike && node serve-108.cjs`(监听 3108)
 3. uTools → 设置 → 开启「开发者插件」;将 `tools/utools-spike/plugin/plugin.json` 拖入 uTools 窗口
-4. `alt+space` 呼出 uTools,输入 `atf` 或 `任务看板` 回车 → 应看到降级渲染后的完整看板
-5. 检查点:看板列/卡片颜色、任务数据加载、思维导图/自由画布切换、文字可读性、半透明遮罩缺失程度
+   (已拖入过且改了 preload 的:在 uTools 插件管理里移除后重新拖入,或开发者模式下重启 uTools)
+4. `alt+space` 呼出 uTools,输入 `atf` 或 `任务看板` 回车 → 应弹出独立的 1440x900(最大化)工作台窗口,
+   uTools 主窗口自动隐藏
+5. 检查点:独立窗口尺寸/缩放、看板列/卡片颜色、任务数据加载、画布平移缩放、窗口关闭后再呼出
 
 ## 移植路线(确认可行后)
 
