@@ -10,7 +10,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
-import { TaskCard } from './TaskCard';
+import { TaskCard, TaskCardBody } from './TaskCard';
 import { Collapse } from '@/components/ui/collapse';
 import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { useNarrowViewport } from '@/hooks/useNarrowViewport';
@@ -48,6 +48,30 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
         <span className="text-muted-foreground truncate text-xs font-semibold">{label}</span>
         <span className="text-muted-foreground/70 text-[10px]">{tasks.length}</span>
       </button>
+
+      {/* 紧凑收起态:卡片叠堆(业界 stacked cards 模式)——顶层首张真实卡 +
+          底下两层错位露边 + 计数徽标,一眼看出"这里收了一摞任务";点击整堆展开 */}
+      {narrow && collapsed && tasks.length > 0 && (
+        <button
+          type="button"
+          onClick={() => toggleGroup(groupKey)}
+          className="group/stack relative mr-2 mb-2 h-[128px] w-64 shrink-0 cursor-pointer rounded-md text-left transition-transform hover:-translate-y-0.5"
+          title={`展开「${label}」(${tasks.length} 张)`}
+          aria-label={`展开分组 ${label},${tasks.length} 张任务`}
+        >
+          {/* 底层两张错位"卡背":只露边,营造一沓的厚度 */}
+          <div className="border-border/60 bg-card/60 absolute inset-0 translate-x-2 translate-y-2 rounded-md border" />
+          <div className="border-border bg-card/80 absolute inset-0 translate-x-1 translate-y-1 rounded-md border" />
+          {/* 顶层:首张真实卡内容(只读展示;点击是展开分组,不吃卡片的选/拽) */}
+          <div className="border-border bg-card pointer-events-none absolute inset-0 overflow-hidden rounded-md border shadow-sm">
+            <TaskCardBody task={tasks[0]} />
+          </div>
+          {/* 计数徽标:一沓的数量 */}
+          <span className="bg-primary text-primary-foreground absolute -top-2 left-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold shadow">
+            {tasks.length}
+          </span>
+        </button>
+      )}
 
       <Collapse open={!collapsed} direction={narrow ? 'horizontal' : 'vertical'}>
         <div className="flex flex-col gap-2 pt-1 @max-[1023px]:flex-row @max-[1023px]:items-stretch">
