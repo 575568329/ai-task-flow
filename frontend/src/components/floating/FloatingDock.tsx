@@ -23,29 +23,29 @@ export function FloatingDock() {
       <div
         data-floating-chat="dock"
         className={cn(
-          'fixed right-6 bottom-6 z-[1200] flex flex-col items-center gap-3 transition-opacity duration-200',
+          'fixed right-6 bottom-6 z-[1200] flex flex-col items-center gap-2.5 transition-opacity duration-200',
           drawerOpen && 'pointer-events-none opacity-0',
         )}
       >
-        {/* 打开终端(上):新建 / 恢复 Claude 会话 */}
+        {/* 打开终端(上):新建 / 恢复 Claude 会话。size-9=36px:桌面鼠标目标足够,更少遮挡 */}
         <button
           type="button"
           onClick={() => setTerminalOpen(true)}
-          className="bg-background text-foreground border-border hover:bg-accent inline-flex size-12 items-center justify-center rounded-full border shadow-md transition-transform hover:scale-105"
+          className="bg-background text-foreground border-border hover:bg-accent inline-flex size-9 items-center justify-center rounded-full border shadow-md transition-transform hover:scale-105"
           aria-label="打开终端"
           title="打开终端 (新建 / 恢复 Claude 会话)"
         >
-          <Terminal className="size-5" />
+          <Terminal className="size-4" />
         </button>
         {/* 对话悬浮球(下):点击展开悬浮窗 */}
         <button
           type="button"
           onClick={openWindow}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex size-12 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex size-9 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105"
           aria-label="打开对话悬浮窗"
           title="点击打开对话"
         >
-          <MessageSquare className="size-5" />
+          <MessageSquare className="size-4" />
         </button>
       </div>
       <OpenClaudeDialog
