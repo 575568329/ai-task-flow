@@ -388,7 +388,8 @@ export function ChatView() {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="border-t p-3">
+        {/* pr 让位右下角悬浮坞(fixed right-6 bottom-6,宽约 72px):否则悬浮球压住发送按钮 */}
+        <div className="border-t p-3 pr-[88px]">
           <div className="flex items-end gap-2">
             <Textarea
               value={input}

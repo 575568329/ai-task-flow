@@ -3,12 +3,12 @@
 @import "@xyflow/react/dist/base.css";
 @import "./styles/animations.css";
 
-/* 模态弹层打开时隐藏右下角悬浮坞。
+/* 模态弹层打开时隐藏悬浮对话入口(悬浮坞 dock + 悬浮窗 window)。
  * Radix Dialog/AlertDialog(modal)打开会给 body 打 data-scroll-locked(react-remove-scroll,实测属性名),
- * 悬浮坞 z-1200 高于弹窗 z-50,不藏会浮在遮罩/弹窗上挡内容。
+ * 它们 z-50/1300 高于弹窗 z-50,不藏会浮在遮罩/弹窗上挡内容。
  * 一条规则覆盖所有现有及未来新增的模态弹窗;任务抽屉 modal=false 无此属性,
  * 由 FloatingDock 组件内 uiStore 联动隐藏。 */
-body[data-scroll-locked] [data-floating-chat='dock'] {
+body[data-scroll-locked] [data-floating-chat] {
   opacity: 0;
   pointer-events: none;
 }

@@ -217,7 +217,8 @@ export function FloatingChatWindow() {
     saveBounds(boundsRef.current);
   };
 
-  // 浏览器窗口缩小时,把浮窗 clamp 回视口(避免被抓不回)。只更内存不落盘。
+  // 浏览器窗口缩小时,把浮窗 clamp 回视口(避免被抓不回);窄视口重放铺满(fitCompact)。
+  // 只更内存不落盘。
   useEffect(() => {
     const onViewportResize = () => {
       const b = boundsRef.current;
@@ -225,7 +226,7 @@ export function FloatingChatWindow() {
       const y = clamp(b.y, 0, window.innerHeight - 48);
       const width = Math.min(b.width, window.innerWidth);
       const height = Math.min(b.height, window.innerHeight);
-      updateBounds({ ...b, x, y, width, height });
+      updateBounds(fitCompact({ ...b, x, y, width, height }));
     };
     window.addEventListener('resize', onViewportResize);
     return () => window.removeEventListener('resize', onViewportResize);

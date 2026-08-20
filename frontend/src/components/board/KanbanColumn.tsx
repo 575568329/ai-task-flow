@@ -3,13 +3,14 @@
 // 列内卡片按 projectName 二次分组(可折叠),缓解「单列卡片纵向堆太多滚动很久」。
 // 紧凑(行形态,uTools 802 等):列头可点击展开/收起整行,空行默认收起省高度,
 // 手动操作按状态记忆 localStorage;宽屏(列形态)不收起。
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { ChevronDown } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
 import { ProjectGroup } from './ProjectGroup';
 import { UNGROUPED_KEY, UNGROUPED_LABEL, type KanbanColumnDef } from './meta';
 import { useNarrowViewport } from '@/hooks/useNarrowViewport';
+import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { cn } from '@/lib/utils';
 
 interface KanbanColumnProps {
@@ -23,40 +24,19 @@ interface ProjectGroupItem {
   tasks: TaskDTO[];
 }
 
-const ROW_COLLAPSED_KEY = 'ai-task-flow:board-row-collapsed:v1';
-
-/** 读取用户手动设置的行收起记忆(按状态);容错坏数据 */
-function loadRowOverrides(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(ROW_COLLAPSED_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, boolean>;
-  } catch {
-    // 坏数据当无记忆
-  }
-  return {};
-}
-
 export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
   // droppable 挂整行/整列(含列头):收起态(卡片区不渲染)仍可作为拖放目标
   const { setNodeRef, isOver } = useDroppable({ id: column.status });
   const narrow = useNarrowViewport();
-  const [rowOverrides, setRowOverrides] = useState<Record<string, boolean>>(loadRowOverrides);
+  // 行收起记忆收口共享 store:各列实例读同一份,避免多列折叠互相覆盖
+  const rowOverrides = useBoardGroupingStore((s) => s.rowCollapsed);
+  const setRowCollapsed = useBoardGroupingStore((s) => s.setRowCollapsed);
 
   // 收起仅紧凑行形态生效:用户手动记忆 ?? 空行默认收起。
   // 行由空变有卡且无手动记忆 → 自动展开(拖卡进来立即可见)
   const collapsed = narrow ? (rowOverrides[column.status] ?? tasks.length === 0) : false;
 
-  const toggleRow = () => {
-    setRowOverrides((prev) => {
-      const next = { ...prev, [column.status]: !collapsed };
-      try {
-        localStorage.setItem(ROW_COLLAPSED_KEY, JSON.stringify(next));
-      } catch {
-        // 持久化失败不影响本次会话
-      }
-      return next;
-    });
-  };
+  const toggleRow = () => setRowCollapsed(column.status, !collapsed);
 
   // 列内按 projectName 分组:有项目名按卡片数降序(主打项目置顶),未分组固定垫底。
   const groups = useMemo<ProjectGroupItem[]>(() => {
@@ -97,6 +77,7 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
         type="button"
         onClick={narrow ? toggleRow : undefined}
         aria-expanded={narrow ? !collapsed : undefined}
+        title={narrow ? (collapsed ? '展开此行' : '收起此行') : undefined}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-2 text-left',
           narrow && 'hover:bg-muted/60 cursor-pointer',

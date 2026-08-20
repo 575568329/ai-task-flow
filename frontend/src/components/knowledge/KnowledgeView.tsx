@@ -10,6 +10,7 @@ import {
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { fetchManifest } from '@/api/knowledge';
 import { toast } from '@/components/ui/toaster';
+import { useNarrowViewport } from '@/hooks/useNarrowViewport';
 import { KnowledgeTree } from './KnowledgeTree';
 import { KnowledgeViewer } from './KnowledgeViewer';
 
@@ -18,6 +19,8 @@ export function KnowledgeView() {
   const setManifest = useKnowledgeStore((s) => s.setManifest);
   const setError = useKnowledgeStore((s) => s.setError);
   const [loading, setLoading] = useState(false);
+  // 紧凑视口树面板收窄(与 docs 同策略),保查看器可用宽度
+  const narrow = useNarrowViewport();
 
   const load = async () => {
     setLoading(true);
@@ -49,7 +52,7 @@ export function KnowledgeView() {
 
       <div className="flex-1 overflow-hidden p-2">
         <ResizablePanelGroup orientation="horizontal">
-          <ResizablePanel defaultSize="28%" minSize="18%">
+          <ResizablePanel defaultSize={narrow ? '22%' : '28%'} minSize={narrow ? '14%' : '18%'}>
             <KnowledgeTree onRefresh={() => void load()} refreshing={loading} />
           </ResizablePanel>
           <ResizableHandle withHandle />
