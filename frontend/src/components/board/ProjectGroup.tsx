@@ -29,6 +29,25 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
   // 紧凑行形态卡片横排 → 折叠用横向收拢(向左收,右侧分组滑来补位);宽屏列形态纵向塌缩
   const narrow = useNarrowViewport();
 
+  // 组内卡片列表(展开态渲染;两种形态共用)
+  const groupCards = (
+    <div className="flex flex-col gap-2 pt-1 @max-[1023px]:flex-row @max-[1023px]:items-stretch">
+      {/* initial={false}:首屏不播,避免几十张卡同时淡入闪烁;仅真正新增的卡才淡入 */}
+      <AnimatePresence initial={false}>
+        {tasks.map((task) => (
+          <motion.div
+            key={task.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <TaskCard task={task} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+
   return (
     // 紧凑(看板行形态):分组块作为整体参与行内横排(shrink-0),组内卡片也横向排
     <div className="flex flex-col gap-1 @max-[1023px]:shrink-0">
@@ -50,7 +69,8 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
       </button>
 
       {/* 紧凑收起态:卡片叠堆(业界 stacked cards 模式)——顶层首张真实卡 +
-          底下两层错位露边 + 计数徽标,一眼看出"这里收了一摞任务";点击整堆展开 */}
+          底下两层错位露边,一眼看出"这里收了一摞任务";点击整堆展开。
+          宽屏列形态收起无卡堆(纵向组头一条即可)。 */}
       {narrow && collapsed && tasks.length > 0 && (
         <button
           type="button"
@@ -62,30 +82,29 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
           {/* 底层两张错位"卡背":只露边,营造一沓的厚度 */}
           <div className="border-border/60 bg-card/60 absolute inset-0 translate-x-2 translate-y-2 rounded-md border" />
           <div className="border-border bg-card/80 absolute inset-0 translate-x-1 translate-y-1 rounded-md border" />
-          {/* 顶层:首张真实卡内容(只读展示;点击是展开分组,不吃卡片的选/拽) */}
-          <div className="border-border bg-card pointer-events-none absolute inset-0 overflow-hidden rounded-md border shadow-sm">
+          {/* 顶层:首张真实卡内容。p-2.5 与 TaskCard 外壳一致,视觉与展开态卡片相同;
+              pointer-events-none:点击是展开分组,不吃卡片的选/拽 */}
+          <div className="border-border bg-card pointer-events-none absolute inset-0 overflow-hidden rounded-md border p-2.5 shadow-sm">
             <TaskCardBody task={tasks[0]} />
           </div>
         </button>
       )}
 
-      <Collapse open={!collapsed} direction={narrow ? 'horizontal' : 'vertical'}>
-        <div className="flex flex-col gap-2 pt-1 @max-[1023px]:flex-row @max-[1023px]:items-stretch">
-          {/* initial={false}:首屏不播,避免几十张卡同时淡入闪烁;仅真正新增的卡才淡入 */}
-          <AnimatePresence initial={false}>
-            {tasks.map((task) => (
-              <motion.div
-                key={task.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-              >
-                <TaskCard task={task} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </Collapse>
+      {/* 紧凑:收起即卸载——grid 0fr 横向塌缩在 flex 布局里会被 stretch 撑住,
+          收起态残留占位把行内布局顶乱(实测 264×110 幽灵块);
+          展开动画交给卡片 AnimatePresence 淡入。
+          宽屏:保持原纵向 Collapse(0fr 高度塌缩在纵列表中工作正常) */}
+      {narrow ? (
+        !collapsed && (
+          <Collapse open direction="horizontal">
+            {groupCards}
+          </Collapse>
+        )
+      ) : (
+        <Collapse open={!collapsed} direction="vertical">
+          {groupCards}
+        </Collapse>
+      )}
     </div>
   );
 }
