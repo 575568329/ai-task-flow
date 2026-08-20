@@ -313,7 +313,9 @@ export function TaskDrawer() {
     <Sheet open={open} modal={false} onOpenChange={(isOpen) => !isOpen && close()}>
       <SheetContent
         side="right"
-        className="flex w-[80vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"
+        // 紧凑(<1024,如 uTools 主窗 802)用 max-lg: 提到 95vw 并收窄元信息栏;
+        // 弹层 portal 到 body,不在 main @container 上下文内,只能用视口断点
+        className="flex w-[80vw] max-lg:w-[95vw] sm:max-w-none flex-col gap-0 overflow-hidden p-0"
         // 图片预览(YARL)打开时,屏蔽抽屉的 outside-click / ESC 关闭:
         // YARL 蒙版 portal 到 document.body,不在本抽屉的 content 树内 → 点击它 / 按 ESC
         // 会被 Radix 误判为"操作抽屉外部"而连带关闭抽屉(只关了抽屉、预览没关)。
@@ -341,7 +343,7 @@ export function TaskDrawer() {
         {/* 三栏:元信息(固定窄) | 步骤(flex-1) | 预览(flex-1) */}
         <div className="flex flex-1 flex-row overflow-hidden">
           {/* 栏1:元信息(字段紧凑纵向排列) */}
-          <div className="bg-muted/20 flex w-[240px] shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-3">
+          <div className="bg-muted/20 flex w-[240px] max-lg:w-[170px] shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-3">
             <Field label="标题 *">
               <Input
                 ref={titleRef}

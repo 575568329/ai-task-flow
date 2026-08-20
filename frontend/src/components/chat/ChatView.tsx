@@ -27,6 +27,7 @@ import { streamChat } from '@/api/chatStream';
 import { MessageContent } from './MessageContent';
 import { SourceList } from './SourceList';
 import { CustomPromptPanel } from './CustomPromptPanel';
+import { useNarrowViewport } from '@/hooks/useNarrowViewport';
 
 interface MessageBubbleProps {
   role: ChatRole;
@@ -77,6 +78,7 @@ function MessageBubble({
 }
 
 export function ChatView() {
+  const narrow = useNarrowViewport();
   const conversations = useChatStore((s) => s.conversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const messages = useChatStore((s) => s.messages);
@@ -240,8 +242,8 @@ export function ChatView() {
   return (
     <>
     <PanelGroup className="flex h-full">
-      {/* 左:会话列表(可拖拽调宽) */}
-      <Panel defaultSize="18%" minSize="12%" maxSize="28%">
+      {/* 左:会话列表(可拖拽调宽)。窄视口默认收起(collapsible),拖把手可展开 */}
+      <Panel defaultSize={narrow ? '0%' : '18%'} minSize="12%" maxSize="28%" collapsible>
       <aside className="bg-muted/30 flex h-full flex-col border-r">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">会话</span>

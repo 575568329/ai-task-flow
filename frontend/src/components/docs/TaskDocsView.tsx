@@ -36,6 +36,7 @@ import { taskApi, systemApi } from '@/api/task';
 import { addRepoHistory } from '@/lib/repoHistory';
 import { readFile, writeFile } from '@/api/files';
 import { toast } from '@/components/ui/toaster';
+import { useNarrowViewport } from '@/hooks/useNarrowViewport';
 import { useConfirm } from '@/components/ui/confirm';
 import { MessageContent } from '@/components/chat/MessageContent';
 import { MdEditor } from '../knowledge/MdEditor';
@@ -88,6 +89,7 @@ function safeName(name: string): string {
 }
 
 export function TaskDocsView() {
+  const narrow = useNarrowViewport();
   const tasks = useTaskStore((s) => s.tasks);
   const fetchAll = useTaskStore((s) => s.fetchAll);
   const { confirm } = useConfirm();
@@ -306,8 +308,8 @@ export function TaskDocsView() {
   return (
     <div className="h-full">
       <ResizablePanelGroup orientation="horizontal" className="h-full">
-        {/* 左栏:Tab + 列表 */}
-        <ResizablePanel defaultSize="28%" minSize="18%">
+        {/* 左栏:Tab + 列表。窄视口收窄默认占比,保内容区可用 */}
+        <ResizablePanel defaultSize={narrow ? '22%' : '28%'} minSize={narrow ? '14%' : '18%'}>
           <div className="flex h-full flex-col border-r">
             {/* Tab 切换 */}
             <div className="flex border-b">

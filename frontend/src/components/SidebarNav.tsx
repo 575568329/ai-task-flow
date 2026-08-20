@@ -58,10 +58,13 @@ export function SidebarNav({ activeView, onViewChange, onOpenSettings }: Sidebar
 
   const [collapsed, setCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(COLLAPSE_KEY) === '1';
+      // 有记忆尊重记忆;无记忆时窄视口(uTools 主窗 802 等)默认收成图标栏
+      const stored = localStorage.getItem(COLLAPSE_KEY);
+      if (stored !== null) return stored === '1';
     } catch {
-      return false;
+      // 持久化不可用则落入宽度判断
     }
+    return typeof window !== 'undefined' && window.innerWidth < 1024;
   });
 
   const toggleCollapsed = () => {

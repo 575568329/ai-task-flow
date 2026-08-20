@@ -87,7 +87,7 @@ export function BoardToolbar() {
   }, [tasks]);
 
   return (
-    <div className="bg-background/80 flex items-center gap-2 border-b px-3 py-2 backdrop-blur">
+    <div className="bg-background/80 @max-[1023px]:gap-1 flex items-center gap-2 border-b px-3 py-2 backdrop-blur">
       <div
         className="flex items-center gap-1.5 pr-1"
         title={sseConnected ? '实时推送已连接' : '实时推送断开,正在重连…'}
@@ -98,7 +98,7 @@ export function BoardToolbar() {
             sseConnected ? 'bg-green-500' : 'bg-muted-foreground/40',
           )}
         />
-        <span className="text-muted-foreground hidden text-xs sm:inline">
+        <span className="text-muted-foreground hidden text-xs @min-[1024px]:inline">
           {sseConnected ? '已连接' : '断开'}
         </span>
       </div>
@@ -107,7 +107,7 @@ export function BoardToolbar() {
         value={projectFilter ?? ALL_OPTION}
         onValueChange={(value) => setProjectFilter(value === ALL_OPTION ? null : value)}
       >
-        <SelectTrigger size="sm" className="w-36">
+        <SelectTrigger size="sm" className="@max-[1023px]:w-28 w-36">
           <SelectValue placeholder="项目" />
         </SelectTrigger>
         <SelectContent>
@@ -124,7 +124,7 @@ export function BoardToolbar() {
         value={sourceFilter ?? ALL_OPTION}
         onValueChange={(value) => setSourceFilter(value === ALL_OPTION ? null : value as 'web' | 'manual')}
       >
-        <SelectTrigger size="sm" className="w-36">
+        <SelectTrigger size="sm" className="@max-[1023px]:w-28 w-36">
           <SelectValue placeholder="来源" />
         </SelectTrigger>
         <SelectContent>
@@ -134,7 +134,7 @@ export function BoardToolbar() {
         </SelectContent>
       </Select>
 
-      <div className="relative w-64">
+      <div className="relative @max-[1023px]:w-36 w-64">
         <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <Input
           value={searchQuery}
@@ -153,7 +153,7 @@ export function BoardToolbar() {
         onClick={() => expandAllGroups()}
       >
         <ChevronsUpDown className="size-4" />
-        展开分组
+        <span className="hidden @min-[1024px]:inline">展开分组</span>
       </Button>
       <Button
         size="sm"
@@ -163,7 +163,7 @@ export function BoardToolbar() {
         onClick={() => collapseAllGroups(allGroupKeys)}
       >
         <ChevronsDownUp className="size-4" />
-        收起分组
+        <span className="hidden @min-[1024px]:inline">收起分组</span>
       </Button>
 
       <div className="ml-auto flex items-center gap-2">
@@ -173,7 +173,7 @@ export function BoardToolbar() {
           title={`新建任务 (${formatCombo(shortcuts.newTask)})`}
         >
           <Plus className="size-4" />
-          新建任务
+          <span className="hidden @min-[1024px]:inline">新建任务</span>
         </Button>
       </div>
     </div>

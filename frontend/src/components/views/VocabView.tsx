@@ -109,9 +109,9 @@ export function VocabView() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden p-4 md:flex-row">
-      {/* ===== 翻译区(宽屏左栏 w-96 / 窄屏顶部)===== */}
-      <section className="bg-card flex shrink-0 flex-col gap-2 rounded-lg border p-3 md:w-96">
+    <div className="@min-[1024px]:flex-row flex h-full flex-col gap-4 overflow-hidden p-4">
+      {/* ===== 翻译区(宽屏左栏 w-96 / 紧凑顶部堆叠)。断点用容器查询(1024):md(768) 会让 802 误走宽屏分栏 */}
+      <section className="bg-card flex shrink-0 flex-col gap-2 rounded-lg border p-3 @min-[1024px]:w-96">
         <div className="flex flex-col gap-2">
           <Textarea
             value={input}

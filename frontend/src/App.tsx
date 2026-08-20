@@ -70,7 +70,9 @@ function App() {
         onViewChange={setActiveView}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <main className="flex-1 overflow-hidden">
+      {/* @container:内部视图按"实际内容宽"做紧凑/宽敞降级(容器查询),
+          独立窗口拖窄、uTools 主窗 802 都按 main 实宽触发,视口断点会误判 */}
+      <main className="@container flex-1 overflow-hidden">
         <motion.div animate={viewControls} className="h-full">
           {/* keep-alive:全部挂载,用 hidden 切换,保留各视图内部状态(聊天滚动/分栏位置等) */}
           {(Object.keys(VIEWS) as ViewKey[]).map((key) => {
