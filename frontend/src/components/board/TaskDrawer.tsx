@@ -473,8 +473,9 @@ export function TaskDrawer() {
         </div>
 
         {/* 底部:操作按钮(跨三栏)。新建态统一显示编辑态按钮;
-            对话→开悬浮窗;打开终端基于 draft.repoPath;复制指令/删除依赖已保存任务 */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
+            对话→开悬浮窗;打开终端基于 draft.repoPath;复制指令/删除依赖已保存任务。
+            紧凑态右侧留白:95vw 全宽时最右的删除按钮会撞右下角悬浮坞(fixed z-1200),让出其宽度 */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3 max-lg:pr-[88px]">
           <Button
             size="sm"
             onClick={() => {

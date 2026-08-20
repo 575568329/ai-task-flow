@@ -298,7 +298,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             title="刷新知识库"
           >
             <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
-            刷新
+            <span className="hidden @min-[1024px]:inline">刷新</span>
           </Button>
           <Button
             size="icon"
@@ -329,7 +329,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             title="只看收藏的文档"
           >
             <Star className={cn('size-3', filterFavorites && 'fill-current')} />
-            仅收藏
+            <span className="hidden @min-[1024px]:inline">仅收藏</span>
           </Button>
           <Button
             size="sm"
@@ -339,7 +339,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             title="只看最近 3 天新增/更新的文档"
           >
             <Sparkles className="size-3" />
-            近 3 天
+            <span className="hidden @min-[1024px]:inline">近 3 天</span>
           </Button>
         </div>
       </div>
@@ -404,7 +404,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
                   title="展开全部目录"
                 >
                   <ChevronsUpDown className="size-3.5" />
-                  全部展开
+                  <span className="hidden @min-[1024px]:inline">全部展开</span>
                 </Button>
                 <Button
                   size="sm"
@@ -414,7 +414,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
                   title="收起全部目录"
                 >
                   <ChevronsDownUp className="size-3.5" />
-                  全部收起
+                  <span className="hidden @min-[1024px]:inline">全部收起</span>
                 </Button>
               </div>
               {/* 根节点:知识库(明显加粗) */}
