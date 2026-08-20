@@ -41,4 +41,4 @@ knowledge-base/
 
 # playwright MCP 运行时产物(页面快照等)
 .playwright-mcp/
-browser-pilot-shots/
+.claude/browser-pilot-shots/
