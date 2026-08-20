@@ -54,13 +54,15 @@ Electron 22 二进制安装方式(spike 临时,勿提交):
 - uTools 主窗口宽 **802px 固定不可调**(`setExpendHeight` 只能调高度,无宽度 API),当前屏 1920x1200
 - 本应用按 >=1024 宽设计 → 内嵌主窗口形态不可用
 
-适配策略(已实现于 `plugin/preload.js`):`onPluginEnter` 即
-`utools.createBrowserWindow(当前页面URL, {width:1440, height:900, minWidth:1024, resizable/maximizable})`
-→ 加载完成后 `show + maximize` → `utools.hideMainWindow()`。独立窗口可自由调整/最大化。
+适配策略(v2,`plugin/preload.js`):`onPluginEnter` 即
+`utools.createBrowserWindow(当前页面URL, {width/height = 屏幕工作区, minWidth:1024, resizable/maximizable})`
+→ 加载完成后 `show`(附 maximize,实测不生效但不报错)→ `utools.hideMainWindow()`。
 
-待实测风险:`createBrowserWindow` 文档标注 url 为相对路径 html,传入绝对 URL
-(serve-108)是否可行;失败则回退 plugin/ 内放 launcher.html 中转。
-已知限制:再次呼出会多开窗口(uTools 无单例 API),生产形态需防重入。
+第三轮验证结论(eton-probe 布局探针,数字量化):
+- 802x602(uTools 主窗):**40+ 元素超出视口**(顶栏按钮被裁 64px),内嵌不可用
+- 1440x900:文档级无溢出,17 个超界均为看板列内卡片的正常纵向滚动 → **应用结构无需改动**
+- 用户截图确认:独立窗口已正常弹出(绝对 URL 方案通过),但 maximize() 未生效导致
+  窗口偏窄、"已完成"列被裁 → v2 改为按 `screen.availWidth/availHeight` 开窗(约满屏)
 
 ## 手动验证步骤(uTools 内最终确认)
 

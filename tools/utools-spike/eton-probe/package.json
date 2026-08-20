@@ -1,0 +1,6 @@
+{
+  "name": "utools-spike-eton-probe",
+  "private": true,
+  "version": "0.0.1",
+  "main": "probe.cjs"
+}

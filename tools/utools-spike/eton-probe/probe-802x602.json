@@ -1,0 +1,181 @@
+{
+ "viewport": [
+  802,
+  602
+ ],
+ "documentScrollSize": [
+  802,
+  602
+ ],
+ "overflowElementCount": 40,
+ "sample": [
+  {
+   "tag": "DIV",
+   "cls": "ml-auto flex items-center gap-2",
+   "rect": [
+    768,
+    16,
+    866,
+    48
+   ],
+   "size": [
+    98,
+    32
+   ]
+  },
+  {
+   "tag": "BUTTON",
+   "cls": "inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-a",
+   "rect": [
+    768,
+    16,
+    866,
+    48
+   ],
+   "size": [
+    98,
+    32
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-muted/30 flex min-w-[260px] flex-1 flex-col rounded-lg",
+   "rect": [
+    780,
+    77,
+    1040,
+    582
+   ],
+   "size": [
+    260,
+    505
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "flex items-center gap-2 px-3 py-2",
+   "rect": [
+    780,
+    77,
+    1040,
+    113
+   ],
+   "size": [
+    260,
+    36
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "flex flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors",
+   "rect": [
+    780,
+    113,
+    1040,
+    582
+   ],
+   "size": [
+    260,
+    469
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "flex flex-col gap-1",
+   "rect": [
+    788,
+    121,
+    1024,
+    1074
+   ],
+   "size": [
+    236,
+    953
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "grid",
+   "rect": [
+    788,
+    145,
+    1024,
+    1074
+   ],
+   "size": [
+    236,
+    929
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "min-h-0 overflow-hidden",
+   "rect": [
+    788,
+    145,
+    1024,
+    1074
+   ],
+   "size": [
+    236,
+    929
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    788,
+    149,
+    1024,
+    255
+   ],
+   "size": [
+    236,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.",
+   "rect": [
+    788,
+    149,
+    1024,
+    255
+   ],
+   "size": [
+    236,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    788,
+    263,
+    1024,
+    370
+   ],
+   "size": [
+    236,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.",
+   "rect": [
+    788,
+    263,
+    1024,
+    370
+   ],
+   "size": [
+    236,
+    106
+   ]
+  }
+ ]
+}

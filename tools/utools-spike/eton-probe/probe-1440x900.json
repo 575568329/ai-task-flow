@@ -1,0 +1,181 @@
+{
+ "viewport": [
+  1440,
+  900
+ ],
+ "documentScrollSize": [
+  1440,
+  900
+ ],
+ "overflowElementCount": 17,
+ "sample": [
+  {
+   "tag": "DIV",
+   "cls": "flex flex-col gap-1",
+   "rect": [
+    846,
+    105,
+    1111,
+    1039
+   ],
+   "size": [
+    265,
+    934
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "grid",
+   "rect": [
+    846,
+    129,
+    1111,
+    1039
+   ],
+   "size": [
+    265,
+    910
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "min-h-0 overflow-hidden",
+   "rect": [
+    846,
+    129,
+    1111,
+    1039
+   ],
+   "size": [
+    265,
+    910
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    846,
+    819,
+    1111,
+    925
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.",
+   "rect": [
+    846,
+    819,
+    1111,
+    925
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    846,
+    933,
+    1111,
+    1039
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.",
+   "rect": [
+    846,
+    933,
+    1111,
+    1039
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "flex flex-col gap-1",
+   "rect": [
+    846,
+    1047,
+    1111,
+    1071
+   ],
+   "size": [
+    265,
+    24
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "flex flex-col gap-2 pt-1",
+   "rect": [
+    846,
+    1071,
+    1111,
+    1524
+   ],
+   "size": [
+    265,
+    453
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    846,
+    1075,
+    1111,
+    1181
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.",
+   "rect": [
+    846,
+    1075,
+    1111,
+    1181
+   ],
+   "size": [
+    265,
+    106
+   ]
+  },
+  {
+   "tag": "DIV",
+   "cls": "",
+   "rect": [
+    846,
+    1189,
+    1111,
+    1296
+   ],
+   "size": [
+    265,
+    106
+   ]
+  }
+ ]
+}
