@@ -10,7 +10,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import type { TaskDTO } from '@ai-task-flow/shared';
-import { TaskCard, TaskCardBody } from './TaskCard';
+import { TaskCard } from './TaskCard';
 import { Collapse } from '@/components/ui/collapse';
 import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
 import { useNarrowViewport } from '@/hooks/useNarrowViewport';
@@ -68,24 +68,24 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
         <span className="text-muted-foreground/70 text-[10px]">{tasks.length}</span>
       </button>
 
-      {/* 紧凑收起态:卡片叠堆(业界 stacked cards 模式)——顶层首张真实卡 +
-          底下两层错位露边,一眼看出"这里收了一摞任务";点击整堆展开。
-          宽屏列形态收起无卡堆(纵向组头一条即可)。 */}
+      {/* 紧凑收起态:卡片叠堆——直接复用完整 TaskCard 作顶层(样式/尺寸/间距与
+          展开态完全一致,不手工拼外壳),底下两层错位卡背露边营造一沓的厚度;
+          点击整堆展开。宽屏列形态收起无卡堆(纵向组头一条即可)。 */}
       {narrow && collapsed && tasks.length > 0 && (
         <button
           type="button"
           onClick={() => toggleGroup(groupKey)}
-          className="group/stack relative mr-2 mb-2 h-[128px] w-64 shrink-0 cursor-pointer rounded-md text-left transition-transform hover:-translate-y-0.5"
+          className="group/stack relative mr-2 mb-2 shrink-0 cursor-pointer rounded-md text-left transition-transform hover:-translate-y-0.5"
           title={`展开「${label}」(${tasks.length} 张)`}
           aria-label={`展开分组 ${label},${tasks.length} 张任务`}
         >
-          {/* 底层两张错位"卡背":只露边,营造一沓的厚度 */}
+          {/* 底层两张错位"卡背":inset-0 对齐顶层真卡,只露边 */}
           <div className="border-border/60 bg-card/60 absolute inset-0 translate-x-2 translate-y-2 rounded-md border" />
           <div className="border-border bg-card/80 absolute inset-0 translate-x-1 translate-y-1 rounded-md border" />
-          {/* 顶层:首张真实卡内容。p-2.5 与 TaskCard 外壳一致,视觉与展开态卡片相同;
-              pointer-events-none:点击是展开分组,不吃卡片的选/拽 */}
-          <div className="border-border bg-card pointer-events-none absolute inset-0 overflow-hidden rounded-md border p-2.5 shadow-sm">
-            <TaskCardBody task={tasks[0]} />
+          {/* 顶层:完整 TaskCard 原样渲染(含外壳/内边距/hover 结构)。
+              pointer-events-none:阻断选卡/拖拽/右键,点击落到堆按钮=展开分组 */}
+          <div className="pointer-events-none relative">
+            <TaskCard task={tasks[0]} />
           </div>
         </button>
       )}
