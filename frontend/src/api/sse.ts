@@ -1,5 +1,7 @@
 // frontend/src/api/sse.ts
 
+import { API_BASE } from './base';
+
 export interface SSEEvent {
   type: string;
   aggregateId?: string;
@@ -23,7 +25,7 @@ export class SSEClient {
   private readonly reconnectMs = 3000;
   private closed = false;
 
-  constructor(url = '/api/events') {
+  constructor(url = `${API_BASE}/api/events`) {
     this.url = url;
   }
 

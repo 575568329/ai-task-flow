@@ -44,3 +44,8 @@ tools/utools-spike/orig.css
 tools/utools-spike/lc108.css
 .tmp-eton/
 eton-probe/sentinel.txt
+
+# uTools 插件包与包内构建产物(build-upx.ps1 可再生;.upx 同理不入库)
+tools/utools-spike/plugin/index.html
+tools/utools-spike/plugin/assets/
+tools/utools-spike/ai-task-flow.upx

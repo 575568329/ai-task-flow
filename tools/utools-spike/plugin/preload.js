@@ -1,19 +1,22 @@
 /**
- * AI Task Flow uTools 插件 preload(窗口适配 v2)
+ * AI Task Flow uTools 插件 preload(生产打包版)
  *
- * 窗口实测(2026-08-20,本机 uTools 7.8.0 / 屏幕 1920x1200):
- * - uTools 主窗口宽 802px 固定不可调,内嵌形态下 40+ 元素被裁(eton-probe 实测),不可用
- * - createBrowserWindow 传绝对 URL(serve-108)实测可用,独立窗口正常加载应用
- * - createBrowserWindow 返回的窗口 maximize() 实测不生效(文档示例亦无此方法),
- *   窗口停留在初始尺寸导致"已完成"列被裁 → 改为按屏幕工作区(availWidth/availHeight)开窗
- * - 1440x900 及以上视口布局无横向溢出(eton-probe 实测),应用结构无需改动
+ * 职责:
+ * 1. 独立工作台窗口(紧凑主窗 802 放不下本应用,进插件即弹独立窗并最大化近似尺寸)
+ * 2. backend 守护:健康检查 127.0.0.1:3000,不通则 spawn 系统 node 拉起
+ *    backend/dist/http-server.js(PORT=3000,detached 不随插件退出),就绪后 reload 页面补数据
  *
- * 已知限制(spike 阶段):
- * - 独立窗口开着时再次呼出会开新窗口(uTools 无单例 API,生产形态需加防重入)
- * - 手动缩到 <1024 宽时内容会被 overflow-hidden 裁剪(与浏览器同表现)
+ * 环境:uTools preload 为 CommonJS(渲染进程 + Node require)。
+ * 已知限制:再次呼出会多开独立窗口(uTools 无单例 API);backend 项目路径硬编码(个人工具)。
  */
+const BACKEND_PORT = 3000;
+const BACKEND_DIR = 'D:\\study\\ai-task-flow\\backend';
+const BACKEND_ENTRY = BACKEND_DIR + '\\dist\\http-server.js';
+const HEALTH_URL = 'http://127.0.0.1:' + BACKEND_PORT + '/api/tasks';
+
 function openWorkspaceWindow() {
   const targetUrl = window.location.href;
+  // 按屏幕工作区开窗(约满屏):uTools 定制窗口 maximize() 实测不生效
   const availWidth = (window.screen && window.screen.availWidth) || 1440;
   const availHeight = (window.screen && window.screen.availHeight) || 900;
   const workspace = utools.createBrowserWindow(targetUrl, {
@@ -38,6 +41,56 @@ function openWorkspaceWindow() {
   return workspace;
 }
 
+function fetchWithTimeout(url, ms) {
+  return Promise.race([
+    fetch(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
+/** backend 守护:不通则 spawn 拉起,就绪后 reload(页面首屏请求可能已失败,重载补数据) */
+function ensureBackend() {
+  fetchWithTimeout(HEALTH_URL, 2500)
+    .then((res) => {
+      if (res.ok) return null; // 已在跑(dev 形态/backend 常驻),不动
+      throw new Error('unhealthy');
+    })
+    .catch(() => {
+      let child;
+      try {
+        const { spawn } = require('child_process');
+        child = spawn('node', [BACKEND_ENTRY], {
+          cwd: BACKEND_DIR,
+          env: Object.assign({}, process.env, { PORT: String(BACKEND_PORT) }),
+          detached: true,  // 脱离插件生命周期:插件退出后 backend 常驻
+          stdio: 'ignore',
+        });
+        child.unref();
+      } catch (err) {
+        console.error('[atf] spawn backend failed:', err);
+        return;
+      }
+      // 轮询至多 30s 等监听;页面已渲染空态 → 就绪后 reload 一次补数据
+      let waited = 0;
+      const timer = setInterval(() => {
+        waited += 1000;
+        fetchWithTimeout(HEALTH_URL, 1500)
+          .then((res) => {
+            if (!res.ok) return;
+            clearInterval(timer);
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+              window.location.reload();
+            }
+          })
+          .catch(() => {
+            if (waited >= 30000) clearInterval(timer);
+          });
+      }, 1000);
+    });
+}
+
+ensureBackend();
+
 if (window.utools && typeof utools.onPluginEnter === 'function') {
   utools.onPluginEnter(({ code }) => {
     if (code === 'ai-task-flow') openWorkspaceWindow();
@@ -45,13 +98,5 @@ if (window.utools && typeof utools.onPluginEnter === 'function') {
 }
 
 window.atfServices = {
-  backendBase: 'http://127.0.0.1:3000',
-  isBackendAlive: async () => {
-    try {
-      const res = await fetch('http://127.0.0.1:3000/api/tasks');
-      return res.ok;
-    } catch {
-      return false;
-    }
-  },
+  backendBase: 'http://127.0.0.1:' + BACKEND_PORT,
 };

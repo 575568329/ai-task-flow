@@ -28,6 +28,9 @@ function getBackendPort(): number {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // base './':产物资源相对引用。uTools 插件包以 file:// 加载,
+  // 默认绝对路径 /assets/... 会解析到文件系统根而 404;同源 http 托管下相对路径等效
+  base: './',
   plugins: [
     react(),
     tailwindcss(),

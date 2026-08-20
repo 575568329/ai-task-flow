@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { TaskStep, StepBlock } from '@ai-task-flow/shared';
+import { API_BASE } from '@/api/base';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toaster';
@@ -95,11 +96,12 @@ export function StepEditor({ steps, onChange, disabled }: StepEditorProps) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/upload/image', { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/api/upload/image`, { method: 'POST', body: formData });
       if (!res.ok) throw new Error(`上传失败: HTTP ${res.status}`);
       const data = (await res.json()) as { url: string };
-      // 绝对路径:任务 md 会被 Claude Code 经 MCP 拉取,需可直接访问
-      const url = `${window.location.origin}${data.url}`;
+      // 绝对路径:任务 md 会被 Claude Code 经 MCP 拉取,需可直接访问。
+      // uTools 包形态(file://)下 origin 是 "file://" 不可用,用 API_BASE;同源形态用 origin
+      const url = `${API_BASE || window.location.origin}${data.url}`;
       setStepBlocks(stepIndex, [...getBlocks(stepsRef.current[stepIndex]), { type: 'image', url }]);
       toast.success('图片已添加');
     } catch (error) {

@@ -1,7 +1,8 @@
 // frontend/src/api/http.ts
 import { toast } from '@/components/ui/toaster';
+import { API_BASE } from './base';
 
-const BASE = '/api';
+const BASE = `${API_BASE}/api`;
 
 interface RequestOptions {
   method?: string;

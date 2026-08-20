@@ -2,6 +2,7 @@
 // 任务对话流式客户端:POST /api/tasks/:id/chat → SSE(text/event-stream)逐事件 yield。
 // 后端透传 Claude Code stream-json 事件(assistant/user/result/init/error),前端按 type 分发渲染。
 import type { AgentEvent, ChatSessionSummary, ChatTurn } from '@ai-task-flow/shared';
+import { API_BASE } from './base';
 import { http } from './http';
 import { streamAgentEvents } from './sse-utils';
 
@@ -36,7 +37,7 @@ export async function* streamTaskChat(
   /** 跑哪一侧的 claude:windows(默认)/ wsl */
   side?: 'windows' | 'wsl',
 ): AsyncIterable<AgentEvent> {
-  const response = await fetch(`/api/tasks/${taskId}/chat`, {
+  const response = await fetch(`${API_BASE}/api/tasks/${taskId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, sessionId, side }),

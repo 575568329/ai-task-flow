@@ -1,5 +1,6 @@
 // frontend/src/api/chatStream.ts
 import type { SSEEvent } from '@ai-task-flow/shared';
+import { API_BASE } from './base';
 
 /**
  * SSE 流式客户端（POST 不能用 EventSource，手动读 ReadableStream）
@@ -10,7 +11,7 @@ export async function* streamChat(params: {
   useWebSearch: boolean;
   regenerate?: boolean;
 }): AsyncIterable<SSEEvent> {
-  const response = await fetch('/api/chat', { // 使用相对路径
+  const response = await fetch(`${API_BASE}/api/chat`, { // API_BASE:uTools 包形态绝对地址,同源形态空串
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

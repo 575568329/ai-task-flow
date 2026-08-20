@@ -1,6 +1,7 @@
 // frontend/src/api/vocab.ts
 // 翻译生词本 API 封装。复用 http 统一拦截器(失败自动 toast)。
 import { http } from './http';
+import { API_BASE } from './base';
 import { toast } from '@/components/ui/toaster';
 import type {
   VocabDTO,
@@ -44,7 +45,7 @@ export const vocabApi = {
   importYoudao: async (file: File): Promise<YoudaoImportResultDTO> => {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch('/api/vocab/import-youdao', { method: 'POST', body: fd });
+    const res = await fetch(`${API_BASE}/api/vocab/import-youdao`, { method: 'POST', body: fd });
     if (!res.ok) {
       let message = `导入失败 (${res.status})`;
       try {

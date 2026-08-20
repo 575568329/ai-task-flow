@@ -2,6 +2,7 @@
 // 项目对话(悬浮窗)客户端:聚合项目视图 + 加载历史 + 流式发消息(SSE)。
 // 后端 POST /api/project-chat → SSE 透传 Claude stream-json 事件,前端按 type 分发。
 import type { AgentEvent, ChatTurn, ImageAttachment, ProjectChatGroup } from '@ai-task-flow/shared';
+import { API_BASE } from './base';
 import { http } from './http';
 import { streamAgentEvents } from './sse-utils';
 import { loadRepoHistory } from '@/lib/repoHistory';
@@ -42,7 +43,7 @@ export async function* streamProjectChat(
   options: StreamProjectChatOptions,
 ): AsyncIterable<AgentEvent> {
   const { repoPath, message, signal, sessionId, side, images } = options;
-  const response = await fetch('/api/project-chat', {
+  const response = await fetch(`${API_BASE}/api/project-chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ repoPath, message, sessionId, side, images, extraPaths: loadRepoHistory() }),
