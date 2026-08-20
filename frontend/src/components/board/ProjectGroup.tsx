@@ -66,10 +66,6 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
           <div className="border-border bg-card pointer-events-none absolute inset-0 overflow-hidden rounded-md border shadow-sm">
             <TaskCardBody task={tasks[0]} />
           </div>
-          {/* 计数徽标:一沓的数量 */}
-          <span className="bg-primary text-primary-foreground absolute -top-2 left-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold shadow">
-            {tasks.length}
-          </span>
         </button>
       )}
 
