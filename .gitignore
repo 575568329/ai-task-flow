@@ -38,3 +38,7 @@ knowledge-base/
 
 # IDE/工具临时目录(ZCode agent 会话、计划、执行日志),不进版本库
 .zcode/
+
+# playwright MCP 运行时产物(页面快照等)
+.playwright-mcp/
+browser-pilot-shots/
