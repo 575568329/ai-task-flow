@@ -1,0 +1,16 @@
+{
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "development": {
+    "main": "http://127.0.0.1:3108/",
+    "preload": "preload.js"
+  },
+  "features": [
+    {
+      "code": "ai-task-flow",
+      "explain": "AI 任务工作台:任务看板 / 自由画布 / 知识库",
+      "cmds": ["atf", "任务看板", "ai任务"]
+    }
+  ]
+}

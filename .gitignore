@@ -38,3 +38,8 @@ knowledge-base/
 
 # IDE/工具临时目录(ZCode agent 会话、计划、执行日志),不进版本库
 .zcode/
+
+# uTools spike 可再生 CSS 产物(downgrade-css.cjs 生成)与临时 Electron 二进制
+tools/utools-spike/orig.css
+tools/utools-spike/lc108.css
+.tmp-eton/

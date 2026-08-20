@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- uTools spike: 用 canvas 解码两张截图,统计颜色丰富度/非白占比/平均饱和度 -->
+<body>
+<img id="a" src="shot-orig.png">
+<img id="b" src="shot-lc108.png">
+<script>
+function stat(img) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  const colors = new Map();
+  let total = 0, nonWhite = 0, satSum = 0;
+  for (let i = 0; i < d.length; i += 4 * 61) {
+    const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+    const key = r + ',' + g + ',' + b + ',' + a;
+    colors.set(key, (colors.get(key) || 0) + 1);
+    total++;
+    if (a !== 0 && !(r > 245 && g > 245 && b > 245)) nonWhite++;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    satSum += (mx === 0 ? 0 : (mx - mn) / mx);
+  }
+  return {
+    total,
+    uniqueColors: colors.size,
+    nonWhitePct: Math.round((nonWhite * 1000) / total) / 10,
+    avgSaturation: Math.round((satSum * 1000) / total) / 1000,
+  };
+}
+window.addEventListener('load', () => {
+  for (const [id, name] of [['a', 'orig'], ['b', 'lc108']]) {
+    console.log('STAT ' + name + ' ' + JSON.stringify(stat(document.getElementById(id))));
+  }
+});
+</script>
+</body>

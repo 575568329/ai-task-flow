@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- 生成 uTools 插件 logo.png:蓝紫渐变圆角块 + 字母 A -->
+<canvas id="c" width="256" height="256"></canvas>
+<script>
+const c = document.getElementById('c');
+const x = c.getContext('2d');
+const g = x.createLinearGradient(0, 0, 256, 256);
+g.addColorStop(0, '#6366f1');
+g.addColorStop(1, '#8b5cf6');
+x.fillStyle = g;
+x.beginPath();
+x.roundRect(0, 0, 256, 256, 48);
+x.fill();
+x.fillStyle = '#fff';
+x.font = 'bold 150px sans-serif';
+x.textAlign = 'center';
+x.textBaseline = 'middle';
+x.fillText('A', 128, 140);
+console.log('LOGO ' + c.toDataURL('image/png'));
+</script>
