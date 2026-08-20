@@ -13,6 +13,7 @@ import type { TaskDTO } from '@ai-task-flow/shared';
 import { TaskCard } from './TaskCard';
 import { Collapse } from '@/components/ui/collapse';
 import { useBoardGroupingStore } from '@/stores/boardGroupingStore';
+import { useNarrowViewport } from '@/hooks/useNarrowViewport';
 import { cn } from '@/lib/utils';
 
 interface ProjectGroupProps {
@@ -25,6 +26,8 @@ interface ProjectGroupProps {
 export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
   const collapsed = useBoardGroupingStore((s) => s.collapsedGroups[groupKey] === true);
   const toggleGroup = useBoardGroupingStore((s) => s.toggleGroup);
+  // 紧凑行形态卡片横排 → 折叠用横向收拢(向左收,右侧分组滑来补位);宽屏列形态纵向塌缩
+  const narrow = useNarrowViewport();
 
   return (
     // 紧凑(看板行形态):分组块作为整体参与行内横排(shrink-0),组内卡片也横向排
@@ -46,7 +49,7 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
         <span className="text-muted-foreground/70 text-[10px]">{tasks.length}</span>
       </button>
 
-      <Collapse open={!collapsed}>
+      <Collapse open={!collapsed} direction={narrow ? 'horizontal' : 'vertical'}>
         <div className="flex flex-col gap-2 pt-1 @max-[1023px]:flex-row @max-[1023px]:items-stretch">
           {/* initial={false}:首屏不播,避免几十张卡同时淡入闪烁;仅真正新增的卡才淡入 */}
           <AnimatePresence initial={false}>
