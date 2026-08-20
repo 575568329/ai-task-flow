@@ -92,7 +92,7 @@ export function TaskCard({ task }: TaskCardProps) {
         data-dragging={isDragging}
         onClick={() => setSelectedTask(task.id)}
         onContextMenu={(e) => e.stopPropagation()}
-        className="bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 shadow-sm transition-shadow hover:shadow-md"
+        className="bg-card group data-[dragging=true]:opacity-40 relative flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 shadow-sm transition-shadow hover:shadow-md @max-[1023px]:w-64 @max-[1023px]:shrink-0"
         {...attributes}
         {...listeners}
       >

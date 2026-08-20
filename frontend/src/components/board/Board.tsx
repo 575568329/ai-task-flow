@@ -107,7 +107,9 @@ export function Board() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full gap-3 overflow-x-auto p-3">
+      {/* 宽敞:四列横排 + 整页横滚;紧凑(uTools 802 等):四行纵堆 + 页面纵滚,
+          行内卡片横滚(见 KanbanColumn/ProjectGroup/TaskCard) */}
+      <div className="flex h-full gap-3 overflow-x-auto p-3 @max-[1023px]:flex-col @max-[1023px]:overflow-x-hidden @max-[1023px]:overflow-y-auto">
         {KANBAN_COLUMNS.map((column) => (
           <KanbanColumn
             key={column.status}

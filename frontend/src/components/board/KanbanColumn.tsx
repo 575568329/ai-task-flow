@@ -48,8 +48,9 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
 
   return (
     // 列宽:min-w 保底可读 + flex-1 填满看板宽度。
-    // 宽屏(≥3×260)时 3 列等分铺满;窄屏装不下时 min-w 撑超触发外层 overflow-x-auto 横滚。
-    <div className="bg-muted/30 flex min-w-[260px] flex-1 flex-col rounded-lg">
+    // 宽屏(≥3×260)时列等分铺满;窄屏装不下时 min-w 撑超触发外层 overflow-x-auto 横滚。
+    // 紧凑态看板改为"行"形态:全宽行 + 行内卡片横滚(见 ProjectGroup/TaskCard)。
+    <div className="bg-muted/30 flex min-w-[260px] flex-1 flex-col rounded-lg @max-[1023px]:w-full @max-[1023px]:min-w-0">
       <div className="flex items-center gap-2 px-3 py-2">
         <span className={cn('size-2 rounded-full', column.dotClass)} />
         <span className="text-sm font-semibold">{column.label}</span>
@@ -59,14 +60,16 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
         ref={setNodeRef}
         className={cn(
           'flex flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors',
-          isOver && 'bg-primary/5'
+          // 紧凑:行内横向排布(分组块/卡片),单独左右滚动
+          '@max-[1023px]:flex-row @max-[1023px]:items-start @max-[1023px]:overflow-x-auto @max-[1023px]:overflow-y-hidden',
+          isOver && 'bg-primary/5',
         )}
       >
         {groups.map((group) => (
           <ProjectGroup key={group.key} groupKey={group.key} label={group.label} tasks={group.tasks} />
         ))}
         {tasks.length === 0 && (
-          <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs">
+          <div className="text-muted-foreground/50 rounded-md border border-dashed py-6 text-center text-xs @max-[1023px]:w-full @max-[1023px]:py-3">
             拖拽任务到此处
           </div>
         )}

@@ -27,7 +27,8 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
   const toggleGroup = useBoardGroupingStore((s) => s.toggleGroup);
 
   return (
-    <div className="flex flex-col gap-1">
+    // 紧凑(看板行形态):分组块作为整体参与行内横排(shrink-0),组内卡片也横向排
+    <div className="flex flex-col gap-1 @max-[1023px]:shrink-0">
       <button
         type="button"
         onClick={() => toggleGroup(groupKey)}
@@ -46,7 +47,7 @@ export function ProjectGroup({ groupKey, label, tasks }: ProjectGroupProps) {
       </button>
 
       <Collapse open={!collapsed}>
-        <div className="flex flex-col gap-2 pt-1">
+        <div className="flex flex-col gap-2 pt-1 @max-[1023px]:flex-row @max-[1023px]:items-stretch">
           {/* initial={false}:首屏不播,避免几十张卡同时淡入闪烁;仅真正新增的卡才淡入 */}
           <AnimatePresence initial={false}>
             {tasks.map((task) => (
