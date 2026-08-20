@@ -22,6 +22,9 @@ const MIN_HEIGHT = 420;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(v, max));
 
+/** 紧凑视口阈值:低于此宽度(uTools 主窗 802 等)悬浮窗直接铺满视口宽,拖动/缩放意义不大 */
+const COMPACT_VIEWPORT = 1024;
+
 interface Bounds {
   x: number;
   y: number;
@@ -29,11 +32,21 @@ interface Bounds {
   height: number;
 }
 
+/** 紧凑视口:强制全宽(左右各留 12px)并水平居中;宽敞视口原样返回。 */
+function fitCompact(b: Bounds): Bounds {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  if (vw >= COMPACT_VIEWPORT) return b;
+  const width = vw - 24;
+  return { ...b, width, x: Math.round((vw - width) / 2) };
+}
+
 /** 默认尺寸:按视口自适应并居中。SSR 无 window 时给保守值。 */
 function defaultBounds(): Bounds {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  const width = Math.min(760, Math.max(MIN_WIDTH, Math.round(vw * 0.5)));
+  const width = vw < COMPACT_VIEWPORT
+    ? vw - 24
+    : Math.min(760, Math.max(MIN_WIDTH, Math.round(vw * 0.5)));
   const height = Math.min(880, Math.max(MIN_HEIGHT, Math.round(vh * 0.82)));
   return {
     x: Math.max(16, Math.round((vw - width) / 2)),
@@ -43,19 +56,20 @@ function defaultBounds(): Bounds {
   };
 }
 
-/** 读取记忆的位置/尺寸(降级默认值,坏数据不阻断) */
+/** 读取记忆的位置/尺寸(降级默认值,坏数据不阻断)。
+ *  紧凑视口下忽略记忆宽/x:记忆来自宽屏(或旧窄值),铺满当前视口才是正解。 */
 function loadBounds(): Bounds {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Bounds>;
       if (p && typeof p.width === 'number' && typeof p.height === 'number') {
-        return {
+        return fitCompact({
           x: typeof p.x === 'number' ? p.x : 0,
           y: typeof p.y === 'number' ? p.y : 0,
           width: Math.max(MIN_WIDTH, p.width),
           height: Math.max(MIN_HEIGHT, p.height),
-        };
+        });
       }
     }
   } catch (error) {
@@ -102,14 +116,16 @@ export function FloatingChatWindow() {
   // 左栏收起状态:记忆 localStorage,命令式 collapse/expand 通过 panelRef(react-resizable-panels v4)
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
+    // 紧凑铺满态(悬浮窗已占满视口宽):默认展开——左栏(minSize 170px)是悬浮窗核心导航,
+    // 且旧收起记忆多来自"窄竖缝"时代,已过时;收起记忆仅在宽屏生效。
+    if (typeof window !== 'undefined' && window.innerWidth < COMPACT_VIEWPORT) return false;
     try {
       const stored = localStorage.getItem(SIDEBAR_KEY);
       if (stored !== null) return stored === '1';
     } catch {
       // 读取失败落入宽度判断
     }
-    // 无记忆时:悬浮窗初始宽不足以舒适容纳会话列表(22%<~150px,窄视口 401px 窗尤甚,
-    // 强展开会挤成竖缝)则默认收起,顶部会话 tab 条仍可切换。
+    // 宽屏无记忆:悬浮窗初始宽不足以舒适容纳会话列表(22%<~150px)则默认收起。
     return boundsRef.current.width < 640;
   });
   const persistCollapsed = (next: boolean) => {
