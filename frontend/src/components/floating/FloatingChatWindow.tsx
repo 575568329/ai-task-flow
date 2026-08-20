@@ -103,10 +103,14 @@ export function FloatingChatWindow() {
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(SIDEBAR_KEY) === '1';
+      const stored = localStorage.getItem(SIDEBAR_KEY);
+      if (stored !== null) return stored === '1';
     } catch {
-      return false;
+      // 读取失败落入宽度判断
     }
+    // 无记忆时:悬浮窗初始宽不足以舒适容纳会话列表(22%<~150px,窄视口 401px 窗尤甚,
+    // 强展开会挤成竖缝)则默认收起,顶部会话 tab 条仍可切换。
+    return boundsRef.current.width < 640;
   });
   const persistCollapsed = (next: boolean) => {
     setCollapsed(next);
@@ -297,7 +301,9 @@ export function FloatingChatWindow() {
         <ResizablePanelGroup orientation="horizontal" className="h-full">
           <ResizablePanel
             defaultSize={22}
-            minSize={15}
+            // v4 支持像素单位:百分比下限在窄窗(如 401px)里只有几十像素,
+            // 会话列表会被挤成竖缝不可用;170px 保证标题/列表项可读。
+            minSize="170px"
             collapsible
             collapsedSize={0}
             panelRef={leftPanelRef}
