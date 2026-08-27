@@ -51,3 +51,8 @@ tools/utools-spike/plugin/assets/
 tools/utools-spike/ai-task-flow.upx
 tools/utools-spike/upx-verify/shot-file-mode.png
 tools/utools-spike/upx-verify/report.json
+
+# Electron 桌面版产物与依赖(可再生)
+desktop/node_modules/
+desktop/release/
+desktop/dev-run.png

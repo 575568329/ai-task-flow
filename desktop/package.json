@@ -1,0 +1,29 @@
+{
+  "name": "@ai-task-flow/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI Task Flow 桌面版(Electron 壳:主进程内起 backend + 窗口加载同源页面)",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "cn.yufj.ai-task-flow",
+    "productName": "AI Task Flow",
+    "directories": { "output": "release" },
+    "files": ["main.mjs"],
+    "extraResources": [
+      { "from": "../backend/dist", "to": "backend/dist" },
+      { "from": "../backend/public", "to": "backend/public" },
+      { "from": "../backend/node_modules", "to": "backend/node_modules" },
+      { "from": "../shared", "to": "backend/node_modules/@ai-task-flow/shared" }
+    ],
+    "portable": { "artifactName": "AI-Task-Flow-Portable-${version}.exe" }
+  }
+}
