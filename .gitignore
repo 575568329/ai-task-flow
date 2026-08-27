@@ -56,3 +56,5 @@ tools/utools-spike/upx-verify/report.json
 desktop/node_modules/
 desktop/release/
 desktop/dev-run.png
+desktop/release*/
+desktop/release*

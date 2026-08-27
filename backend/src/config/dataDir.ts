@@ -11,7 +11,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 /** 默认数据目录名(位于用户主目录下) */
 const DEFAULT_DIR_NAME = '.ai-task-flow';
@@ -192,11 +191,10 @@ export function maimemoConfigFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'maimemo-config.json');
 }
 
-/** 知识库目录(项目内,进 git,相对项目根) */
+/** 知识库目录(用户数据,随数据根 ~/.ai-task-flow 走,与其他持久化同层)。
+ *  曾经按 import.meta 位置上溯到项目根——dev(tsx src)/部署(dist) 推算出
+ *  不同位置,知识库数据分裂;portable 形态更会解压到 %TEMP% 写完即丢。
+ *  统一收口到数据根;需要指回仓库时用 ATF_KNOWLEDGE_DIR 覆盖。 */
 export function knowledgeDirPath(): string {
-  // ESM 中获取当前文件路径: import.meta.url → file:///... → 绝对路径
-  const currentFile = fileURLToPath(import.meta.url);
-  // backend/src/config/dataDir.ts → 上 3 层到项目根
-  const projectRoot = path.resolve(path.dirname(currentFile), '../../..');
-  return path.join(projectRoot, 'knowledge-base');
+  return process.env.ATF_KNOWLEDGE_DIR ?? path.join(resolveDataDir(), 'knowledge-base');
 }
