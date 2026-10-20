@@ -36,8 +36,9 @@ spike/
 # 本地保留(git rm --cached 仅移除索引)。如需共享知识,放 docs/ 并面向产品。
 knowledge-base/
 
-# IDE/工具临时目录(ZCode agent 会话、计划、执行日志),不进版本库
+# IDE/工具临时目录(ZCode agent 会话、计划、执行日志;ecode 输入历史与日志),不进版本库
 .zcode/
+.ecode/
 
 # uTools spike 可再生 CSS 产物(downgrade-css.cjs 生成)与临时 Electron 二进制
 tools/utools-spike/orig.css
@@ -45,11 +46,12 @@ tools/utools-spike/lc108.css
 .tmp-eton/
 eton-probe/sentinel.txt
 
-# uTools 插件包与包内构建产物(build-upx.ps1 可再生;.upx 同理不入库)
+# uTools 插件包与包内构建产物(build-upx.ps1 可再生;.upx/.upxs 打包产物同理不入库)
 tools/utools-spike/plugin/index.html
 tools/utools-spike/plugin/assets/
 tools/utools-spike/plugin-prod/
-tools/utools-spike/ai-task-flow.upx
+tools/utools-spike/*.upx
+tools/utools-spike/*.upxs
 tools/utools-spike/upx-verify/shot-file-mode.png
 tools/utools-spike/upx-verify/report.json
 
