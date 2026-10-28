@@ -274,7 +274,15 @@ function buildBacklinks(
  * 扫描知识库目录,生成完整 manifest
  */
 export async function scanKnowledge(root: string): Promise<KnowledgeManifest> {
-  const tree = await scanDir(root, root);
+  let tree: KnowledgeDirNode | null;
+  try {
+    tree = await scanDir(root, root);
+  } catch (err) {
+    // 根目录不存在(如全新安装、知识库路径迁移后未初始化)按空库处理,
+    // 而非抛 ENOENT 导致 manifest 接口 500;目录只在写入文档时才创建
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    tree = null;
+  }
 
   if (!tree) {
     // 空目录,返回空 manifest

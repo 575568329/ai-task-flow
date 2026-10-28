@@ -206,6 +206,17 @@ describe('KnowledgeScanner', () => {
       expect(manifest.tags).toEqual([]);
     });
 
+    it('should return empty manifest when root does not exist', async () => {
+      // 未创建过知识库的机器(~/.ai-task-flow/knowledge-base 缺失)不应 500
+      const dir = path.join(os.tmpdir(), `knowledge-test-missing-${process.pid}-${Date.now()}`);
+      const manifest = await scanKnowledge(dir);
+      expect(manifest.flatDocs).toEqual([]);
+      expect(manifest.tags).toEqual([]);
+      expect(manifest.backlinks).toEqual({});
+      // 读取不应有创建目录的副作用
+      await expect(fs.access(dir)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
     it('should skip unsupported file extensions', async () => {
       const dir = await createTmpDir();
       await writeFile('readme.txt', 'just text');
