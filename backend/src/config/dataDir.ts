@@ -158,3 +158,13 @@ export function maimemoConfigFilePath(dataDir?: string): string {
 export function knowledgeDirPath(): string {
   return process.env.ATF_KNOWLEDGE_DIR ?? path.join(resolveDataDir(), 'knowledge-base');
 }
+
+/** 工作记录数据文件(项目→版本→功能点条目,单 JSON;双层锁写协议见 JsonWorklogRepository) */
+export function worklogFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'worklog.json');
+}
+
+/** 工作记录破坏性操作前的快照目录(滚动保留最近 10 份,恢复=手工复制回 worklog.json) */
+export function worklogBackupsDirPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'worklog-backups');
+}
