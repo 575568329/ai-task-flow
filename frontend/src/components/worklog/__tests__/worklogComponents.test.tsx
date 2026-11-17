@@ -14,6 +14,16 @@ vi.mock('@/components/common/MessageContent', () => ({
   ),
 }));
 
+// toaster 含 lucide 图标(同双 React 问题),交互测试只需 toast 可调用
+vi.mock('@/components/ui/toaster', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
+// ui/label 走 @radix-ui/react-label(node_modules CJS,同双 React 问题),mock 为原生 label
+vi.mock('@/components/ui/label', () => ({
+  Label: (props: React.LabelHTMLAttributes<HTMLLabelElement>) => <label {...props} />,
+}));
+
 function makeEntry(overrides: Partial<WorklogEntry> = {}): WorklogEntry {
   return {
     id: 'e_test0001',

@@ -7,14 +7,15 @@ import type {
   WorklogRenameRequest,
 } from '@ai-task-flow/shared';
 import type { WorklogService } from '../../../application/worklog/WorklogService.js';
+import { DomainError } from '../../../domain/_shared/DomainError.js';
 
-/** 把 Service 抛的业务错映射为 HTTP 状态码(锁竞争 ELOCKED → 503) */
+/** 把 Service 抛的业务错映射为 HTTP 状态码:
+ *  DomainError 带精准 httpStatus(P1 修复:替代 message 字符串匹配,文案微调不再错位);
+ *  锁竞争 ELOCKED → 503;未知系统错误 → 500(不再误判为请求问题)。 */
 function statusForError(err: unknown): number {
-  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof DomainError) return err.httpStatus;
   if ((err as NodeJS.ErrnoException)?.code === 'ELOCKED') return 503;
-  if (message.includes('不存在')) return 404;
-  if (message.includes('已存在')) return 409;
-  return 400;
+  return 500;
 }
 
 export async function registerWorklogRoutes(

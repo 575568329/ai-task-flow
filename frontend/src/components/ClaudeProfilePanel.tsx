@@ -3,7 +3,7 @@
 // Step7(worklog 转型)单面板化重做:功能清单与后端契约不变(目标选择/导入/快照 CRUD/
 // API 预设/掩码/切换自动备份),交互全部内联——卡片展开编辑、应用与删除两段确认,
 // 零二级弹窗(原 ProfileEditDialog/PresetFormDialog 已移除)。
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff,
   Loader2, Pencil, Plus, RefreshCw, Trash2, X,
@@ -299,6 +299,8 @@ export function ClaudeProfilePanel() {
 
   // 内联编辑状态:null=关闭;'new'=新建;profile 对象=编辑该卡
   const [editing, setEditing] = useState<ClaudeProfileSummary | null | 'new'>(null);
+  /** loadProfiles 竞态守卫:快速切换目标时,慢的旧响应不得覆盖新目标数据 */
+  const loadProfilesSeq = useRef(0);
   // 两段确认:确认应用 / 确认删除 的 profile id
   const [confirmApplyId, setConfirmApplyId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -318,9 +320,11 @@ export function ClaudeProfilePanel() {
 
   const loadProfiles = useCallback(async () => {
     if (!selectedTarget) return;
+    const seq = ++loadProfilesSeq.current;
     setLoading(true);
     try {
       const res = await claudeProfileApi.list(selectedTarget);
+      if (seq !== loadProfilesSeq.current) return; // 已切到其他目标,丢弃旧响应
       setProfiles(res.profiles);
       setActiveProfileId(res.activeProfileId);
       setTargets((prev) => prev.map((t) => (t.key === res.target.key ? res.target : t)));
@@ -380,7 +384,6 @@ export function ClaudeProfilePanel() {
   };
 
   const currentTarget = targets.find((t) => t.key === selectedTarget);
-  const applyingProfile = useMemo(() => profiles.find((p) => p.id === applyingId) ?? null, [profiles, applyingId]);
 
   return (
     <div className="flex flex-col gap-3 py-1">
@@ -452,7 +455,7 @@ export function ClaudeProfilePanel() {
 
           {!loading && profiles.map((profile) => {
             const isActive = profile.id === activeProfileId;
-            const isEditing = editing === profile;
+            const isEditing = editing !== null && editing !== 'new' && editing.id === profile.id;
             const isApplying = profile.id === applyingId;
             return (
               <div key={profile.id} className="flex flex-col gap-0">
@@ -506,8 +509,6 @@ export function ClaudeProfilePanel() {
                       >
                         {isApplying ? (
                           <Loader2 className="size-3.5 animate-spin" />
-                        ) : applyingProfile?.id === profile.id ? (
-                          <Check className="size-3.5" />
                         ) : (
                           <RefreshCw className="size-3.5" />
                         )}

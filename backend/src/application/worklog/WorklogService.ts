@@ -16,15 +16,18 @@ import type {
   WorklogUpdateRequest,
 } from '@ai-task-flow/shared';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
+import {
+  WorklogNotFoundError, WorklogConflictError, WorklogValidationError,
+} from '../../domain/worklog/errors.js';
 
 /** 项目/版本名约束:trim 后非空、不含路径分隔符(防路由参数歧义)、长度上限 */
 const NAME_MAX_LEN = 60;
 
 function validateName(name: string, label: string): string {
   const trimmed = name?.trim() ?? '';
-  if (!trimmed) throw new Error(`${label}不能为空`);
-  if (trimmed.includes('/')) throw new Error(`${label}不能包含 "/"`);
-  if (trimmed.length > NAME_MAX_LEN) throw new Error(`${label}长度不能超过 ${NAME_MAX_LEN}`);
+  if (!trimmed) throw new WorklogValidationError(`${label}不能为空`);
+  if (trimmed.includes('/')) throw new WorklogValidationError(`${label}不能包含 "/"`);
+  if (trimmed.length > NAME_MAX_LEN) throw new WorklogValidationError(`${label}长度不能超过 ${NAME_MAX_LEN}`);
   return trimmed;
 }
 
@@ -50,7 +53,7 @@ function locateEntry(
       if (entry) return { project, version, entry };
     }
   }
-  throw new Error(`条目 ${entryId} 不存在`);
+  throw new WorklogNotFoundError(`条目 ${entryId} 不存在`);
 }
 
 function findProject(data: WorklogData, name: string): WorklogProject {
@@ -71,8 +74,8 @@ export class WorklogService {
   async record(input: WorklogRecordRequest): Promise<WorklogRecordResponse> {
     const project = validateName(input.project, '项目名');
     const version = validateName(input.version, '版本名');
-    if (!input.title?.trim()) throw new Error('标题不能为空');
-    if (input.detail == null || !String(input.detail).trim()) throw new Error('详细说明不能为空');
+    if (!input.title?.trim()) throw new WorklogValidationError('标题不能为空');
+    if (input.detail == null || !String(input.detail).trim()) throw new WorklogValidationError('详细说明不能为空');
 
     return this.repo.mutate((data) => {
       let proj = data.projects.find((p) => p.name === project);
@@ -99,7 +102,13 @@ export class WorklogService {
         createdAt: now,
         updatedAt: now,
       };
-      if (input.files?.length) entry.files = input.files;
+      // files 运行时守卫:非数组(或元素非对象)拒绝,防 AI 客户端传坏结构入库后在查询路径抛 TypeError
+      if (input.files != null) {
+        if (!Array.isArray(input.files) || input.files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
+          throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');
+        }
+        entry.files = input.files;
+      }
       if (input.diff) entry.diff = input.diff;
       if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
       ver.entries.push(entry);
@@ -179,14 +188,24 @@ export class WorklogService {
     return this.repo.mutate((data) => {
       const { project, version, entry } = locateEntry(data, entryId);
       if (patch.title !== undefined) {
-        if (!patch.title.trim()) throw new Error('标题不能为空');
+        if (!patch.title.trim()) throw new WorklogValidationError('标题不能为空');
         entry.title = patch.title.trim();
       }
       if (patch.detail !== undefined) entry.detail = String(patch.detail);
       if (patch.tags !== undefined) entry.tags = patch.tags.map((t) => t.trim()).filter(Boolean);
-      if (patch.files !== undefined) entry.files = patch.files;
+      if (patch.files !== undefined) {
+        if (!Array.isArray(patch.files) || patch.files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
+          throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');
+        }
+        entry.files = patch.files;
+      }
       if (patch.diff !== undefined) entry.diff = patch.diff;
-      if (patch.date !== undefined) entry.date = patch.date;
+      if (patch.date !== undefined) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
+          throw new WorklogValidationError('date 必须为 YYYY-MM-DD 格式');
+        }
+        entry.date = patch.date;
+      }
       entry.updatedAt = Date.now();
 
       // 挪版本
@@ -228,7 +247,7 @@ export class WorklogService {
       (data) => {
         const proj = findProject(data, project);
         if (!proj.versions.some((v) => v.name === version)) {
-          throw new Error(`版本 "${version}" 不存在`);
+          throw new WorklogNotFoundError(`版本 "${version}" 不存在`);
         }
         proj.versions = proj.versions.filter((v) => v.name !== version);
       },
@@ -257,9 +276,9 @@ export class WorklogService {
       (data) => {
         const proj = findProject(data, project);
         const ver = proj.versions.find((v) => v.name === version);
-        if (!ver) throw new Error(`版本 "${version}" 不存在`);
+        if (!ver) throw new WorklogNotFoundError(`版本 "${version}" 不存在`);
         if (proj.versions.some((v) => v.name === target)) {
-          throw new Error(`版本名 "${target}" 已存在`);
+          throw new WorklogConflictError(`版本名 "${target}" 已存在`);
         }
         ver.name = target;
       },
@@ -275,7 +294,7 @@ export class WorklogService {
       (data) => {
         findProject(data, project);
         if (data.projects.some((p) => p.name === target)) {
-          throw new Error(`项目名 "${target}" 已存在`);
+          throw new WorklogConflictError(`项目名 "${target}" 已存在`);
         }
         const proj = data.projects.find((p) => p.name === project)!;
         proj.name = target;

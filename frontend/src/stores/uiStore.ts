@@ -56,6 +56,9 @@ interface UIState {
   setSearchQuery: (query: string) => void;
   setLocalAccess: (v: boolean) => void;
   setStorageWarn: (v: boolean) => void;
+  /** 视图激活打点(keep-alive 下视图不卸载,以此通知目标视图"用户切回来了",如 worklog 静默重拉) */
+  viewEnterTick: Partial<Record<string, number>>;
+  bumpViewEnter: (view: string) => void;
   /** 设置夜间开发模式(同时持久化到 localStorage)。 */
   setNightMode: (v: boolean) => void;
   /** 设置弹窗开关 + 初始 tab(供任意组件打开,如生词本页「连接墨墨」跳 maimemo tab) */
@@ -74,6 +77,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   searchQuery: '',
   // 默认 true:fetch /health 前不误屏蔽本机用户的敏感页面
   localAccess: true,
+    viewEnterTick: {},
   storageWarn: false,
   nightMode: getInitialNightMode(),
 
@@ -91,6 +95,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   setLocalAccess: (v) => set({ localAccess: v }),
   setStorageWarn: (v) => set({ storageWarn: v }),
+  bumpViewEnter: (view) => set((state) => ({ viewEnterTick: { ...state.viewEnterTick, [view]: (state.viewEnterTick?.[view] ?? 0) + 1 } })),
   setNightMode: (v) => {
     localStorage.setItem(NIGHT_MODE_KEY, String(v));
     set({ nightMode: v });

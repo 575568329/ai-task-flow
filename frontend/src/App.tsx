@@ -39,9 +39,11 @@ function App() {
     void systemApi.getStorage().then((s) => setStorageWarn(s.warning));
   }, []);
 
-  // activeView 变化 → 主内容区快速淡入(不卸载视图,状态得以保留)
+  // activeView 变化 → 主内容区快速淡入(不卸载视图,状态得以保留);
+  // 同时打点 viewEnterTick,让 keep-alive 的目标视图感知"用户切回来了"(worklog 据此静默重拉)
   useEffect(() => {
     void viewControls.start({ opacity: [0, 1], transition: { duration: 0.15, ease: 'easeOut' } });
+    useUIStore.getState().bumpViewEnter(activeView);
   }, [activeView, viewControls]);
 
   return (

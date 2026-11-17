@@ -1,11 +1,15 @@
 // frontend/src/components/worklog/NewEntryForm.tsx
 // 「+ 记一条」内联表单:项目/版本下拉(支持新建)+ 标题 + 详情 + 标签。
 // 人工记录默认无 diff/文件引用(可由 AI 用 update_work 后补)。
+// P0 修复:版本初值按「当前选中项目」解析(原取 projects[0] 会在跨项目时静默裂树),
+// 哨兵选项必须配上合法文本才可提交。
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/toaster';
 
 interface NewEntryFormProps {
   projects: { name: string; versions: string[] }[];
@@ -18,9 +22,17 @@ interface NewEntryFormProps {
 const NEW_OPTION = '__new__';
 
 export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreate, onCancel }: NewEntryFormProps) {
-  const [project, setProject] = useState(defaultProject || projects[0]?.name || '');
+  // 初值:优先当前选中项目;它无版本或不存在时 → 新建版本选项(P0 修复,绝不跨项目取值)
+  const initialProject = defaultProject || projects[0]?.name || NEW_OPTION;
+  const initialProjectVersions = projects.find((p) => p.name === initialProject)?.versions ?? [];
+  const initialVersion =
+    defaultVersion && initialProjectVersions.includes(defaultVersion)
+      ? defaultVersion
+      : initialProjectVersions[0] ?? NEW_OPTION;
+
+  const [project, setProject] = useState(initialProject);
   const [projectText, setProjectText] = useState('');
-  const [version, setVersion] = useState(defaultVersion || projects[0]?.versions[0] || '');
+  const [version, setVersion] = useState(initialVersion);
   const [versionText, setVersionText] = useState('');
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
@@ -30,64 +42,99 @@ export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreat
   const currentVersions = projects.find((p) => p.name === project)?.versions ?? [];
 
   const submit = async () => {
-    if (!title.trim() || !detail.trim()) return;
+    const finalProject = project === NEW_OPTION ? projectText.trim() : project;
+    const finalVersion = version === NEW_OPTION ? versionText.trim() : version;
+    if (!finalProject) { toast.error('请输入项目名'); return; }
+    if (!finalVersion) { toast.error('请输入版本名'); return; }
+    if (!title.trim() || !detail.trim()) {
+      toast.error('标题与详细说明均不能为空');
+      return;
+    }
     setSaving(true);
     try {
-      const finalProject = project === NEW_OPTION ? projectText.trim() : project;
-      const finalVersion = version === NEW_OPTION ? versionText.trim() : version;
-      if (!finalProject || !finalVersion) return;
-      const tags = tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+      const tags = [...new Set(tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean))];
       await onCreate({ project: finalProject, version: finalVersion, title: title.trim(), detail, tags });
     } finally {
       setSaving(false);
     }
   };
 
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void submit(); }
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+  };
+
   return (
-    <div className="bg-card border-primary/40 rounded-lg border p-4 space-y-2 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={project}
-          onChange={(e) => {
-            setProject(e.target.value);
-            const next = projects.find((p) => p.name === e.target.value);
-            setVersion(next?.versions[0] ?? NEW_OPTION);
-            setVersionText('');
-          }}
-          className="bg-background border rounded-md px-2 py-1.5 text-sm"
-        >
-          {projects.map((p) => (
-            <option key={p.name} value={p.name}>{p.name}</option>
-          ))}
-          <option value={NEW_OPTION}>＋ 新建项目…</option>
-        </select>
-        {project === NEW_OPTION && (
-          <Input value={projectText} onChange={(e) => setProjectText(e.target.value)} placeholder="项目名" className="w-36 text-sm" autoFocus />
-        )}
-        <select
-          value={version}
-          onChange={(e) => setVersion(e.target.value)}
-          className="bg-background border rounded-md px-2 py-1.5 text-sm"
-        >
-          {currentVersions.map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-          <option value={NEW_OPTION}>＋ 新建版本…</option>
-        </select>
-        {version === NEW_OPTION && (
-          <Input value={versionText} onChange={(e) => setVersionText(e.target.value)} placeholder="版本名,如 v1.3.0" className="w-36 text-sm" />
-        )}
+    <div className="bg-card border-primary/40 rounded-lg border p-4 space-y-3 shadow-sm" onKeyDown={onKeyDown}>
+      <div className="space-y-1.5">
+        <Label className="text-xs">项目</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={project}
+            onChange={(e) => {
+              setProject(e.target.value);
+              const next = projects.find((p) => p.name === e.target.value);
+              setVersion(next?.versions[0] ?? NEW_OPTION);
+              setVersionText('');
+            }}
+            className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+            aria-label="选择项目"
+          >
+            {projects.map((p) => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+            <option value={NEW_OPTION}>＋ 新建项目…</option>
+          </select>
+          {project === NEW_OPTION && (
+            <Input value={projectText} onChange={(e) => setProjectText(e.target.value)} placeholder="项目名" className="w-36 text-sm" autoFocus />
+          )}
+        </div>
       </div>
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="一句话功能点(标题)" className="text-sm font-medium" autoFocus={project !== NEW_OPTION} />
-      <Textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="详细改动说明(markdown):改了什么/为什么/影响面" rows={5} className="text-sm" />
-      <div className="flex items-center gap-2">
-        <Input value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="标签,逗号分隔(feat/fix/refactor/docs)" className="text-sm" />
-        <Button size="sm" onClick={submit} disabled={saving || !title.trim() || !detail.trim()}>
-          <Check className="size-4" /> 保存
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>
-          <X className="size-4" /> 取消
-        </Button>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">版本</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+            aria-label="选择版本"
+          >
+            {currentVersions.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+            <option value={NEW_OPTION}>＋ 新建版本…</option>
+          </select>
+          {version === NEW_OPTION && (
+            <Input value={versionText} onChange={(e) => setVersionText(e.target.value)} placeholder="版本名,如 v1.3.0" className="w-44 text-sm" />
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="nf-title" className="text-xs">标题(一句话功能点)</Label>
+        <Input id="nf-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如:登录页加记住密码" className="text-sm font-medium" autoFocus={project !== NEW_OPTION} />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="nf-detail" className="text-xs">详细说明(markdown:改了什么/为什么/影响面)</Label>
+        <Textarea id="nf-detail" value={detail} onChange={(e) => setDetail(e.target.value)} rows={5} className="text-sm" />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="nf-tags" className="text-xs">标签(逗号分隔:feat/fix/refactor/docs)</Label>
+        <div className="flex items-center gap-2">
+          <Input id="nf-tags" value={tagsText} onChange={(e) => setTagsText(e.target.value)} className="text-sm" />
+          <Button size="sm" onClick={submit} disabled={saving || !title.trim() || !detail.trim()}>
+            <Check className="size-4" /> 保存
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            <X className="size-4" /> 取消
+          </Button>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          人工记录默认不带 diff/文件引用,可由 AI 用 update_work 后补。Ctrl+Enter 保存,Esc 取消。
+        </p>
       </div>
     </div>
   );
