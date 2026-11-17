@@ -1,11 +1,11 @@
 // frontend/src/App.tsx
 // 应用骨架:启动副作用(健康检查 / 存储红点)+ 视图切换(keep-alive)+ 主题。
-// worklog 转型 Step5:看板/聊天/任务文档/用量视图已砍除,默认视图暂设 knowledge
-// (Step6 工作记录页就绪后切换为 worklog)。
+// worklog 转型 Step6:工作记录页为默认落地视图。
 import { useEffect, useState } from 'react';
 import type { ComponentType } from 'react';
 import { motion, useAnimationControls } from 'motion/react';
 import { SidebarNav, type ViewKey } from '@/components/SidebarNav';
+import { WorklogView } from '@/components/views/WorklogView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
 import { VocabView } from '@/components/views/VocabView';
 import { MindmapView } from '@/components/views/MindmapView';
@@ -16,13 +16,14 @@ import { useUIStore } from '@/stores/uiStore';
 import { fetchHealth, systemApi } from '@/api/system';
 
 const VIEWS: Record<ViewKey, ComponentType> = {
+  worklog: WorklogView,
   knowledge: KnowledgeView,
   vocab: VocabView,
   mindmap: MindmapView,
 };
 
 function App() {
-  const [activeView, setActiveView] = useState<ViewKey>('knowledge');
+  const [activeView, setActiveView] = useState<ViewKey>('worklog');
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const settingsTab = useUIStore((s) => s.settingsTab);

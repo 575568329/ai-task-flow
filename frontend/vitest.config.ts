@@ -34,5 +34,13 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['./src/test/setup.ts'],
+    // lucide-react 被 npm hoist 到 monorepo 根(与 react@18 同层),vitest 对 node_modules
+    // CJS 默认 externalize → 其内部 import 'react' 不经上述 alias → 图标元素由根 react@18
+    // 创建,与 19 混渲染报 "older version of React"。inline 后走 vite transform,alias 生效。
+    server: {
+      deps: {
+        inline: ['lucide-react'],
+      },
+    },
   },
 });
