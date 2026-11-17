@@ -126,31 +126,6 @@ export function uploadsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'uploads');
 }
 
-let cachedWinUploads: string | null | undefined;
-/**
- * uploads 目录的 Windows 路径形式(`wslpath -w` 转换,模块级缓存)。
- *
- * 用途:MCP get_task 给 Claude 两种本地路径——WSL 侧读 uploadsDirPath()(/mnt/c/...),
- * Windows 侧读本函数值(C:\\...)——按自身环境取用,无需访问后端 HTTP(localhost:5678 在
- * WSL 侧是死链)。非 WSL 或转换失败返回 null(此时无 Windows 形式可转,只给 WSL 路径)。
- */
-export function uploadsDirWindowsPath(): string | null {
-  if (cachedWinUploads !== undefined) return cachedWinUploads;
-  if (!IS_WSL) {
-    cachedWinUploads = null;
-    return null;
-  }
-  try {
-    cachedWinUploads = execFileSync('wslpath', ['-w', uploadsDirPath()], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    cachedWinUploads = null;
-  }
-  return cachedWinUploads;
-}
-
 /** Claude Code settings.json 多套配置(profile)存储,与 llm-config.json 同级 */
 export function claudeProfilesFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'claude-profiles.json');
@@ -161,24 +136,9 @@ export function claudeSettingsBackupDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'claude-settings-backups');
 }
 
-/** 任务 markdown 存档目录(派发时落盘,供 Claude Code 读取 + 用户存档) */
+/** 任务 markdown 存档目录(旧任务派发产物;派发链路已砍,存档仅供 StorageService 统计/清理) */
 export function taskDocsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'tasks');
-}
-
-/** 单个任务 markdown 文件路径 */
-export function taskDocPath(taskId: string, dataDir?: string): string {
-  return path.join(taskDocsDirPath(dataDir), `${taskId}.md`);
-}
-
-/** 任务对话 sessionId 存储( taskId → claude session_id,用于 --resume 续接) */
-export function taskSessionsFilePath(dataDir?: string): string {
-  return path.join(resolveDataDir(dataDir), 'task-sessions.json');
-}
-
-/** 会话自定义标题存储( sessionId → 用户命名,看板历史列表显示用;不碰 Claude jsonl) */
-export function sessionTitlesFilePath(dataDir?: string): string {
-  return path.join(resolveDataDir(dataDir), 'session-titles.json');
 }
 
 /** 日志目录(后端运行日志,如聊天链路全量日志) */

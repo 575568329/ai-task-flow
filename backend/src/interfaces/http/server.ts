@@ -7,20 +7,12 @@ import path from 'path';
 import fs from 'fs';
 import { uploadsDirPath } from '../../config/dataDir.js';
 import { findAvailablePort } from '../../utils/port-finder.js';
-import { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
-import { EventBus } from '../../infrastructure/pubsub/EventBus.js';
-import { registerTaskRoutes } from './routes/taskRoutes.js';
-import { registerSSERoutes } from './routes/sseRoutes.js';
 import { registerUploadRoutes } from './routes/uploadRoutes.js';
-import { registerProjectRoutes } from './routes/projectRoutes.js';
-import { registerChatRoutes } from './routes/chatRoutes.js';
 import { registerFileRoutes } from './routes/fileRoutes.js';
 import { registerKnowledgeRoutes } from './routes/knowledgeRoutes.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { isLocalAccess } from '../../utils/localAccess.js';
 import { DomainError } from '../../domain/_shared/DomainError.js';
-import type { ChatRepository } from '../../domain/research/repositories/ChatRepository.js';
-import type { ChatService } from '../../application/research/ChatService.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
@@ -30,26 +22,11 @@ import type { MindmapService } from '../../application/mindmap/MindmapService.js
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
-import { registerUsageRoutes } from './routes/usageRoutes.js';
 import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
 import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
 import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
 import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
 import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
-import { UsageService } from '../../application/usage/UsageService.js';
-import { registerTaskChatRoutes } from './routes/taskChatRoutes.js';
-import { registerProjectChatRoutes } from './routes/projectChatRoutes.js';
-import { AgentRuntimeManager } from '../../application/agent/AgentRuntimeManager.js';
-import { TaskSessionStore } from '../../infrastructure/persistence/TaskSessionStore.js';
-import { SessionTitleStore } from '../../infrastructure/persistence/SessionTitleStore.js';
-
-/** 用量聚合服务(无外部依赖,模块级单例:跨请求保持 L1/L2 扫描缓存) */
-const usageService = new UsageService();
-
-/** 常驻 runtime 池(Phase 2):同 (side, sessionId) 连发复用同一 claude 进程,turn2 无冷启。模块级单例 */
-const agentRuntimeManager = new AgentRuntimeManager();
-const taskSessionStore = new TaskSessionStore();
-const sessionTitleStore = new SessionTitleStore();
 
 /** Claude Code settings.json 多套配置切换(无外部依赖,模块级单例即可) */
 const claudeProfileService = new ClaudeProfileService(new JsonClaudeProfileRepository());
@@ -68,7 +45,7 @@ export interface HttpServerConfig {
   uploadsDir?: string;
 }
 
-/** 解析上传目录,默认放在用户数据目录下,与 tasks.json 同级 */
+/** 解析上传目录,默认放在用户数据目录下 */
 function resolveUploadsDir(custom?: string): string {
   if (custom) return custom;
   return uploadsDirPath();
@@ -76,10 +53,6 @@ function resolveUploadsDir(custom?: string): string {
 
 export async function createHttpServer(
   config: HttpServerConfig,
-  taskRepository: TaskRepository,
-  eventBus: EventBus,
-  chatRepository: ChatRepository,
-  chatService: ChatService,
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
@@ -165,14 +138,8 @@ export async function createHttpServer(
     };
   });
 
-  // 注册业务路由
-  await registerTaskRoutes(fastify, taskRepository);
-  await registerTaskChatRoutes(fastify, taskRepository, agentRuntimeManager, taskSessionStore, sessionTitleStore);
-  await registerProjectChatRoutes(fastify, taskRepository, agentRuntimeManager, sessionTitleStore);
-  await registerSSERoutes(fastify, eventBus);
+  // 注册业务路由(worklog 转型 Step1:任务/聊天/SSE/项目选择/usage 路由已砍除)
   await registerUploadRoutes(fastify, uploadsDir);
-  await registerProjectRoutes(fastify);
-  await registerChatRoutes(fastify, chatRepository, chatService);
   await registerLlmConfigRoutes(fastify, llmConfigService);
   await registerWebClipRoutes(fastify, webClipService);
   await registerFileRoutes(fastify);
@@ -180,13 +147,8 @@ export async function createHttpServer(
   await registerVocabRoutes(fastify, vocabService);
   await registerMaimemoRoutes(fastify, maimemoService);
   await registerMindmapRoutes(fastify, mindmapService);
-  await registerSystemRoutes(fastify, agentRuntimeManager);
-  await registerUsageRoutes(fastify, usageService);
+  await registerSystemRoutes(fastify);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
-  // graceful 关闭:dispose 所有常驻 runtime(杀 claude 子进程);sweeper 已 unref,SIGINT 直退靠 OS 清理
-  fastify.addHook('onClose', async () => {
-    await agentRuntimeManager.shutdown();
-  });
 
   // 全局错误处理(P1-16 + P2-20):未捕获的抛错统一转 JSON。
   // 优先级:DomainError.httpStatus(业务 4xx/5xx 精准) > Fastify statusCode(校验 4xx) > 默认 500。
@@ -262,10 +224,6 @@ const LISTEN_RETRY_ATTEMPTS = 5;
 
 export async function startHttpServer(
   config: HttpServerConfig,
-  taskRepository: TaskRepository,
-  eventBus: EventBus,
-  chatRepository: ChatRepository,
-  chatService: ChatService,
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
@@ -277,7 +235,7 @@ export async function startHttpServer(
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
+    const server = await createHttpServer(currentConfig, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

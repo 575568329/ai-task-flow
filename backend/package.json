@@ -63,7 +63,6 @@
     "fastify": "^5.2.0",
     "gray-matter": "^4.0.3",
     "nanoid": "^5.0.5",
-    "node-file-dialog": "^1.0.3",
     "reflect-metadata": "^0.2.2",
     "simple-git": "^3.22.0",
     "zod": "^4.0.0"

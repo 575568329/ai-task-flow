@@ -46,16 +46,16 @@ interface CategoryDef {
 const CATEGORY_DEFS: CategoryDef[] = [
   {
     key: 'tasks',
-    label: '任务数据',
-    description: '任务看板的全部任务(tasks.json)。业务核心数据,请回到看板逐个删除任务。',
+    label: '任务数据(旧)',
+    description: '旧任务看板的任务数据(tasks.json)。看板功能已下线,此为历史数据,清理前请确认不再需要。',
     clearable: false,
     resolvePath: () => tasksFilePath(),
     isDir: false,
   },
   {
     key: 'chats',
-    label: '调研聊天',
-    description: '资料调研的全部会话与消息(chats.json)。业务数据,请回到调研页删除会话。',
+    label: '调研聊天(旧)',
+    description: '旧调研聊天的会话与消息(chats.json)。聊天功能已下线,此为历史数据,清理前请确认不再需要。',
     clearable: false,
     resolvePath: () => chatFilePath(),
     isDir: false,
@@ -79,8 +79,8 @@ const CATEGORY_DEFS: CategoryDef[] = [
   },
   {
     key: 'taskDocs',
-    label: '任务存档',
-    description: '派发时落盘的任务 Markdown 存档。清空后,进行中任务的 Claude 可能读不到存档。',
+    label: '任务存档(旧)',
+    description: '旧任务派发时落盘的 Markdown 存档(tasks/ 目录)。派发功能已下线,此为历史存档,可安全清理。',
     clearable: true,
     danger: true,
     resolvePath: () => taskDocsDirPath(),

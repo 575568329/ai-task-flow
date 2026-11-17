@@ -1,22 +1,10 @@
 // backend/src/http-server.ts
-import 'reflect-metadata';
 import { startHttpServer } from './interfaces/http/server.js';
-import { JsonTaskRepository } from './infrastructure/persistence/JsonTaskRepository.js';
-import { TaskFileWatcher } from './infrastructure/persistence/TaskFileWatcher.js';
-import { InMemoryEventBus } from './infrastructure/pubsub/EventBus.js';
-import { JsonEventStore } from './infrastructure/pubsub/EventStore.js';
 import { findAvailablePort } from './utils/port-finder.js';
-import { resolveDataDir, taskDocPath, tasksFilePath } from './config/dataDir.js';
-import { writeTaskDoc } from './infrastructure/persistence/taskDoc.js';
+import { resolveDataDir } from './config/dataDir.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-// 调研聊天 Agent
-import { JsonChatRepository } from './infrastructure/persistence/JsonChatRepository.js';
-import { GlmWebSearchClient } from './infrastructure/search/GlmWebSearchClient.js';
-import { ArxivClient } from './infrastructure/search/ArxivClient.js';
-import { SearchOrchestrator } from './application/research/SearchOrchestrator.js';
-import { ChatService } from './application/research/ChatService.js';
 import { JsonLlmConfigRepository } from './infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from './application/llm-config/LlmConfigService.js';
 import { WebClipService } from './application/webclip/WebClipService.js';
@@ -33,7 +21,7 @@ import { knowledgeDirPath } from './config/dataDir.js';
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 47821 */
   port?: number;
-  /** HTTP 监听地址,默认 0.0.0.0 */
+  /** HTTP 监听地址,默认 127.0.0.1 */
   host?: string;
   /** CORS 允许源,默认 * */
   corsOrigin?: string | string[];
@@ -44,16 +32,12 @@ export interface StartAppOptions {
    */
   frontendDist?: string;
   /**
-   * 自定义 tasks.json 路径。默认 ~/.ai-task-flow/tasks.json
-   */
-  dataFile?: string;
-  /**
    * 自定义上传目录。默认 {dataDir}/uploads
    */
   uploadsDir?: string;
   /**
    * 自定义数据根目录。默认 ~/.ai-task-flow
-   * 优先级最高,会贯穿 tasks.json / events.jsonl / uploads / tasks 存档。
+   * 优先级最高,贯穿全部持久化模块。
    */
   dataDir?: string;
 }
@@ -66,32 +50,16 @@ export async function startApp(options: StartAppOptions = {}) {
   // 先锁定数据根目录(优先级:显式参数 > 环境变量 > 默认 ~/.ai-task-flow),
   // 后续所有持久化模块都从 config/dataDir 读取同一份路径。
   const dataDir = resolveDataDir(options.dataDir);
+  void dataDir; // dataDir 已被 resolveDataDir 模块级缓存,后续各仓储自行读取
 
-  const eventBus = new InMemoryEventBus();
-  const eventStore = new JsonEventStore();
-  // 文件监听器:轮询 tasks.json,感知外部进程(MCP stdio)写入 → 发事件 → SSE 推前端。
-  // 与 repository 共用 filePath;repository 写后 markSelfWrite 自标,避免重复推送。
-  const tasksFile = options.dataFile ?? tasksFilePath();
-  const taskFileWatcher = new TaskFileWatcher(tasksFile, eventBus);
-  const taskRepository = new JsonTaskRepository(options.dataFile, eventBus, eventStore, taskFileWatcher);
-  void taskFileWatcher.start();
-
-  // 调研聊天 Agent 初始化
-  const chatRepository = new JsonChatRepository();
   const llmConfigRepository = new JsonLlmConfigRepository();
   const llmConfigService = new LlmConfigService(llmConfigRepository);
   await llmConfigService.init();
-  // 网页检索改用智谱 GLM 官方 MCP 搜索(复用 LLM 的 bigmodel apiKey,实时取最新值;
-  // 替换已失效且国内不可达的 DuckDuckGo)。arXiv 作为论文源保留。
-  const webSearchClient = new GlmWebSearchClient(() => llmConfigService.getActiveApiKey());
-  const arxivClient = new ArxivClient();
-  const searchOrchestrator = new SearchOrchestrator(webSearchClient, arxivClient);
-  const chatService = new ChatService(chatRepository, llmConfigService, searchOrchestrator);
   // 网页剪藏服务(存图 + LLM 拆解 + 回退),复用 LLM 配置
   const webClipService = new WebClipService(llmConfigService);
   // 知识库服务
   const knowledgeService = new KnowledgeService(knowledgeDirPath());
-  // 翻译生词本服务（复用 LLM 配置；translate 见 P1）
+  // 翻译生词本服务（复用 LLM 配置）
   const vocabRepository = new JsonVocabRepository();
   const vocabService = new VocabService(vocabRepository, llmConfigService);
 
@@ -106,27 +74,13 @@ export async function startApp(options: StartAppOptions = {}) {
   const mindmapRepository = new JsonMindmapRepository();
   const mindmapService = new MindmapService(mindmapRepository);
 
-  // 一次性补齐:给历史任务(本次改动前创建、还没 md 存档的)补写 markdown 文件,
-  // 让它们的派发指令也能指向真实存在的文件。只补缺失,不覆盖已有。
-  try {
-    const existing = await taskRepository.findAll();
-    for (const task of existing) {
-      if (!fs.existsSync(taskDocPath(task.id.value))) {
-        await writeTaskDoc(task);
-      }
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`! 任务 markdown 存档补齐失败(不影响启动): ${message}`);
-  }
-
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);
-  // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口(含 spawn 终端)。
+  // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口。
   // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
   const host = options.host ?? process.env.HOST ?? '127.0.0.1';
   if (host === '0.0.0.0' || host === '::') {
     console.warn(
-      `⚠️  监听 ${host}:服务无鉴权,同网段可访问全部接口(含 spawn 终端/bypass 权限)。仅限隔离网络。`,
+      `⚠️  监听 ${host}:服务无鉴权,同网段可访问全部接口。仅限隔离网络。`,
     );
   }
 
@@ -145,7 +99,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, taskRepository, eventBus, chatRepository, chatService, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
+  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,
@@ -181,8 +135,7 @@ const isDirectRun = import.meta.url === `file://${process.argv[1]?.replace(/\\/g
 if (isDirectRun) {
   startApp()
     .then((server) => {
-      // 优雅关闭(P1-16):Ctrl+C / kill 时先 server.close()(触发 onClose → dispose 常驻 runtime,
-      // 杀 claude 子进程防孤儿),再 exit。Node 默认硬退会跳过 onClose,留下僵尸 claude 进程。
+      // 优雅关闭:Ctrl+C / kill 时先 server.close()(释放端口/连接)再 exit。
       let closing = false;
       const shutdown = async (sig: string) => {
         if (closing) return; // 防 Ctrl+C 连按重复触发
@@ -190,7 +143,7 @@ if (isDirectRun) {
         console.log(`\n${sig} 收到,正在优雅关闭...`);
         try {
           await server.close();
-          console.log('✓ 已关闭(常驻 runtime 已 dispose)');
+          console.log('✓ 已关闭');
         } catch (e) {
           console.error('关闭过程出错:', e);
         }

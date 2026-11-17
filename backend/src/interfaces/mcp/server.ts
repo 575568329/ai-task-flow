@@ -7,26 +7,19 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { JsonTaskRepository } from '../../infrastructure/persistence/JsonTaskRepository.js';
 import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { knowledgeDirPath } from '../../config/dataDir.js';
-import type { TaskRepository } from '../../domain/workflow/repositories/TaskRepository.js';
 import { ALL_TOOLS, HANDLERS } from './tools/index.js';
 
 /**
  * AI Task Flow MCP Server
  *
- * 提供给 Claude Code 的 MCP 工具：
- * - list_pending_tasks: 列出待办任务
- * - get_task: 获取任务详情
- * - record_result: 记录执行结果
- * - complete_step: 标记步骤完成
- * - add_note_to_task: 添加备注
+ * 提供给 Claude Code/ZCode 的 MCP 工具：
  * - save_to_knowledge: 写入知识库
+ * (Step1 任务工具已随看板砍除;Step4 将注册 worklog 九工具)
  */
 class AITaskFlowServer {
   private server: Server;
-  private taskRepository: TaskRepository;
   private knowledgeService: KnowledgeService;
 
   constructor() {
@@ -35,10 +28,8 @@ class AITaskFlowServer {
       { capabilities: { tools: {}, resources: {} } },
     );
 
-    // MCP 进程手工装配(MCP 是 stdio server,不经 HTTP;原 tsyringe container 已移除,决策项2A)。
-    // TaskRepository 用默认实例(读默认 ~/.ai-task-flow/tasks.json)。MCP 写入触发 HTTP 侧
-    // 刷新靠 TaskFileWatcher 轮询,未接 EventBus(报告 P1 议题,本次不动)。
-    this.taskRepository = new JsonTaskRepository();
+    // MCP 进程手工装配(MCP 是 stdio server,不经 HTTP)。
+    // 与 HTTP backend 是两个 OS 进程——共享持久化文件,写协调靠各仓储的文件锁协议。
     this.knowledgeService = new KnowledgeService(knowledgeDirPath());
 
     this.setupHandlers();
@@ -58,7 +49,6 @@ class AITaskFlowServer {
         throw new Error(`Unknown tool: ${name}`);
       }
       return handler(args, {
-        taskRepository: this.taskRepository,
         knowledgeService: this.knowledgeService,
       });
     });
