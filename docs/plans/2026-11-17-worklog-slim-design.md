@@ -1,9 +1,9 @@
-# 工作台瘦身转型设计:worklog 记录中枢(2026-11-17,v2)
+# 工作台瘦身转型设计:worklog 记录中枢(2026-11-17,v3)
 
 > 分支:`feat/worklog-slim`(基于 `feat/utools-adapter`,含知识库 ENOENT 修复)
-> 状态:v1 经三路审阅(架构师/资深开发/产品经理)+业界调研修订,v2 为开工稿。
-> v2 变更:跨进程写协调(锁方案,替换错误的"单写者"表述)、砍除边界补全(floating/system 裁剪/死代码链)、
-> HTTP partial 语义与 rename 端点、备份范围扩到单条删除、数据模型补约束,详见各节。
+> 状态:v2 经第二轮三路审阅(修复验证+交叉一致性+需求回归)修订,v3 为开工稿。
+> v2→v3 变更:锁协议双层化(进程内 mutex+文件锁 retries)、快照锁内取数、mcp 装配断链补全(sdk-loader/server.ts/types.ts)、
+> shared 类型二次迁移(usage/agent 6 类型被保留的 ClaudeSessionScanner 引用)、删项目端点补齐、死代码直删清单,详见各节。
 
 ## 1. 背景与动机
 
@@ -26,7 +26,7 @@
 | 7 | claude-profile | 功能不变,交互重做:单面板完成全部操作,消灭二级弹窗 |
 | 8 | 页面可编辑 | 工作记录页支持人工增删改**与重命名**,内联编辑不弹窗,更新为 partial 语义 |
 | 9 | 工具指南 | 9 工具说明/场景/示例话术在工作记录页指南视图;元数据单一来源(shared) |
-| 10 | **跨进程写协调(v2)** | MCP 保持 stdio 独立进程(业界共识:本地单用户场景 stdio 即最佳实践);写操作用 proper-lockfile 跨进程文件锁 + write-file-atomic 原子写;**每次操作读最新文件,不缓存** |
+| 10 | **跨进程写协调(v2/v3)** | MCP 保持 stdio 独立进程(业界共识:本地单用户场景 stdio 即最佳实践);**双层锁**(进程内 mutex + proper-lockfile retries 配置)+ write-file-atomic 原子写;**每次操作读最新文件,不缓存** |
 
 ## 3. 砍除范围(数据文件保留,只删代码)
 
@@ -34,33 +34,34 @@
 
 | 类别 | 砍除项 |
 |------|--------|
-| 领域/应用 | `domain/workflow`(整目录)、`domain/research` 聊天链路(ChatMessage/Conversation/ChatRepository)、ChatService、SearchOrchestrator、ClassifierService、GlmWebSearchClient、ArxivClient(唯一消费者为 SearchOrchestrator)、UsageService |
-| 基础设施 | JsonTaskRepository、TaskFileWatcher、JsonChatRepository、TaskSessionStore、SessionTitleStore、taskDoc.ts、`infrastructure/git/`(WorktreeManager)、EventBus/EventStore(pubsub) |
+| 领域/应用 | `domain/workflow`(整目录)、`domain/research` 聊天链路(ChatMessage/Conversation/ChatRepository)、ChatService、SearchOrchestrator、ClassifierService、GlmWebSearchClient、ArxivClient(唯一消费者为 SearchOrchestrator)、UsageService、`application/agent/`(整目录,AgentRuntimeManager 等) |
+| 基础设施 | JsonTaskRepository、TaskFileWatcher、JsonChatRepository、TaskSessionStore、SessionTitleStore、taskDoc.ts、`infrastructure/git/`(WorktreeManager)、EventBus/EventStore(pubsub)、`utils/sdk-loader.ts`(import AgentRunner,agent 删后必断)、TerminalLauncher.ts(open 死端点专用)、modelPricing.ts(UsageService 专用)、isSafeRepoPath/isValidRepoPath/projectChatHelpers.ts(调用点全在死端点内,**直删不迁移**) |
 | HTTP 路由 | taskRoutes、sseRoutes、chatRoutes、taskChatRoutes、projectChatRoutes、projectRoutes、usageRoutes |
-| MCP | 5 个任务工具(list_pending_tasks / get_task / record_result / complete_step / add_note_to_task) |
-| system 裁剪(v2) | 保留 storage/mcp-setup/health;砍 select-directory、claude-sessions、open、agent-runtime/snapshot 端点及 AgentRuntimeManager(杀 claude 子进程链);`isValidRepoPath` 自 projectChatHelpers 迁入 system 后整删该文件 |
+| MCP | 5 个任务工具(list_pending_tasks / get_task / record_result / complete_step / add_note_to_task);装配面 `mcp/server.ts`(TaskRepository/JsonTaskRepository import)与 `tools/types.ts`(ToolDeps.taskRepository)同步重写 |
+| system 裁剪 | 保留 storage/health;砍 select-directory、claude-sessions、open、agent-runtime/snapshot、**mcp-setup** 端点(唯一消费者 McpHelpPanel 已删,指南页纯静态渲染 catalog)及 AgentRuntimeManager;`node-file-dialog` 依赖随之移除 |
 
-**保留**:knowledge、mindmap、vocab、maimemo、webclip、llm-config(被 vocab/maimemo/webclip 依赖)、claude-profile、file、upload、system(裁剪后)、MCP 的 save_to_knowledge、`migrations.ts`(被 JsonMindmapRepository 引用)。
-`dataDir.ts` 中任务/聊天专用路径函数(tasksFilePath/chatFilePath/eventsFilePath/taskDocsDirPath 等)**暂留**——保留的 StorageService 存储统计仍引用,仅更新其类目文案。
+**保留**:knowledge、mindmap、vocab、maimemo、webclip、llm-config(被 vocab/maimemo/webclip 依赖)、claude-profile、file、upload、system(裁剪后)、MCP 的 save_to_knowledge、`migrations.ts`(被 JsonMindmapRepository 引用)、**ClaudeSessionScanner.ts**(claude-profile 链的 ClaudeSettingsTargetResolver 依赖其 listWslDistros)、**`@anthropic-ai/claude-agent-sdk` 依赖**(claude-profile 经 pathCodec/sdk-loader 链使用,勿误删)。
+`dataDir.ts`:tasksFilePath/chatFilePath/eventsFilePath/taskDocsDirPath **暂留**(保留的 StorageService 引用,仅更新类目文案);taskSessionsFilePath/sessionTitlesFilePath/taskDocPath/uploadsDirWindowsPath 零引用**删除**。
 
 ### 3.2 前端
 
-- BoardView + board 组件、ChatView + chat 组件、**floating/ 悬浮聊天整目录**(10 文件,依赖被砍 projectChatStore)、DocsView(docs/TaskDocsView)、UsageView;
+- BoardView + board 组件、ChatView + chat 组件、**floating/ 悬浮聊天整目录**(8 文件,依赖被砍 projectChatStore)、DocsView(docs/TaskDocsView)、UsageView;
 - taskStore / chatStore / taskChatStore / projectChatStore / boardGroupingStore、stores/chat/;
-- api 层:taskChat/projectChat/chat/chatStream/sse/sse-utils/files(仅 docs 引用);**先迁出** api/task.ts 内被保留功能引用的 systemApi/fetchHealth → api/system.ts;
+- api 层:task/taskChat/projectChat/chat/chatStream/sse/sse-utils/files(仅 docs 引用)/**usage**;**先迁出** api/task.ts 内被保留功能引用的 systemApi(仅保留 getStorage/clearStorage 等活方法)/fetchHealth → api/system.ts;
 - **先迁移后删**:`chat/MessageContent`、`chat/CodeBlock`、`chat/MermaidBlock` 为通用 Markdown 渲染组件(被保留的 KnowledgeViewer 引用),迁至 components/common/ 后再删 chat 目录;
-- lib:删 chatEvents/repoHistory/taskMeta(消费者均在砍除范围);**保留** speech/docExport/formatDate/copyPath(VocabView/KnowledgeViewer 在用);
-- **McpHelpPanel 删除**(指南唯一入口在工作记录页,与决策 9 一致);
-- SidebarNav 对应入口;App.tsx 启动 effect(SSE/taskStore 逻辑)整体重写。
+- lib:删 chatEvents/repoHistory/taskMeta/shortcuts.ts(消费者均在砍除范围,ShortcutsPanel 动作全是任务语义,随 SettingsDialog 过时 Tab 一并移除);**保留** speech/docExport/formatDate/copyPath(VocabView/KnowledgeViewer 在用);
+- **McpHelpPanel 删除**(指南唯一入口在工作记录页,与决策 9 一致);NightModePanel 随过时 Tab 处置一并评估移除(唯一消费场景是被砍的 board);
+- SidebarNav 对应入口;App.tsx 启动 effect 重写为 **fetchHealth + getStorage(侧边栏存储红点)**,移除 fetchAll/sseClient/taskStore 逻辑。
 
-### 3.3 shared 包
+### 3.3 shared 包(两轮抽取,缺一编译断)
 
-- types/task.ts 中 WebClipService 实际使用的 StepBlock/TaskStep 等类型**先抽取**至 types/webclip.ts(或独立 steps 类型文件)并改 import,再删 types/{task,research,usage}.ts 与 utils/{prompt,steps}.ts;
-- types/agent.ts(无人用)删除;index.ts barrel 对应行清理。
+1. types/task.ts 中 WebClipService 使用的 StepBlock/TaskStep 等 → 抽至 types/webclip.ts(含其现有 `import ... from './task.js'` 的内联),改 WebClipService import;
+2. **types/usage.ts 的 ModelAccum/SessionUsage/TokenUsage 与 types/agent.ts 的 ChatTurn/ChatBlock → 迁至保留的 types/claude-session.ts**(消费者是保留的 ClaudeSessionScanner),随后才可删 types/{task,research,usage,agent}.ts 与 utils/{prompt,steps}.ts;
+3. index.ts barrel 对应行清理;shared rebuild 后前端 tsc 才绿。
 
 ### 3.4 测试资产
 
-- `tests/test-mcp-tools.sh`(测 5 个旧 MCP 工具)、`tests/curl/test_task_api.sh` 删除,新增 worklog curl 冒烟(record→query→delete 前备份断言),保住 `tests/run_all.sh` 统一回归入口。
+- `tests/test-mcp-tools.sh`、`tests/curl/test_task_api.sh`、**`tests/curl/test_claude_sessions.sh`(claude-sessions 端点被裁)** 删除;`routes/__tests__/systemRoutes.test.ts`(测被裁端点)删除;新增 worklog curl 冒烟(record→query→delete 前备份断言),保住 `tests/run_all.sh` 统一回归入口。
 
 ## 4. worklog 数据模型与存储
 
@@ -97,14 +98,16 @@
 }
 ```
 
-### 4.1 跨进程写协调(v2,替换 v1"单写者"表述)
+### 4.1 跨进程写协调(v3:双层锁,替换 v1"单写者"表述)
 
-MCP(stdio 独立进程,业界共识:本地单用户场景的最佳 transport)与 HTTP backend 是**两个 OS 进程**,不存在"共享内存实例"。写协议:
+MCP(stdio 独立进程,业界共识:本地单用户场景的最佳 transport)与 HTTP backend 是**两个 OS 进程**,不存在"共享内存实例"。写协议(双层):
 
-- **每次操作(读和写)都从磁盘读最新文件**——HTTP 侧不缓存树,页面刷新即拉新,故 AI 刚记的条目页面立刻可见(替代被砍的 TaskFileWatcher 轮询);
-- 写操作 = `proper-lockfile` 锁住 worklog.json → 重读 → 内存变更 → `write-file-atomic`(tmp+rename)写回 → 解锁;
-- proper-lockfile 用 mkdir 原子策略(任何文件系统原子),自带 stale lock 检测恢复,进程崩溃不留下死锁;
-- 两个进程各持 Repository 实例,协议一致性由文件锁保证(单测以双实例模拟双进程验证)。
+- **进程内**:`JsonWorklogRepository extends JsonRepository` 基类,复用其 `withWriteLock` promise-chain mutex——同进程并发请求(Fastify 多路 PUT)先排队,不直接撞文件锁;
+- **跨进程**:进程内临界区内再取 `proper-lockfile` 文件锁(**必须配 retries/backoff**——默认 retries:0,竞争即抛 ELOCKED,HTTP 侧映射 409/503、MCP 侧 isError)→ **锁内重读** worklog.json → 内存变更 → `write-file-atomic`(同目录 tmp+rename 原子替换)写回 → 解锁(catch ECOMPROMISED 记日志);stale 阈值调大(默认 10s 在慢盘/杀毒扫描下可能误抢);
+- **读侧不锁不缓存**:write-file-atomic 的原子替换保证读者永远读到完整的旧版或新版,无撕裂;**每次操作重读磁盘**——AI 刚记的条目在页面**下次拉取时可见**(刷新/操作后重拉,页面提供刷新按钮;SSE 已砍,不做自动推送);
+- **快照时机**:破坏性操作的备份在**锁内重读之后、写回之前**落盘(锁外先读会漏掉他进程刚提交的更新,恢复即丢数据);
+- **层次归属**:备份与锁实现在 JsonWorklogRepository;HTTP 与 MCP **统一经 WorklogService**(partial/建层/重名规则单点),禁止任一入口直调 Repository;
+- 两进程各持实例,协议一致性由上述双层锁保证(单测双实例模拟双进程 + Step8 真双进程冒烟)。
 
 ### 4.2 备份(v2:范围扩大)
 
@@ -141,9 +144,10 @@ inputSchema 仍手写在工具文件(catalog 不含 schema),测试断言 catalog
 | `/api/worklog/entries` | POST | 新增条目(项目/版本自动建层,同 record_work) |
 | `/api/worklog/entries/:id` | PUT | **partial 更新**(同 update_work 语义;严禁全量替换实现——表单无 diff 字段,全量会把 AI 记录的 diff 抹掉) |
 | `/api/worklog/entries/:id` | DELETE | 删单条,自动备份 |
-| `/api/worklog/versions` | DELETE | 删版本(可删非空),备份 |
-| `/api/worklog/versions/rename` | POST | v2:重命名版本(页面右键重命名用) |
-| `/api/worklog/projects/:name/rename` | POST | v2:重命名项目 |
+| `/api/worklog/versions?project=&version=` | DELETE | 删版本(可删非空),备份(参数走 query) |
+| `/api/worklog/versions/rename` | POST | 重命名版本(页面右键用) |
+| `/api/worklog/projects/:name` | DELETE | v3 补:删项目(页面右键用,补齐页面增删改查对称性),自动备份 |
+| `/api/worklog/projects/:name/rename` | POST | 重命名项目 |
 
 ## 7. 前端设计
 
@@ -167,7 +171,8 @@ inputSchema 仍手写在工具文件(catalog 不含 schema),测试断言 catalog
 - 编辑内联(原地变表单,partial 提交,diff/files 不在表单时不回传即保留);
 - 「+ 记一条」内联表单:项目/版本**下拉支持"新建项目/新建版本"**(人工开层,同 record 建层);人工记录默认无 diff,可由 AI 后补;
 - 删除:按钮变红色确认态(再点才删),不弹 Dialog;
-- 树节点**右键菜单:重命名**(v2,补齐人工重命名能力);
+- 树节点**右键菜单:重命名 / 删除**(v3:删除覆盖项目与版本,同红色确认态;删除项目走 DELETE /projects/:name,自动备份);
+- 工具栏**刷新按钮**(读不缓存,手动拉最新;SSE 已砍不做自动推送);
 - diff 折叠默认收起,点开用现成 DiffViewer 渲染;
 - AI 使用指南:左栏入口 → 页内切换指南视图(非弹窗),渲染 mcpToolCatalog。
 
@@ -179,18 +184,18 @@ inputSchema 仍手写在工具文件(catalog 不含 schema),测试断言 catalog
 
 只用现有 ui/(shadcn/ui)组件;颜色/间距/字号走 Tailwind v4 设计 token(CSS 变量),禁硬编码,亮暗主题兼容;布局密度对齐 KnowledgeView;中文文案语气统一。
 
-## 8. 实施顺序与风险(顺序详见实施计划文档,v2 时间修正)
+## 8. 实施顺序与风险(顺序详见实施计划文档,v3 时间修正)
 
-预估 **13-16h**(v1 的 11h 偏乐观,三路审阅一致:Step1/5/6 最紧)。
+预估 **18-20h**(两轮审阅一致判定:v1 的 11h、v2 的 15.5h 均偏乐观;Step1 牵动 60+ 文件、Step5 叠加两轮迁移)。
 
 | 风险 | 应对 |
 |------|------|
-| 砍除牵动 server.ts 与 50+ 文件 | 每步 tsc + 全量测试;砍除步独立 commit;grep 残留清零(floating/projectChatStore 关键词在列) |
-| 双进程丢更新 | proper-lockfile + write-file-atomic + 读不缓存(§4.1);双实例单测模拟双进程 |
+| 砍除牵动 server.ts 与 60+ 文件 | 每步 tsc + 全量测试;砍除步独立 commit;grep 残留清零(floating/projectChatStore 关键词在列) |
+| 双进程丢更新 | 双层锁(§4.1):进程内 mutex + proper-lockfile(retries 配置);Step2 双实例单测 + **Step8 真双进程冒烟** |
 | 旧功能反悔 | 旧数据文件保留;代码 git 可回滚 |
 | AI 误删 | 所有删除(含单条)前快照,滚动 10 份 |
 | 版本树变脏 | list_projects 先查 + record 返回"已新建版本"标注 + 指南话术 |
-| proper-lockfile 在 Windows 的兼容性 | mkdir 锁策略本身跨文件系统原子;Step2 冒烟含双进程并发写用例,Step8 回归覆盖 |
+| proper-lockfile 在 Windows 的兼容性 | mkdir 锁策略跨文件系统原子;stale 调大防杀毒扫描误抢;Step8 双进程并发覆盖 |
 | uTools/desktop 壳引用被砍模块 | Step8 冒烟;desktop 仅依赖 server 启动入口 |
 
 ## 9. 明确不做(YAGNI 清单)
