@@ -1,0 +1,50 @@
+// backend/src/interfaces/mcp/tools/worklog/query-work.ts
+import type { ToolDeps } from '../types.js';
+import { CATALOG, ok, fail } from './_shared.js';
+
+export const toolDef = {
+  name: CATALOG.query_work.name,
+  description: CATALOG.query_work.description,
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      project: { type: 'string' as const, description: '按项目精确过滤,可选' },
+      version: { type: 'string' as const, description: '按版本精确过滤,可选' },
+      keyword: { type: 'string' as const, description: '关键词,对标题/详情/文件路径不区分大小写模糊,可选' },
+      tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签任一命中,可选' },
+      dateFrom: { type: 'string' as const, description: '起始日期 YYYY-MM-DD(含),可选' },
+      dateTo: { type: 'string' as const, description: '结束日期 YYYY-MM-DD(含),可选' },
+      limit: { type: 'number' as const, description: '返回条数上限,默认 20' },
+      includeDiff: { type: 'boolean' as const, description: '是否携带 diff 原文(体积大,确需时才开),默认 false' },
+    },
+  },
+};
+
+export async function handle(args: Record<string, unknown> | undefined, deps: ToolDeps) {
+  args ??= {};
+  try {
+    const entries = await deps.worklogService.query({
+      project: args.project ? String(args.project) : undefined,
+      version: args.version ? String(args.version) : undefined,
+      keyword: args.keyword ? String(args.keyword) : undefined,
+      tags: args.tags as string[] | undefined,
+      dateFrom: args.dateFrom ? String(args.dateFrom) : undefined,
+      dateTo: args.dateTo ? String(args.dateTo) : undefined,
+      limit: typeof args.limit === 'number' ? args.limit : undefined,
+      includeDiff: args.includeDiff === true,
+    });
+
+    if (entries.length === 0) return ok('未找到匹配的工作记录。');
+
+    const lines = entries.map((e) => {
+      const head = `### ${e.title}`;
+      const meta = [`${e.project}/${e.version}`, e.date, ...(e.tags ?? [])].join(' · ');
+      const files = e.files?.length ? `\n文件: ${e.files.join(', ')}` : '';
+      const diff = e.diff ? `\n\n\`\`\`diff\n${e.diff}\n\`\`\`` : '';
+      return `${head}\n${meta}${files}\n\n${e.detail}${diff}`;
+    });
+    return ok(`共 ${entries.length} 条:\n\n${lines.join('\n\n---\n\n')}`);
+  } catch (err) {
+    return fail(err);
+  }
+}

@@ -8,19 +8,23 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
-import { knowledgeDirPath } from '../../config/dataDir.js';
+import { WorklogService } from '../../application/worklog/WorklogService.js';
+import { JsonWorklogRepository } from '../../infrastructure/persistence/JsonWorklogRepository.js';
+import { knowledgeDirPath, worklogFilePath, worklogBackupsDirPath } from '../../config/dataDir.js';
 import { ALL_TOOLS, HANDLERS } from './tools/index.js';
 
 /**
  * AI Task Flow MCP Server
  *
  * 提供给 Claude Code/ZCode 的 MCP 工具：
+ * - worklog 九工具(record_work/query_work/list_projects/update_work/delete_work/
+ *   delete_version/delete_project/rename_version/rename_project)
  * - save_to_knowledge: 写入知识库
- * (Step1 任务工具已随看板砍除;Step4 将注册 worklog 九工具)
  */
 class AITaskFlowServer {
   private server: Server;
   private knowledgeService: KnowledgeService;
+  private worklogService: WorklogService;
 
   constructor() {
     this.server = new Server(
@@ -29,8 +33,11 @@ class AITaskFlowServer {
     );
 
     // MCP 进程手工装配(MCP 是 stdio server,不经 HTTP)。
-    // 与 HTTP backend 是两个 OS 进程——共享持久化文件,写协调靠各仓储的文件锁协议。
+    // 与 HTTP backend 是两个 OS 进程——共享持久化文件,写协调靠 JsonWorklogRepository 的双层锁协议。
     this.knowledgeService = new KnowledgeService(knowledgeDirPath());
+    this.worklogService = new WorklogService(
+      new JsonWorklogRepository(worklogFilePath(), worklogBackupsDirPath()),
+    );
 
     this.setupHandlers();
   }
@@ -50,6 +57,7 @@ class AITaskFlowServer {
       }
       return handler(args, {
         knowledgeService: this.knowledgeService,
+        worklogService: this.worklogService,
       });
     });
 
