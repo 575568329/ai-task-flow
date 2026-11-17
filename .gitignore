@@ -55,17 +55,7 @@ tools/utools-spike/*.upxs
 tools/utools-spike/upx-verify/shot-file-mode.png
 tools/utools-spike/upx-verify/report.json
 
-# playwright MCP 默认输出目录(console log 等,可再生)
-.playwright-mcp/
-
-# Electron 桌面版产物与依赖(可再生)
-desktop/node_modules/
-desktop/release/
-desktop/dev-run.png
-desktop/release*/
-desktop/release*
-
-# playwright MCP 运行时产物(页面快照等)
+# playwright MCP 运行时产物(默认输出 console log、页面快照等,可再生)
 .playwright-mcp/
 .claude/browser-pilot-shots/
 # browser-pilot storageState 登录态(等效凭据,禁止提交)
