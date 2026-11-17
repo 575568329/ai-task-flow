@@ -1,5 +1,19 @@
 #!/bin/bash
 set -euo pipefail
+# --- 中文 payload 临时文件(Git Bash 内联非 ASCII 传参给 curl.exe 会致 Content-Length 不匹配) ---
+__p1=$(mktemp)
+cat > "$__p1" <<'__EOF__'
+{"title":"curl测试文档","content":"# 测试\n正文内容"}
+__EOF__
+__p2=$(mktemp)
+cat > "$__p2" <<'__EOF__'
+{"title":"带标签文档","content":"标签正文","tags":["e2e","test"]}
+__EOF__
+__p3=$(mktemp)
+cat > "$__p3" <<'__EOF__'
+{"title":"越界","content":"x","dir":"../../etc"}
+__EOF__
+trap "rm -f $__p1 $__p2 $__p3" EXIT
 
 # AI Task Flow - 知识库写入(createDoc)HTTP API E2E 测试
 # 用法: BASE_URL=http://localhost:3001 bash tests/curl/test_knowledge_create.sh
@@ -34,7 +48,7 @@ echo ""
 echo "=== 测试 1: 创建文档 返回 201 + path 命名规则 ==="
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   -H "Content-Type: application/json" \
-  --data-binary '{"title":"curl测试文档","content":"# 测试\n正文内容"}')
+  --data-binary @"$__p1")
 CODE=$(echo "$RESP" | tail -1); BODY=$(echo "$RESP" | sed '$d')
 assert_status "创建返回 201" 201 "$CODE" "$BODY"
 CREATED_PATH=$(extract_field "$BODY" ".path")
@@ -50,7 +64,7 @@ echo ""
 echo "=== 测试 2: 带 tags 创建 返回 201 + 读回含 frontmatter ==="
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   -H "Content-Type: application/json" \
-  --data-binary '{"title":"带标签文档","content":"标签正文","tags":["e2e","test"]}')
+  --data-binary @"$__p2")
 CODE=$(echo "$RESP" | tail -1); BODY=$(echo "$RESP" | sed '$d')
 assert_status "带 tags 创建返回 201" 201 "$CODE" "$BODY"
 TAGGED_PATH=$(extract_field "$BODY" ".path")
@@ -78,7 +92,7 @@ echo ""
 echo "=== 测试 4: dir 越界返回 403 ==="
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   -H "Content-Type: application/json" \
-  --data-binary '{"title":"越界","content":"x","dir":"../../etc"}')
+  --data-binary @"$__p3")
 CODE=$(echo "$RESP" | tail -1)
 assert_status "dir 越界返回 403" 403 "$CODE" ""
 

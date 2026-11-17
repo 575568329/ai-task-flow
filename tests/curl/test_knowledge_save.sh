@@ -1,5 +1,11 @@
 #!/bin/bash
 set -euo pipefail
+# --- 中文 payload 临时文件(Git Bash 内联非 ASCII 传参给 curl.exe 会致 Content-Length 不匹配) ---
+__p1=$(mktemp)
+cat > "$__p1" <<'__EOF__'
+{"title":"save测试原文档","content":"old content"}
+__EOF__
+trap "rm -f $__p1" EXIT
 
 # AI Task Flow - 知识库覆盖更新(saveDoc)HTTP API E2E 测试
 # 用法: BASE_URL=http://localhost:3001 bash tests/curl/test_knowledge_save.sh
@@ -29,7 +35,7 @@ echo "=============================="
 # 前置:创建一篇待覆盖文档
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   -H "Content-Type: application/json" \
-  --data-binary '{"title":"save测试原文档","content":"old content"}')
+  --data-binary @"$__p1")
 BODY=$(echo "$RESP" | sed '$d')
 DOC_PATH=$(extract_field "$BODY" ".path")
 echo "  前置创建文档: $DOC_PATH"

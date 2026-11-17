@@ -442,14 +442,21 @@ Step 5: 集成收尾
 
 ## 项目概述
 
-**产品定位**: 个人 AI 工作台(任务编排看板 + 原生 Claude Code 对话 + 知识库 + 思维导图等个人工具集合,经 MCP 协议串联)。任务编排 + worktree 隔离 + MCP 拉取式是核心差异化,其余模块为个人工具延伸。
+> **2026-11 worklog 转型**: 任务编排看板/AI 聊天/任务文档/用量统计已砍除(代码在 git 历史,旧数据文件保留于
+> ~/.ai-task-flow)。下文关于看板/worktree/MCP 任务工具的描述为历史设计,仅作背景。
 
-**核心价值**: 在网页看板上录入任务，点派发后创建 git worktree，你在终端用 Codex 通过 MCP 协议拉取任务、回写状态。看板自动同步，保留原生 Codex 体验。
+**产品定位**: 个人 AI 工作记录中枢 + 个人工具集合。核心循环:在终端用 Claude Code/ZCode 干活 →
+AI 通过 MCP 调 record_work 记录「项目→版本→功能点」(含 diff 与文件行号) → 工作记录页
+(默认视图)按项目/版本回溯,页面直接看 diff,支持人工增删改与重命名。其余模块(知识库/思维导图/
+生词本/墨墨/网页剪藏/Claude 配置切换)为个人工具延伸。MCP 工具说明见工作记录页「AI 使用指南」。
+
+**核心价值**: 干完活先记录再汇报,成果不留在对话里;删除/重命名自动快照备份(~/.ai-task-flow/worklog-backups/,
+保留 10 份);旧任务存档仍在 ~/.ai-task-flow/tasks/(DocsView 已移除,手工可看)。
 
 **技术栈**: 
-- Backend: Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git
+- Backend: Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk
 - Frontend: React 19 + TypeScript + Vite + shadcn/ui(Radix) + Tailwind CSS v4 + Zustand
-- Architecture: DDD 四层 + git worktree 隔离 + EventBus
+- Architecture: DDD 四层 + worklog 双层锁写协议(进程内 mutex + proper-lockfile 跨进程文件锁)
 
 **MVP 周期**: 2-3 周
 
