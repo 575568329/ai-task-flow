@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { systemApi } from '@/api/task';
+import { systemApi } from '@/api/system';
 import { useUIStore } from '@/stores/uiStore';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';

@@ -3,7 +3,7 @@
 // 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState, useEffect } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Plug, Keyboard, Moon, Layers, BookOpen } from 'lucide-react';
+import { Database, SlidersHorizontal, Layers, BookOpen } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -17,13 +17,10 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { LlmConfigPanel } from './LlmConfigPanel';
 import { StoragePanel } from './StoragePanel';
-import { McpHelpPanel } from './McpHelpPanel';
-import { ShortcutsPanel } from './ShortcutsPanel';
-import { NightModePanel } from './NightModePanel';
 import { ClaudeProfilePanel } from './ClaudeProfilePanel';
 import { MaimemoConfigPanel } from './MaimemoConfigPanel';
 
-type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'mcp' | 'shortcuts' | 'night' | 'maimemo';
+type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'maimemo';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -42,10 +39,7 @@ const TABS: TabDef[] = [
   { key: 'llm', label: '模型配置', icon: SlidersHorizontal },
   { key: 'claude-profile', label: 'Claude 配置', icon: Layers },
   { key: 'storage', label: '存储管理', icon: Database },
-  { key: 'mcp', label: 'MCP 挂载', icon: Plug },
   { key: 'maimemo', label: '墨墨同步', icon: BookOpen },
-  { key: 'shortcuts', label: '快捷键', icon: Keyboard },
-  { key: 'night', label: '夜间开发', icon: Moon },
 ];
 
 export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
@@ -62,7 +56,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
           <DialogDescription>
-            配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储、MCP 挂载、快捷键、夜间开发模式。
+            配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储、墨墨同步。MCP 工具说明见工作记录页「AI 使用指南」。
           </DialogDescription>
         </DialogHeader>
 
@@ -102,14 +96,8 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
                 <ClaudeProfilePanel />
               ) : tab === 'storage' ? (
                 <StoragePanel />
-              ) : tab === 'mcp' ? (
-                <McpHelpPanel />
-              ) : tab === 'maimemo' ? (
-                <MaimemoConfigPanel />
-              ) : tab === 'night' ? (
-                <NightModePanel />
               ) : (
-                <ShortcutsPanel />
+                <MaimemoConfigPanel />
               )}
             </motion.div>
           </AnimatePresence>

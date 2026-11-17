@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { fetchDoc, getRawUrl, deleteDoc, fetchManifest, saveDoc } from '@/api/knowledge';
-import { MessageContent } from '@/components/chat/MessageContent';
+import { MessageContent } from '@/components/common/MessageContent';
 import { MdEditor } from './MdEditor';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';

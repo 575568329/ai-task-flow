@@ -1,6 +1,20 @@
 // shared/src/types/webclip.ts
 // 网页剪藏的前后端共享契约(扩展 → 后端 WebClipService → 扩展)。
-import type { TaskStep } from './task.js';
+
+/** 步骤内容块(原 types/task.ts,webclip 任务草稿使用;任务链路砍除后由本文件承接) */
+export type StepBlock =
+  | { type: 'text'; content: string }
+  | { type: 'image'; url: string };
+
+/** 任务步骤:有序图文块(顺序即渲染顺序);description/imageUrl 为旧格式兼容字段 */
+export interface TaskStep {
+  blocks?: StepBlock[];
+  completed?: boolean;
+  /** @deprecated 旧格式字段，仅用于兼容历史数据 */
+  description?: string;
+  /** @deprecated 旧格式字段，仅用于兼容历史数据 */
+  imageUrl?: string;
+}
 
 /** 抓取到的图片(base64 形式,WebClipService 落盘后转为 url) */
 export interface ClipImage {

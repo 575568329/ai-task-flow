@@ -4,12 +4,8 @@
 // 不用 shadcn sidebar(那是 dashboard 布局,过重);本应用只需纵向导航条。
 import { useState } from 'react';
 import {
-  LayoutDashboard,
-  MessageSquare,
-  FileText,
   BookOpen,
   Languages,
-  Gauge,
   Network,
   Sun,
   Moon,
@@ -23,7 +19,8 @@ import { Separator } from '@/components/ui/separator';
 import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/lib/utils';
 
-export type ViewKey = 'board' | 'chat' | 'docs' | 'knowledge' | 'vocab' | 'mindmap' | 'usage';
+// worklog 转型 Step5:看板/聊天/任务文档/用量已砍;Step6 将加 'worklog'(工作记录)
+export type ViewKey = 'knowledge' | 'vocab' | 'mindmap';
 
 interface NavItem {
   key: ViewKey;
@@ -32,13 +29,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'board', label: '看板', icon: LayoutDashboard },
-  { key: 'chat', label: '资料调研', icon: MessageSquare },
-  { key: 'docs', label: '任务文档', icon: FileText },
   { key: 'knowledge', label: '知识库', icon: BookOpen },
   { key: 'vocab', label: '生词本', icon: Languages },
   { key: 'mindmap', label: '思维导图', icon: Network },
-  { key: 'usage', label: '用量', icon: Gauge },
 ];
 
 const COLLAPSE_KEY = 'ai-task-flow-sidebar-collapsed';

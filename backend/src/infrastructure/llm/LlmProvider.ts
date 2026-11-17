@@ -1,5 +1,11 @@
 // backend/src/infrastructure/llm/LlmProvider.ts
-import type { ClassificationResult } from '@ai-task-flow/shared';
+/** LLM 分类结果(原 shared types/research.ts;聊天分类链路砍除后此处为唯一消费者,收口为局部类型) */
+export interface ClassificationResult {
+  skipSearch: boolean;
+  academicSearch: boolean;
+  standaloneQuery: string;
+  searchQueries: string[];  // 最多 3 条
+}
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';

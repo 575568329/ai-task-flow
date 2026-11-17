@@ -5,8 +5,12 @@ import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import crypto from 'crypto';
-import type { UploadImageResponse } from '@ai-task-flow/shared';
 import { uploadsDirPath } from '../../../config/dataDir.js';
+
+/** POST /api/upload/image 响应(原 shared types/task.ts,收口为局部类型) */
+interface UploadImageResponse {
+  url: string;  // 图片访问路径,如 /api/uploads/abc.png
+}
 
 export async function registerUploadRoutes(fastify: FastifyInstance, customUploadsDir?: string) {
   // 确保上传目录存在(默认数据目录/uploads,与 server.ts 中静态托管路径一致)
