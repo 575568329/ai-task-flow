@@ -16,7 +16,9 @@ import { MaimemoClient } from './infrastructure/maimemo/MaimemoClient.js';
 import { MaimemoService } from './application/maimemo/MaimemoService.js';
 import { JsonMindmapRepository } from './infrastructure/persistence/JsonMindmapRepository.js';
 import { MindmapService } from './application/mindmap/MindmapService.js';
-import { knowledgeDirPath } from './config/dataDir.js';
+import { JsonWorklogRepository } from './infrastructure/persistence/JsonWorklogRepository.js';
+import { WorklogService } from './application/worklog/WorklogService.js';
+import { knowledgeDirPath, worklogFilePath, worklogBackupsDirPath } from './config/dataDir.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 47821 */
@@ -74,6 +76,11 @@ export async function startApp(options: StartAppOptions = {}) {
   const mindmapRepository = new JsonMindmapRepository();
   const mindmapService = new MindmapService(mindmapRepository);
 
+  // 工作记录服务(项目→版本→功能点;写协议=进程内 mutex + 跨进程文件锁,见 JsonWorklogRepository)
+  const worklogService = new WorklogService(
+    new JsonWorklogRepository(worklogFilePath(options.dataDir), worklogBackupsDirPath(options.dataDir)),
+  );
+
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);
   // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口。
   // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
@@ -99,7 +106,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
+  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,

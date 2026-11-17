@@ -12,6 +12,8 @@ import { MaimemoClient } from '../../../infrastructure/maimemo/MaimemoClient.js'
 import { MaimemoService } from '../../../application/maimemo/MaimemoService.js';
 import { JsonMindmapRepository } from '../../../infrastructure/persistence/JsonMindmapRepository.js';
 import { MindmapService } from '../../../application/mindmap/MindmapService.js';
+import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
+import { WorklogService } from '../../../application/worklog/WorklogService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -51,6 +53,14 @@ describe('HTTP Server', () => {
     const mindmapRepository = new JsonMindmapRepository(testMindmapPath);
     const mindmapService = new MindmapService(mindmapRepository);
 
+    // 工作记录测试依赖（临时文件隔离）
+    const worklogService = new WorklogService(
+      new JsonWorklogRepository(
+        path.join(os.tmpdir(), `test-worklog-${id}.json`),
+        path.join(os.tmpdir(), `test-worklog-backups-${id}`),
+      ),
+    );
+
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       llmConfigService,
@@ -59,6 +69,7 @@ describe('HTTP Server', () => {
       vocabService,
       maimemoService,
       mindmapService,
+      worklogService,
     );
   });
 

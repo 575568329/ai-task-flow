@@ -62,6 +62,11 @@ function findProject(data: WorklogData, name: string): WorklogProject {
 export class WorklogService {
   constructor(private readonly repo: WorklogRepository) {}
 
+  /** 全树(工作记录页一次拉取;读最新,不缓存) */
+  async getTree(): Promise<WorklogData> {
+    return this.repo.load();
+  }
+
   /** 记录一条工作内容;项目/版本不存在自动创建(建层) */
   async record(input: WorklogRecordRequest): Promise<WorklogRecordResponse> {
     const project = validateName(input.project, '项目名');

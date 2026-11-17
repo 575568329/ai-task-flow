@@ -19,12 +19,14 @@ import type { KnowledgeService } from '../../application/knowledge/KnowledgeServ
 import type { VocabService } from '../../application/vocab/VocabService.js';
 import type { MaimemoService } from '../../application/maimemo/MaimemoService.js';
 import type { MindmapService } from '../../application/mindmap/MindmapService.js';
+import type { WorklogService } from '../../application/worklog/WorklogService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
 import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
 import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
 import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
+import { registerWorklogRoutes } from './routes/worklogRoutes.js';
 import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
 import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 
@@ -59,6 +61,7 @@ export async function createHttpServer(
   vocabService: VocabService,
   maimemoService: MaimemoService,
   mindmapService: MindmapService,
+  worklogService: WorklogService,
 ) {
   // 默认 warn 级别(生产/CLI 用户友好);设 NODE_ENV=development 或 LOG_LEVEL=info 看详细
   // test 环境完全静默,避免 vitest 输出被日志淹没
@@ -147,6 +150,7 @@ export async function createHttpServer(
   await registerVocabRoutes(fastify, vocabService);
   await registerMaimemoRoutes(fastify, maimemoService);
   await registerMindmapRoutes(fastify, mindmapService);
+  await registerWorklogRoutes(fastify, worklogService);
   await registerSystemRoutes(fastify);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
 
@@ -230,12 +234,13 @@ export async function startHttpServer(
   vocabService: VocabService,
   maimemoService: MaimemoService,
   mindmapService: MindmapService,
+  worklogService: WorklogService,
 ) {
   // currentConfig 在重试中会被替换为顺延后的端口;config 保留原始值用于日志。
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService);
+    const server = await createHttpServer(currentConfig, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);
