@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `089dde6`(fix(conclusion): 终审三项——工具描述互指/搜索写后失效/stdio 冒烟) |
-| 构建时间 | 2026-11-18 17:15 |
+| dist 构建来源 commit | `af7ddc2`(feat(conclusion): 卡片展示对话名称与ID——短ID可复制) |
+| 构建时间 | 2026-11-18 18:04 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
