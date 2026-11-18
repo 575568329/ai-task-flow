@@ -1,676 +1,114 @@
 # CLAUDE.md
 
----
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 一、通用原则 (Universal Principles)
+## 项目定位与现状
 
-### 1.1 设计哲学
+个人 AI 工作记录中枢 + 个人工具集。核心闭环：终端里的 AI 改完代码 → 通过 MCP `record_work` 记录为「项目 → 版本 → 功能点」（含 git diff 与文件行号）→ 在 Web 工作记录页按项目/版本/关键字回溯，支持人工增删改。
 
-- **极简导向**：少即是美，如无必要勿增实体 (KISS & YAGNI)。
-- **性能平衡**：不追求极致优化，但拒绝显而易见的性能陷阱（如循环查库、N+1 查询）。
-- **防御式编程**：优先"卫语句 (Guard Clauses)"尽早返回，拒绝深层嵌套（最多 3 层）。
-- **关注点分离**：每个模块/函数只做一件事，高内聚低耦合。
-- **配置与依赖方向**：能代码运行时自探测的，就别让用户/终端/外部环境去配置。别把「能不能正常工作」寄托在你管不了的外部环境（环境变量注入、终端行为、用户手动配 env）上——外部依赖越多，静默失效的链路越长、越难排查。自探测自洽（self-contained）、零配置、失败可优雅降级。
+**2026-11 转型**：任务编排看板、AI 聊天、任务文档、用量统计已整体砍除（代码在 git 历史，旧数据保留在 `~/.ai-task-flow/`）。不要再按「看板 / 派发 / worktree / Task 聚合根 / 四态机」理解本项目；`.claude/2026-06-05-*` 与 `docs/plans/` 里的旧任务文档只是历史归档。当前形态以 `README.md` 为准。
 
-### 1.2 通用编码规范
+## 常用命令
 
-- **命名**：变量/函数用业务语义命名，禁止无意义缩写（循环索引 `i/j/k` 除外）。
-- **异常处理**：禁止吞掉异常，禁止空 catch/except 块；异常信息必须包含上下文。
-- **魔法值**：禁止裸数字/字符串散落在代码中，提取为常量或枚举。
-- **注释**：解释 Why 而非 What；复杂业务逻辑必须写注释，显而易见的代码不写。
-
-### 1.3 通用模式应用
-
-- **策略模式**：`if-else > 3` 或复杂状态判断 → 重构为策略映射 (Map/Dict/Object)。
-- **责任链/中间件**：多级校验、数据清洗场景优先使用。
-- **Builder 模式**：参数 > 4 个的对象构建推荐使用。
-
-### 1.4 任务执行流程
-
-- **前置规划**：先规划（业务拆解 → 技术选型 → 流程梳理 → 方案输出）再编码。
-- **后置总结**：任务完成后输出总结（实现思路、决策依据、优化点），除非用户明确不需要。
-- **设计优先级**：需求优先聚焦接口设计（定义、入参出参、交互逻辑），数据库设计后置。
-- **错误处理**：如果解决一个相同的问题,第一次没有解决掉从第二次重复解决开始就要上网查相关的信息,不要一直试错浪费时间和token.
-
-### 1.5 职业视角与决策维度
-
-- **架构师**：技术选型合理性、扩展性、长期演进。
-- **资深开发**：代码可读性、执行效率、落地成本、最佳实践。
-- **产品经理**：业务价值、时间成本、可行性。
-- **底线**：成本可控、时间可预期、交付质量有保障。
-
-### 1.6 文档管理
-
-- 持久化文档放在项目 `docs/` 目录下（不存在则创建）。
-- 命名规则：`YYYYMMDDHHMMSS_文档标题`。
-- 不要每次都写文档，除非用户明确提出或任务复杂度确实需要。
-- 注意日志,前后端都需要日志，保存到文件中,方便排查.
-
----
-
-## 二、Java 领域 (Java Domain)
-
-### 2.1 架构与分层
-
-- 严格遵循职责分层（Controller → Service → Repository/Mapper），禁止跨层调用。
-- 领域逻辑内聚在 Service 层，Controller 只做参数校验和结果包装。
-- 追求自闭环：一个领域模块尽量不依赖其他领域的内部实现。
-
-### 2.2 编码规范
-
-- **类引用**：使用 import 导入，禁止代码中出现全限定类名。
-- **数据对象策略**：
-  - RPC/SDK 接口 (Dubbo/Feign)：使用普通 POJO + Lombok `@Data`，确保序列化兼容。
-  - 内部逻辑/HTTP 层：推荐 Record（Java 16+），利用不可变性提升安全性。
-- **数据库操作**：所有读写优先批量处理，禁止单条循环操作。
-- **技术栈**：优先选择与当前项目 JDK 和 Spring Boot 版本兼容的依赖。
-
-### 2.3 数据库表设计
-
-- 禁用外键约束（分布式架构考量）。
-- 必需审计字段：`create_by`, `insert_time`, `update_time`, `del_status`。
-- 索引设计跟随查询场景，禁止盲目加索引。
-
-### 2.4 常用约定
-
-- 方法参数 > 3 个时封装为请求对象。
-- Service 方法返回业务对象而非 Entity，做好 DTO 转换。
-- 日志打印包含关键业务参数，敏感字段脱敏。
-
----
-
-## 三、Python 领域 (Python Domain)
-
-### 3.1 代码风格
-
-- 遵循 PEP 8，行宽 120 字符。
-- 所有函数/方法必须添加类型注解（Type Hints），包括返回值。
-- 优先使用 `dataclass` 或 `Pydantic BaseModel` 定义数据结构，少用裸 dict 传递业务数据。
-
-### 3.2 项目结构
-
-- 按功能/领域组织包结构，避免单文件过大（建议单文件 < 500 行）。
-- 配置管理使用环境变量 + `.env` 文件，禁止硬编码密钥和连接串。
-- 依赖管理使用 `pyproject.toml`（优先）或 `requirements.txt`，锁定版本号。
-
-### 3.3 常用约定
-
-- 异步场景优先使用 `async/await`，避免混用同步阻塞调用。
-- 列表/字典推导式适度使用，超过两层嵌套时改为显式循环。
-- 使用 `pathlib.Path` 处理路径，不用字符串拼接。
-- 上下文管理器 (`with`) 管理资源（文件、连接、锁）。
-- f-string 格式化字符串（Python 3.6+）。
-
-### 3.4 测试
-
-- 测试框架统一 `pytest`。
-- 关键业务逻辑需有单元测试覆盖，工具函数优先写测试。
-
----
-
-## 四、前端领域 (Frontend Domain)
-
-### 4.1 通用规范
-
-- **TypeScript 优先**：所有新代码使用 TS，严格模式 (`strict: true`)，禁止 `any`（实在不得已用 `unknown`）。
-- **组件设计**：单一职责，UI 组件与业务逻辑分离（容器组件 vs 展示组件）。
-- **状态管理**：能用局部状态解决的不上全局状态；全局状态按领域拆分 store。
-- **组件封装**: 能够封装成组件的都封装,最好所有组件都可以随时抽出来单独放入组件库
-
-### 4.2 React 约定
-
-本项目前端已于 2026-06-05 从 Vue 3 重构为 React（见 `docs/20260606003000_前端React重构总结.md`）。
-
-- **框架**：React 19 + TypeScript + Vite
-- **状态管理**：Zustand，按领域拆分 store（`taskStore`、`chatStore`、`uiStore` 等）
-- **UI 组件**：shadcn/ui（Radix UI 无样式原语 + Tailwind CSS v4 + `tw-animate-css`）
-- **样式**：Tailwind CSS v4 + CSS 变量双主题 token（亮/暗）+ `cn()` 工具函数
-- **图标**：lucide-react
-- **拖拽**：@dnd-kit/core
-- **HTTP**：原生 fetch 封装（`api/http.ts`），不使用 axios
-- **路由**：无 router —— 单页应用通过 `hidden` 属性切换视图，保持滚动/状态
-
-**编码规范**：
-- 函数组件 + Hooks，不使用 class 组件。
-- 自定义 Hook 抽离可复用逻辑，命名 `useXxx`。
-- `useEffect` 依赖数组必须完整声明，禁止空依赖数组执行有依赖的副作用。
-- 列表渲染必须提供稳定唯一 `key`，禁止使用数组索引。
-- 组件 Props 定义 interface，导出供外部使用。
-- 大型组件（>300 行）拆分为子组件或提取自定义 Hook。
-
-### 4.3 Vue 约定（已废弃）
-
-> ⚠️ 本项目已于 2026-06-05 从 Vue 3 迁移到 React。此节仅保留作为历史参考，不再适用于当前代码库。
-
-### 4.4 样式与 CSS
-
-- 组件级样式使用 CSS Modules / Scoped CSS / CSS-in-JS，避免全局污染。
-- 设计 Token（颜色、间距、字号）提取为 CSS 变量或主题常量，禁止硬编码。
-- 响应式设计移动端优先 (mobile-first)，使用相对单位 (rem/em/%)。
-
-### 4.5 工程化
-
-- ESLint + Prettier 统一代码风格，提交前自动格式化。
-- 路由懒加载，大型依赖按需导入 (tree-shaking)。
-- 图片资源压缩，合理使用 WebP 格式和懒加载。
-- API 请求层统一封装（拦截器处理 token、错误码、loading 状态）。
-
-### 4.6 交互设计原则
-
-- **操作路径最短化**：能一步完成的不要两步，避免让用户在多个界面/弹窗之间跳转。
-- **直接触发原生能力**：文件/文件夹选择、日期选择等，优先调用系统原生控件（`<input type="file">`、`<input type="date">`），不要自己实现模拟版本。
-- **减少中间态**：避免"打开弹窗 → 在弹窗里再点按钮 → 才触发真正操作"的多层嵌套，直接触发目标动作。
-- **即时反馈**：操作后立即显示结果（成功/失败），不让用户猜测是否生效。
-
-**反例**：点"浏览" → 打开自定义弹窗 → 弹窗里再点"打开系统选择器" → 选择文件夹（3步）  
-**正例**：点"浏览" → 直接打开系统选择器 → 选择文件夹（2步）
-
----
-
-## 五、测试驱动开发 (TDD Strategy)
-
-### 5.1 TDD 核心流程
-
-- 严格遵循 Red → Green → Refactor 循环：先写失败测试 → 最小实现通过 → 重构优化。
-- 每个功能点先定义"什么算完成"（验收条件），再转化为测试用例。
-- 测试粒度：单元测试覆盖核心逻辑，集成测试覆盖模块协作，E2E 测试覆盖关键链路。
-
-### 5.2 curl 测试驱动（API 层 TDD）
-
-适用于 HTTP 接口的快速验证，在接口开发过程中同步编写。
+统一使用 **npm**（禁 pnpm / cnpm / yarn）。仓库根为 monorepo，workspaces = `shared` / `backend` / `frontend` / `cli` / `extension`。
 
 ```bash
-# 放置位置：项目根目录 tests/curl/ 或 tests/api/
-# 命名规则：test_<模块>_<场景>.sh
-
-# --- 示例：tests/curl/test_user_create.sh ---
-#!/bin/bash
-set -euo pipefail
-
-BASE_URL="${BASE_URL:-http://localhost:8080}"
-
-echo "=== 测试：创建用户 - 正常场景 ==="
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "test", "email": "test@example.com"}')
-
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | sed '$d')
-
-if [ "$HTTP_CODE" -ne 200 ]; then
-  echo "FAIL: 期望 200，实际 $HTTP_CODE"
-  echo "Response: $BODY"
-  exit 1
-fi
-
-echo "PASS"
-
-echo "=== 测试：创建用户 - 参数缺失 ==="
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{"name": ""}')
-
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-if [ "$HTTP_CODE" -ne 400 ]; then
-  echo "FAIL: 期望 400，实际 $HTTP_CODE"
-  exit 1
-fi
-
-echo "PASS"
-echo "=== 全部通过 ==="
+npm install
+npm run dev          # concurrently: shared build:watch → backend → frontend
+npm run dev:windows  # PowerShell 版(scripts/dev.ps1)
+npm run build        # shared → backend → frontend(必有产物 backend/public)
+npm start            # CLI 单端口托管前端(cli/bin/ai-task-flow.js，默认 47821，自动开浏览器；需先 build)
 ```
 
-**约定：**
-- 每个 curl 测试脚本必须包含正常场景和异常场景（至少各一个）。
-- 使用 `set -euo pipefail` 确保失败立即退出。
-- 支持环境变量覆盖 `BASE_URL`，方便多环境执行。
-- 复杂断言（JSON 字段校验）使用 `jq` 提取判断。
+- 前端 dev 固定 **5678**，后端从 **47821** 起（被占自动顺延）；实际端口写入 `.logs/backend-port.txt`，vite 每次请求动态读取。
+- dev 有严格顺序：shared 先构建 → backend → frontend。**不要单独起 frontend**（shared 未构建会找不到 `@ai-task-flow/shared`）。
 
-### 5.3 原生单元测试 TDD
-
-各语言测试框架与约定：
-
-| 语言 | 框架 | 测试目录 | 命名规则 |
-|------|------|----------|----------|
-| Java | JUnit 5 + Mockito | `src/test/java/` | `XxxTest.java` / `XxxServiceTest.java` |
-| Python | pytest | `tests/` | `test_xxx.py` |
-| JS/TS | Vitest / Jest | `__tests__/` 或 `*.test.ts` | `xxx.test.ts` / `xxx.spec.ts` |
-
-**编写原则：**
-- 测试方法命名：`should_<预期行为>_when_<前置条件>`（或对应语言的惯用风格）。
-- 每个测试只验证一个行为，禁止一个 test case 塞多个断言逻辑。
-- Mock 外部依赖（数据库、HTTP、MQ），不 Mock 被测对象自身方法。
-- 测试数据就近构造，禁止依赖共享可变状态。
-
-### 5.4 Shell 脚本测试与自动化
+测试（backend/frontend/extension 均为 vitest，测试就近放 `__tests__/`）：
 
 ```bash
-# --- 示例：tests/run_all.sh（测试编排脚本）---
-#!/bin/bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PASSED=0
-FAILED=0
-
-echo "=============================="
-echo " Running All Tests"
-echo "=============================="
-
-for test_file in "$SCRIPT_DIR"/curl/test_*.sh; do
-  echo ""
-  echo "▶ Running: $(basename "$test_file")"
-  if bash "$test_file"; then
-    ((PASSED++))
-  else
-    ((FAILED++))
-    echo "✗ FAILED: $(basename "$test_file")"
-  fi
-done
-
-echo ""
-echo "=============================="
-echo " Results: $PASSED passed, $FAILED failed"
-echo "=============================="
-
-[ "$FAILED" -eq 0 ] || exit 1
+cd backend && npx vitest run                              # 全量
+cd backend && npx vitest run src/application/worklog       # 单目录/单文件
+cd frontend && npm test                                   # vitest run
+cd frontend && npx vitest run src/components/worklog/__tests__/worklogComponents.test.tsx
+cd extension && npm test
+BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh     # curl E2E，需后端已启动
 ```
 
-**Shell 脚本约定：**
-- 所有脚本头部加 `set -euo pipefail`。
-- 提供 `run_all.sh` 作为统一入口，支持一键跑全部测试。
-- 脚本输出清晰的 PASS/FAIL 标记和汇总统计。
-- CI 环境可直接调用 `bash tests/run_all.sh` 集成。
-
-### 5.5 TDD 工作节奏
-
-1. 拿到需求 → 先写接口契约（入参、出参、状态码）
-2. 根据契约写 curl 测试脚本（API 层红灯）
-3. 写核心逻辑的单元测试（Service 层红灯）
-4. 实现代码让测试变绿
-5. 重构，保持测试全绿
-6. 提交前执行 `run_all.sh` 确认无回归
-
----
-
-## 六、大型复杂任务分解 (Complex Task Decomposition)
-
-### 6.1 分解原则
-
-- **自顶向下**：先看全局再拆局部，避免一头扎进细节。
-- **交付粒度**：每个子任务必须有可验证的交付物（能跑的代码、能调的接口、能看的页面）。
-- **依赖最小化**：子任务之间尽量解耦，可并行推进；有依赖的明确标注先后顺序。
-- **单任务时间盒**：单个子任务控制在 30 分钟~2 小时可完成的粒度，超过则继续拆。
-
-### 6.2 分解流程（五步法）
-
-```
-Step 1: 需求澄清
-  └─ 明确业务目标、边界条件、验收标准
-  └─ 产出：需求确认清单（含明确的 Done 定义）
-
-Step 2: 架构草案
-  └─ 技术选型、模块划分、核心流程图
-  └─ 产出：模块依赖关系图 + 接口契约草案
-
-Step 3: 任务拆解
-  └─ 按模块/层级拆为可独立交付的子任务
-  └─ 产出：任务清单（含优先级 P0/P1/P2、依赖关系、预估耗时）
-
-Step 4: 逐个击破
-  └─ 按优先级 + 依赖顺序逐个实现
-  └─ 每个子任务走 TDD 流程（5.5 节）
-  └─ 每完成一个子任务做一次阶段验证
-
-Step 5: 集成收尾
-  └─ 模块联调、端到端测试、边界场景补充
-  └─ 产出：完成总结（决策记录、遗留问题、优化建议）
-```
-
-### 6.3 任务清单模板
-
-在分解任务时使用如下格式输出：
-
-```markdown
-## 任务：<总体目标>
-
-### 前置准备
-- [ ] P0 | 需求澄清 & 接口契约定义 | 预估 30min
-
-### 核心实现
-- [ ] P0 | <子任务1：描述> | 依赖：无 | 预估 1h
-- [ ] P0 | <子任务2：描述> | 依赖：子任务1 | 预估 1.5h
-- [ ] P1 | <子任务3：描述> | 依赖：无 | 预估 45min
-
-### 测试与联调
-- [ ] P0 | 单元测试补充 | 依赖：核心实现完成 | 预估 1h
-- [ ] P0 | curl 集成测试 | 依赖：核心实现完成 | 预估 30min
-- [ ] P1 | 端到端验证 | 依赖：全部完成 | 预估 30min
-
-### 收尾
-- [ ] P2 | 代码审查 & 重构 | 预估 30min
-- [ ] P2 | 文档输出（如需要）| 预估 20min
-```
-
-### 6.4 复杂度判断标准
-
-什么时候需要启动正式的任务分解流程：
-
-- 涉及 **3 个以上模块/服务** 的协作变更
-- 预估开发时间 **> 4 小时**
-- 涉及 **数据库表结构变更** + 业务逻辑变更的组合
-- 需要 **多端联调**（前后端、多服务）
-- 需求描述模糊，需要先做方案对齐
-
-不满足以上条件的简单任务，直接走 TDD 流程即可，无需额外的分解仪式。
-
----
-
-## 七、协作备忘 (Collaboration Notes)
-
-- 我更倾向于先看方案再写代码，请在动手前先给出思路。
-- 遇到模糊需求时主动追问，不要自行假设关键业务逻辑。
-- 代码变更尽量最小化影响面，改动前评估关联影响。
-- Git 提交信息遵循 Conventional Commits 格式：`feat:` / `fix:` / `refactor:` / `docs:` / `chore:`。
-- **提交时机**：完成一个完整功能、修复完一个完整问题、或一个小版本里程碑达成后再提交，**禁止每改一行就 commit**。中间调试过程的小调整保留在工作树里,等都调通验证通过后一起提交,避免污染 git 历史和浪费资源。
-
-永远使用中文与我对话
-
----
-
-## 八、记忆系统集成 (Memory Integration)
-
-### 8.1 记忆库架构
-
-**本地优先的记忆系统**：记忆文件存储在 Claude Code 原生 memory 目录，可选用云同步工具（OneDrive/Dropbox）实现跨设备。
-
-- **主存储目录**：`C:\Users\fjyu9\.claude\projects\C--Users-fjyu9\memory\`
-- **索引文件**：`MEMORY.md`（自动加载前200行）
-
-### 8.2 记忆分类
-
-| 类型 | 目录/文件 | 说明 |
-|------|----------|------|
-| 偏好 | `preferences/` | 编码风格、工具选择、工作习惯 |
-| 决策 | `decisions/` | 技术选型、架构决策及原因 |
-| 流程 | `procedures/` | 操作流程（部署、调试、发布等可复用步骤） |
-| 项目 | `projects/` | 项目上下文、进度、关键信息 |
-| 调试 | `debugging.md` | 踩坑记录和解决方案 |
-
-### 8.3 使用记忆的规则
-
-**每次会话开始时：**
-- 自动加载 `MEMORY.md` 前200行
-- 根据当前任务加载相关分类文件
-
-**处理任务时参考优先级：**
-1. 偏好 → `memory/preferences/`
-2. 决策记录 → `memory/decisions/`
-3. 操作流程 → `memory/procedures/`
-4. 项目上下文 → `memory/projects/`
-5. 调试经验 → `memory/debugging.md`
-
-### 8.4 记忆触发条件
-
-**显式触发（用户明确要求）：**
-- 用户说"记住"/"记录"/"添加到记忆"/"更新记忆"
-
-**隐式触发（AI 自动检测，即时记录）：**
-- 用户在3次以上对话中提到同一习惯或偏好
-- 检测到明确的技术选型或架构决策
-- 发现用户重复的工作流程模式
-- 遇到用户反复遇到的错误并已解决
-
-**定时触发：**
-- 每周日晚上8点自动运行周总结
-
-### 8.5 记忆更新流程
-
-```
-1. 检测到可记忆信息
-   ├─ 检查是否已存在（避免重复）
-   └─ 判断归属分类
-
-2. 用户确认
-   ├─ 简要说明要记录的内容
-   └─ 请求用户确认
-
-3. 写入记忆
-   ├─ 写入对应分类文件
-   └─ 更新 MEMORY.md 索引（一行摘要）
-```
-
-### 8.6 记忆维护
-
-**定期清理（月度）：**
-- 检查记忆是否过时，与当前项目状态对比
-- 已完成项目的上下文归档或精简
-- 过时的调试经验移除（问题已不存在）
-
-**MEMORY.md 索引规范：**
-- 每条索引一行，格式：`- [标题](文件路径) — 一句话摘要`
-- 索引超过200行时，移除低优先级条目
-
-### 8.7 安全注意事项
-
-**禁止记录的内容：**
-- API 密钥、密码、临时凭证
-- 敏感个人信息
-- 未脱敏的生产数据
-
-**如检测到敏感信息：** 立即停止记录并通知用户
-
-
-
-
-# AI Task Flow - Claude 项目指导
-
-## 项目概述
-
-**产品定位**: 个人 AI 任务编排看板 + MCP Server
-
-**核心价值**: 在网页看板上录入任务，点派发后创建 git worktree，你在终端用 Claude Code 通过 MCP 协议拉取任务、回写状态。看板自动同步，保留原生 Claude Code 体验。
-
-**技术栈**: 
-- Backend: Node.js + TypeScript + Fastify + @modelcontextprotocol/sdk + simple-git
-- Frontend: React 19 + TypeScript + Vite + shadcn/ui (Radix UI + Tailwind CSS) + Zustand
-- Architecture: DDD 四层 + git worktree 隔离 + EventBus
-
-**MVP 周期**: 2-3 周
-
----
-
-## 核心文档
-
-1. **设计文档**: `.claude/2026-06-05-ai-task-flow-design.md`
-   - 完整的产品定位、架构设计、技术选型
-   - 必读，理解整体方向
-
-2. **实施计划**: `.claude/2026-06-05-ai-task-flow-implementation-plan.md`
-   - Task 1-5 的详细步骤（项目初始化 + DDD 骨架 + Worktree + Task 聚合根）
-   - 每个 Task 包含完整代码 + 测试 + commit 信息
-
-3. **任务概要**: `docs/plans/2026-06-05-ai-task-flow-phase3-6-summary.md`
-   - Task 6-35 的概要（MCP Server + HTTP API + 前端看板）
-
----
-
-## 实施指南
-
-### 执行方式
-
-**按 Task 顺序逐步实施**：
-
-```
-Task 1: 项目结构搭建 (monorepo + 依赖安装)
-  ↓
-Task 2: TypeScript 配置 + DDD 目录结构
-  ↓
-Task 3: TaskStatus/Priority/TaskId 值对象
-  ↓
-Task 4: WorktreeManager (git worktree 管理)
-  ↓
-Task 5: Task 聚合根 (dispatch/recordResult)
-  ↓
-Task 6-12: MCP Server + 6 个工具
-  ↓
-Task 13-15: EventBus + EventStore
-  ↓
-Task 16-21: HTTP API + SSE 推送
-  ↓
-Task 22-32: 前端看板实现
-  ↓
-Task 33-35: E2E 测试 + 文档
-```
-
-### 关键原则
-
-1. **TDD**: 先写测试，再写实现
-2. **DRY**: 不重复代码
-3. **YAGNI**: 只实现当前需要的功能
-4. **小步提交**: 每个 Task 完成后立即 commit
-5. **workflow**: 本项目不实用workflow功能
-
-### 目录结构
-
-```
-ai-task-flow/
-├── .claude/                    # 项目指导文档（本目录）
-├── backend/
-│   ├── src/
-│   │   ├── domain/workflow/           # 领域层：Task聚合根、值对象、事件
-│   │   ├── application/workflow/      # 应用层：用例
-│   │   ├── infrastructure/
-│   │   │   ├── git/                   # WorktreeManager
-│   │   │   ├── persistence/           # JsonTaskRepository
-│   │   │   └── pubsub/                # EventBus
-│   │   └── interfaces/
-│   │       ├── mcp/                   # MCP Server（给 Claude Code）
-│   │       └── http/                  # REST API（给前端）
-│   └── package.json
-├── frontend/
-│   └── src/modules/workflow/          # 看板组件
-├── shared/types/                      # 前后端共享类型
-└── docs/plans/                        # 设计与实施文档
-```
-
----
-
-## 快速开始
-
-### Step 1: 阅读设计文档
+MCP 产物与发布：
 
 ```bash
-# 在项目根目录
-cat .claude/2026-06-05-ai-task-flow-design.md
+cd backend && npm run build   # 重建 dist 后，ZCode/Claude 全局注册立即指向新产物(下一会话生效)
+bash scripts/publish.sh --dry-run   # 发布预演；正式发布按 shared → backend → cli 顺序
+cd desktop && npm start             # Electron 壳(独立依赖，不在 workspaces；读 backend/dist + backend/public，需先 build)
 ```
 
-理解核心概念：
-- 双层存储（~/.ai-task-flow/ + 项目/.ai-workspaces/）
-- MCP 工具（list_pending_tasks / get_task / record_result）
-- git worktree 隔离机制
+## 仓库布局与依赖方向
 
-### Step 2: 执行 Task 1-5
-
-打开实施计划：
-```bash
-cat .claude/2026-06-05-ai-task-flow-implementation-plan.md
+```
+shared/      前后端共享类型 + worklog MCP 工具目录(catalog)单一来源
+backend/     Fastify HTTP + MCP stdio；DDD 四层；tsc 产物 dist/
+frontend/    React SPA(Vite)
+cli/         npm 全局 CLI 入口(bin/ai-task-flow.js → @ai-task-flow/cli)
+extension/   MV3 网页剪藏扩展
+desktop/     Electron 壳(不在 workspaces，独立 node_modules)
+tools/ spike/  实验性代码，勿当产品代码修改
+tests/       curl E2E 脚本
+knowledge-base/  MCP save_to_knowledge 的写入产物
 ```
 
-从 **Task 1: 项目结构搭建** 开始，逐步执行每个 Step。
+依赖方向单向：`shared → backend / frontend / extension`。改 `shared/` 后必须 `npm run build:shared`（dev 下保持 watch），否则其他 workspace 的 `tsc` 找不到 `.d.ts`。
 
-每个 Task 的典型结构：
-- **Files**: 要创建/修改的文件清单
-- **Step 1-7**: 具体操作步骤（含完整代码）
-- **Commit**: git commit 信息模板
+## 后端架构
 
-### Step 3: 验证进度
+- 入口 `backend/src/http-server.ts` 的 `startApp()`：手工 `new` 仓储/服务并注入（**无 DI 容器**），随后启动 HTTP。新增模块的装配点就在这里。
+- 四层：`domain/`（实体、值对象、仓储接口）→ `application/`（用例服务）→ `infrastructure/`（JSON 持久化、LLM、外部客户端）→ `interfaces/`（http routes + mcp tools）。
+- 业务模块：worklog（核心）、knowledge、vocab、maimemo、mindmap、webclip、claude-profile、llm-config、system。
+- ESM + Node16 解析：TS 源码里的相对 import **必须带 `.js` 后缀**。
+- HTTP 路由注册集中在 `interfaces/http/server.ts`；新增模块顺序：repository → service → routes → `startApp` 装配 → 可选 MCP 工具。
+- 前后端日志落 `.logs/`；跨上下文链路必须保证日志能在后端可查。
 
-完成 Task 1-5 后，应该能够：
-- ✅ 跑通 `npm install`
-- ✅ 跑通 `npm test`（单元测试 pass）
-- ✅ WorktreeManager 能创建/销毁 worktree
-- ✅ Task 聚合根能正确状态转换
+## 持久化与数据目录
 
-### Step 4: 继续 Phase 3-6
+- 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
+- 主要数据文件：`worklog.json`、`vocab.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）。
+- worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
+- 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
 
-参考 `docs/plans/2026-06-05-ai-task-flow-phase3-6-summary.md`，继续实施 MCP Server 和前端看板。
+## MCP Server
 
----
+- stdio transport，入口 `backend/src/interfaces/mcp/server.ts`，产物 `backend/dist/interfaces/mcp/server.js`。
+- 10 个工具：`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `save_to_knowledge`。
+- 工具描述与 detail 写作模板的**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里。
+- 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
+- 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。
 
-## 关键决策参考
+## 前端
 
-### 为什么选择这个技术栈？
+- React 19 + Vite + TypeScript + Zustand + shadcn/ui（Radix）+ Tailwind v4；路径别名 `@/` → `frontend/src/`。
+- **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、knowledge、vocab、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
+- 每个视图一个领域 store（`stores/*Store.ts`）；HTTP 统一走 `api/http.ts` 封装。
+- 组件按领域放在 `components/views`、`components/worklog|knowledge|mindmap|ui`。
+- 已知坑：图片预览用 YARL（不要手写蒙版）；TTS 统一用 `lib/speech.ts` 封装。
 
-| 技术 | 理由 |
-|------|------|
-| MCP Server | 保留原生 Claude Code 体验，官方协议长期稳定 |
-| git worktree | 任务级隔离，失败可丢弃，主分支永远干净 |
-| DDD 四层 | 未来要扩展 5 个 Bounded Context，必须清晰边界 |
-| JSON 文件存储 | MVP 阶段够用，简单可靠 |
-| Zod + MCP schema | token 级格式保证，无 YAML+正则反模式 |
+## 红线（每一条都有踩坑代价）
 
-### 常见问题
+- 端口：前端固定 5678。`/api` 全 404 先查 5678 是否被其他服务占用，以及 `.logs/backend-port.txt` 是否残留旧端口。
+- 非内网环境安装前删 `package-lock.json`（含内网源，公网会 ENOTFOUND 并报误导性的 `Exit handler never called!`）。
+- 跨 workspace 共享的构建/类型依赖（vite、typescript 等）版本范围必须有交集，否则 npm 装两份 → `PluginOption` 类型冲突。排查：`npm ls vite --workspaces`。
+- `LlmConfigService` 返回值**含密钥**：禁止透传前端或写日志，展示用 `getMaskedConfig()`。
+- 勿提交运行时产物（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
+- WSL ↔ Windows 混合环境：后端常跑 Windows、MCP 常跑 WSL，两边 home 是不同物理目录，统一靠 `resolveDataDir()` 自探测；`appendWindowsPath=false` 时用绝对路径调 `cmd.exe` / `powershell.exe`；WSL 下不要跑 `vite build`（node_modules 是 Windows 侧的），只做 `tsc` 类型检查。
+- 启动子终端必须传 `buildCleanEnv()`（剥离 `ANTHROPIC_*` / `CLAUDE_*`），否则子进程继承后端启动时的 Claude 配置。
+- 详细原因与排障：`docs/20260723130001_项目避坑与约定.md`、`docs/20260723130000_依赖安装排坑记录.md`。
 
-**Q: 为什么不用 Agent SDK 嵌入 Claude？**
-A: v2 设计尝试过，但用户反馈"失去原生 Claude Code 体验"。v3 通过 MCP 协议让用户完全掌控 AI 交互。
+## 文档地图
 
-**Q: 为什么每个任务一个 worktree？**
-A: 所有严肃竞品（Vibe Kanban/agetor）都用。好处：多任务并行不冲突、失败可丢弃、diff 干净。
-
-**Q: MCP Server 和 HTTP Server 如何共享数据？**
-A: 共享同一个 `~/.ai-task-flow/tasks.json`，通过 EventBus 互通。MCP 写入 → 发事件 → HTTP 接口监听 → SSE 推前端。
-
----
-
-## 测试策略
-
-- **70% 单元测试**: domain 层（Task 聚合根、值对象）
-- **20% 集成测试**: infrastructure 层（WorktreeManager、Repository）
-- **10% E2E 测试**: 完整流程（录入 → 派发 → Claude 拉取 → 回写 → 审查）
-
----
-
-## 下一步
-
-1. **读完设计文档**（理解 WHY）
-2. **执行 Task 1**（项目初始化）
-3. **逐步推进到 Task 35**（MVP 完成）
-
-有问题随时查阅 `.claude/` 目录下的文档，或者问我。
-
-Good luck! 🚀
-
----
-
-## 九、npm 包发布 (NPM Publishing)
-
-- **本项目需要发布到 npm**，包名 `@ai-task-flow/cli`，作为全局可安装的 CLI 工具
-- **发布流程与注意事项**详见 [npm-publishing-guide.md](npm-publishing-guide.md)
-
----
-
-## 十、环境与避坑约定（红线）
-
-> 以下为必须遵守的硬性约定。完整原因 / 排查步骤 / 错误对照表见：
-> - 依赖安装：[docs/20260723130000_依赖安装排坑记录.md](../docs/20260723130000_依赖安装排坑记录.md)
-> - 运行时避坑：[docs/20260723130001_项目避坑与约定.md](../docs/20260723130001_项目避坑与约定.md)
-
-- **统一 npm**，禁用 pnpm / cnpm / yarn（pnpm 不支持 `workspaces`，子包依赖装不上）。
-- **非内网环境装前删 `package-lock.json`**（含科大讯飞内网源，公网 ENOTFOUND，报误导性的 `Exit handler never called!`）。
-- 前端固定 `5678`、backend 默认 `47821`（被占顺延）；dev 顺序 shared→backend→frontend，勿单独起 frontend。
-- MCP 的 `TaskRepository` 必须 `useFactory` 注册（否则启动 DI 崩溃）。
-- 任务**四态** `TODO` / `IN_PROGRESS` / `DONE` / `BLOCKED`；打开终端不改状态，`TODO` 可直接回写结果。
-- Claude 每完成一步调 MCP `complete_step`（`stepNumber` 1-based）回写：全步完成→自动转 `DONE`，否则→`IN_PROGRESS`。
-- `get_task` 返回的截图是本地路径（非 localhost 死链）：同时给 WSL（`/mnt/c/...`）和 Windows（`C:\...`）两种，按运行环境 `Read` 即可。
-- `LlmConfigService` 返回值含密钥，**禁止透传前端 / 日志**，用 `getMaskedConfig()`。
-- MCP 回写 `tasks.json` 后前端靠文件轮询刷新（非实时），等几秒再看板。
-- 运行时产物勿提交（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
-- MV3 扩展访问 localhost：PNA 只拦预检，POST 用 `text/plain` 绕过。
-- 终端 `start` 是 fire-and-forget，无法注入消息；`Failed to fetch` 先查后端日志。
-- **多 workspace 共享依赖（如 `vite`）版本范围须有交集**：否则 npm 装多份 → frontend build 报 `PluginOption` 类型冲突（指向两份 vite）；统一到一份。
-- **WSL ↔ Windows 混合环境**（后端跑 Windows、Claude Code/MCP 跑 WSL）：两边 `os.homedir()` 是不同物理目录，完整方案见 [WSL与Windows环境变量桥接通用方案](../knowledge-base/技术方案/工具流程/20260724095424_WSL与Windows环境变量桥接通用方案.md)：
-  - 不要散用 `os.homedir()` / `~` / `$HOME` 定位数据目录——跨进程两套 home 必对不上（MCP 拉到空任务就是它）。统一走 `resolveDataDir()` 单一入口，优先级 **显式 > env > WSL 自探测 Windows home > 默认 home**。
-  - **别用 WSLENV 桥接数据目录**：Windows Terminal 启动 wsl.exe 时用进程级 WSLENV（传 WT_SESSION 等）**覆盖**注册表 User 级，从 WT 启动的 WSL 永远拿不到桥接变量（`wsl --shutdown` 重启也没用）。**改用代码自探测**（resolveDataDir 内 `cmd.exe /c echo %USERPROFILE%` + `wslpath` 转路径，模块级缓存）。原则：**运行时自探测 > 外部环境注入**——自洽、clone 即用、不被宿主覆盖、失败优雅降级；环境注入依赖一长串外部前提，任一环失效就静默崩。
-  - **`appendWindowsPath=false` 下别裸调 `cmd` / `powershell` / `wsl.exe`**：它们不在 WSL PATH 里，用绝对路径 `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe`。
-  - **WSL 下跑 `vite build` 必失败**（node_modules 在 Windows 装的）：缺 `@rollup/rollup-linux-x64-gnu`。在 node_modules 安装侧（Windows）跑构建；WSL 里只做 `tsc` 类型检查。
+| 文档 | 内容 |
+|---|---|
+| `README.md` | 产品现状、快速启动、模块表（**权威**） |
+| `AGENTS.md` | 完整协作 / 编码 / TDD 规范（与全局 CLAUDE.md 同源） |
+| `docs/mcp-registration.md` | MCP 注册清单、当前版本、更新 SOP |
+| `docs/plans/2026-11-17-worklog-slim-design.md` | 当前形态的设计 v3 |
+| `docs/plans/2026-11-17-worklog-slim-implementation-plan.md` | 转型实施计划（已落地） |
+| `docs/YYYYMMDDHHMMSS_*.md` | 各阶段设计与踩坑归档；只记录当时决策，现状以 README 为准 |
+| `scripts/publish.sh` | npm 发布流程（本文件旧版引用的 `.claude/npm-publishing-guide.md` 已不存在） |
