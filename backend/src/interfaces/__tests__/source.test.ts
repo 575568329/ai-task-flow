@@ -30,6 +30,14 @@ describe('resolveMcpSource', () => {
     const source = resolveMcpSource(undefined);
     expect(source.tool).toBe('unknown');
   });
+
+  it('should treat a blank client name as absent and fall back to unknown', () => {
+    vi.stubEnv('AI_AGENT', '');
+    vi.stubEnv('CLAUDE_CODE_SESSION_ID', '');
+    const source = resolveMcpSource({ name: '   ' });
+    expect(source.tool).toBe('unknown');
+    expect(source.conversationId).toMatch(/^unknown:\d+:\d+$/);
+  });
 });
 
 describe('resolveManualSource', () => {
