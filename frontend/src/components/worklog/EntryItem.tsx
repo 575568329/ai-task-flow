@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/common/MessageContent';
 import { toast } from '@/components/ui/toaster';
+import { cn } from '@/lib/utils';
 import type { WorklogEntry } from '@ai-task-flow/shared';
 
 /** 下拉「挪到新版本」选项的哨兵值(不可直接提交,需在二级输入框填新名) */
@@ -87,7 +88,7 @@ export function EntryItem({
   const uniqueTags = useMemo(() => [...new Set(entry.tags ?? [])], [entry.tags]);
 
   return (
-    <article className="bg-card border rounded-lg p-4 space-y-3">
+    <article className="group bg-card border rounded-lg p-4 space-y-3">
       {editing ? (
         <div className="space-y-3" onKeyDown={onKeyDown}>
           <div className="space-y-1.5">
@@ -177,6 +178,14 @@ export function EntryItem({
               <span className="text-muted-foreground text-xs">(已编辑)</span>
             )}
             <span className="flex-1" />
+            <div
+              className={cn(
+                'flex shrink-0 items-center gap-1 transition-opacity',
+                confirmDelete
+                  ? 'opacity-100'                            // 确认删除进行中:常驻
+                  : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100', // hover/键盘聚焦才显示
+              )}
+            >
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={startEdit}>
               <Pencil className="size-3" /> 编辑
             </Button>
@@ -194,6 +203,7 @@ export function EntryItem({
                 <Trash2 className="size-3" /> 删除
               </Button>
             )}
+            </div>
           </header>
 
           {entry.files?.length ? (
