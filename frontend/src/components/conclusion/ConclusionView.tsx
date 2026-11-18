@@ -25,6 +25,8 @@ export function ConclusionView() {
   const [form, setForm] = useState<{ mode: 'create' | 'append'; initial?: Conclusion } | null>(null);
   const [metaForm, setMetaForm] = useState<Conclusion | null>(null);
   const seq = useRef(0);
+  /** 详情请求归属序号:只允许最新一次展开/收起的响应落盘(否则 A 的慢响应会盖掉 B 的详情) */
+  const detailSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     const current = ++seq.current;
@@ -71,6 +73,7 @@ export function ConclusionView() {
   );
 
   const toggle = async (summary: ConclusionSummary) => {
+    const current = ++detailSeq.current;
     if (expandedId === summary.id) {
       setExpandedId(null);
       setDetail(null);
@@ -80,9 +83,10 @@ export function ConclusionView() {
     setDetail(null);
     try {
       const full = await conclusionApi.get(summary.id);
-      setDetail(full);
+      // 归属守卫:期间又点了别的卡片(或收起),本次响应作废,避免 A 的详情落到 B 名下
+      if (current === detailSeq.current) setDetail(full);
     } catch (err) {
-      toast.error(`读取详情失败：${errMessage(err)}`);
+      if (current === detailSeq.current) toast.error(`读取详情失败：${errMessage(err)}`);
     }
   };
 
@@ -132,7 +136,8 @@ export function ConclusionView() {
       await conclusionApi.patch(metaForm.id, value);
       const full = await conclusionApi.get(metaForm.id);
       setMetaForm(null);
-      setDetail(full);
+      // 仅当它仍是当前展开卡时才回填详情(表单打开期间用户可能已展开别的卡)
+      if (metaForm.id === expandedId) setDetail(full);
       await refresh();
       toast.success('信息已更新');
     } catch (err) {
@@ -228,24 +233,29 @@ export function ConclusionView() {
             </div>
           )}
 
-          {visible.map((summary) => (
-            <ConclusionCardItem
-              key={summary.id}
-              summary={summary}
-              expanded={expandedId === summary.id}
-              detail={expandedId === summary.id ? detail ?? undefined : undefined}
-              onToggle={() => void toggle(summary)}
-              onEdit={() => {
-                if (detail && expandedId === summary.id) {
-                  setForm({ mode: 'append', initial: detail });
-                }
-              }}
-              onPatch={() => {
-                if (detail && expandedId === summary.id) setMetaForm(detail);
-              }}
-              onDelete={() => void remove(summary)}
-            />
-          ))}
+          {visible.map((summary) => {
+            // 纵深防御:详情必须同时"属于当前展开卡"且 id 对齐,陈旧对象绝不驱动编辑/改信息
+            const activeDetail =
+              expandedId === summary.id && detail?.id === summary.id ? detail : undefined;
+            return (
+              <ConclusionCardItem
+                key={summary.id}
+                summary={summary}
+                expanded={expandedId === summary.id}
+                detail={activeDetail}
+                onToggle={() => void toggle(summary)}
+                onEdit={() => {
+                  if (activeDetail) {
+                    setForm({ mode: 'append', initial: activeDetail });
+                  }
+                }}
+                onPatch={() => {
+                  if (activeDetail) setMetaForm(activeDetail);
+                }}
+                onDelete={() => void remove(summary)}
+              />
+            );
+          })}
         </div>
       </section>
     </div>
