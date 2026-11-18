@@ -334,7 +334,7 @@ interface ConclusionSummary {
 ### 8.1 请求/响应要点
 
 - 列表按最新版 `date` 倒序，同日按 `updatedAt` 倒序；`limit` 默认 50，最大 200。
-- 列表返回 `ConclusionSummary`，不做全量 revisions；`latestDecisionExcerpt` 截断 500 字。
+- 列表返回 `ConclusionSummary`，不做全量 revisions；`latestDecisionExcerpt` 截断 1500 字（中文下约 3–5 行，与 MCP 查询一致）。
 - 详情返回完整 `Conclusion`；前端展开卡片或演进时按需拉详情。
 - `tags` 过滤为“命中任一标签”。
 - `dateFrom/dateTo` 按**最新版** `date` 过滤；`date` 缺省为服务端本地当天。
@@ -343,7 +343,7 @@ interface ConclusionSummary {
 - 追加合并语义与 MCP 一致：省略字段沿用上一版，显式空值清空；前端编辑表单加载完整最新版后提交，行为可预测。
 - 追加可带 `expectedRev`；与当前最新版不一致 → 409，前端提示“已被其他操作更新，请刷新后重试”。
 - PATCH 不允许修改 `revisions`；同样执行第 4.2 节全部不变量校验；修改标题等元信息不产生新版本，但 PATCH 前备份。
-- DELETE 返回 `{ deleted: true, backupPath: string }`。
+- DELETE 返回 `{ deleted: true }`；备份路径不返回，页面只提示“已自动备份”。
 
 ### 8.2 校验与错误
 
@@ -363,6 +363,7 @@ interface ConclusionSummary {
 
 - `frontend/src/api/conclusion.ts`：`list/get/create/append/patch/remove`
 - 写操作成功后重新拉取列表或详情，不做乐观更新。
+- 状态用视图内局部 `useState`（与 `WorklogView` 一致），不新增全局 store（遵循项目“能局部不上全局”约定）。
 
 ## 9. 前端页面
 
@@ -422,7 +423,6 @@ frontend/src/components/conclusion/
   ConclusionForm.tsx          # 新建/追加表单
   ConclusionProjectList.tsx   # 项目/个人分组
   RevisionTimeline.tsx        # 演进时间线
-frontend/src/stores/conclusionStore.ts
 frontend/src/api/conclusion.ts
 ```
 
