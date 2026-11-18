@@ -17,7 +17,7 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `6db81e6`(feat(worklog): detail 写作规范落地——双模板+自查规则) |
+| dist 构建来源 commit | `1764e42`(feat(worklog): detail 写作规范落地——双模板+自查规则) |
 | 构建时间 | 2026-11-18 10:39 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
