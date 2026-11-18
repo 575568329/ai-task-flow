@@ -9,3 +9,5 @@ export * from './types/vocab.js';
 export * from './types/mindmap.js';
 export * from './types/claude-profile.js';
 export * from './utils/treeLayout.js';
+export * from './types/conclusion.js';
+export * from './conclusion/mcpToolCatalog.js';
