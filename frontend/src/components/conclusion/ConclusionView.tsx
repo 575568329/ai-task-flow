@@ -20,16 +20,22 @@ export function ConclusionView() {
   const [selection, setSelection] = useState<ConclusionSelection>({ type: 'all' });
   const [keyword, setKeyword] = useState('');
   const [searchResults, setSearchResults] = useState<ConclusionSummary[] | null>(null);
+  /** 写操作/刷新后自增:让带关键词的搜索结果重新拉取,避免列表已更新、搜索仍是旧快照 */
+  const [searchTick, setSearchTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Conclusion | null>(null);
   const [form, setForm] = useState<{ mode: 'create' | 'append'; initial?: Conclusion } | null>(null);
   const [metaForm, setMetaForm] = useState<Conclusion | null>(null);
   const seq = useRef(0);
+  /** 搜索请求归属序号:慢的旧关键词响应不得覆盖新关键词的结果 */
+  const searchSeq = useRef(0);
   /** 详情请求归属序号:只允许最新一次展开/收起的响应落盘(否则 A 的慢响应会盖掉 B 的详情) */
   const detailSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     const current = ++seq.current;
+    // 列表重拉成功与否都让在途搜索失效并重查:删除/追加后旧搜索结果会残留(已删卡点击 404)
+    setSearchTick((tick) => tick + 1);
     try {
       const res = await conclusionApi.list();
       if (current !== seq.current) return;
@@ -50,6 +56,8 @@ export function ConclusionView() {
   }, [enterTick]);
 
   useEffect(() => {
+    // 每次关键词变化或列表刷新都领取新序号;旧响应回来时序号已过期 → 丢弃
+    const current = ++searchSeq.current;
     const text = keyword.trim();
     if (!text) {
       setSearchResults(null);
@@ -57,11 +65,15 @@ export function ConclusionView() {
     }
     const timer = window.setTimeout(() => {
       void conclusionApi.list({ keyword: text })
-        .then((res) => setSearchResults(res.conclusions))
-        .catch(() => toast.error('搜索失败'));
+        .then((res) => {
+          if (current === searchSeq.current) setSearchResults(res.conclusions);
+        })
+        .catch(() => {
+          if (current === searchSeq.current) toast.error('搜索失败');
+        });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [keyword]);
+  }, [keyword, searchTick]);
 
   const visible = useMemo(
     () => searchResults ?? filterConclusions(cards, selection),

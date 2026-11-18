@@ -13,7 +13,8 @@ export const CONCLUSION_TOOL_CATALOG: ConclusionToolMeta[] = [
       '仅在用户明确要求记录结论时调用，禁止主动捕获。' +
       '追加时先调 query_conclusions({cardId}) 读取最新版；省略的字段沿用上一版，' +
       '显式传 "" 或 [] 表示清空。追加必须提供 changeNote，建议带 expectedRev。' +
-      '禁止记录密钥、令牌、个人敏感信息。',
+      '禁止记录密钥、令牌、个人敏感信息。' +
+      '本工具不记录 diff；代码变更/文件/行号请用 record_work。',
     whenToUse:
       '用户说“把刚才的结论记一下/存一张结论卡/更新某张结论卡”，' +
       '或一次讨论明确了决策、关键数据、待办时（由用户触发）。',
