@@ -8,15 +8,39 @@ fail() {
   exit 1
 }
 
+# 请求体一律先落临时文件再用 --data-binary @file 发送：
+# Git Bash 的 MSYS curl 会把命令行参数里的中文按系统 ANSI 码页编码，
+# Content-Length 与 UTF-8 字节数对不上，后端会直接回 400。
+TMP_DIR="$(mktemp -d)"
+CONFLICT_BODY="/tmp/conclusion-conflict.json"
+BAD_BODY="/tmp/conclusion-bad.json"
+ID=""
+
+cleanup() {
+  # 中途失败也要删掉本轮创建的卡，避免在数据目录里留下孤儿 e2e-conclusion
+  if [ -n "$ID" ]; then
+    curl -s -X DELETE "$BASE_URL/api/conclusions/$ID" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TMP_DIR"
+  rm -f "$CONFLICT_BODY" "$BAD_BODY"
+}
+trap cleanup EXIT
+
+# 先查依赖：缺 jq 时如果放任脚本继续，会在 health 解析处报「后端不可达」，误导排障
+command -v jq >/dev/null 2>&1 || fail "需要 jq"
+
 echo "=== 结论卡 E2E ==="
 
 STATUS=$(curl -s "$BASE_URL/health" | jq -r '.status // empty')
 [ "$STATUS" = "ok" ] || fail "后端不可达 ($BASE_URL/health)"
 
 echo "--- 1. 创建 ---"
+cat > "$TMP_DIR/create.json" <<'JSON'
+{"scope":"project","project":"e2e-conclusion","title":"E2E 结论","decision":"旧结论：前端过滤","data":"旧数据"}
+JSON
 CREATE=$(curl -s -X POST "$BASE_URL/api/conclusions" \
   -H "Content-Type: application/json" \
-  -d '{"scope":"project","project":"e2e-conclusion","title":"E2E 结论","decision":"旧结论：前端过滤","data":"旧数据"}')
+  --data-binary "@$TMP_DIR/create.json")
 ID=$(echo "$CREATE" | jq -r '.id // empty')
 [ -n "$ID" ] || fail "创建失败: $CREATE"
 echo "PASS: id=$ID"
@@ -27,9 +51,12 @@ DETAIL=$(curl -s "$BASE_URL/api/conclusions/$ID")
 echo "PASS"
 
 echo "--- 3. 部分字段追加（decision 沿用，data 更新） ---"
+cat > "$TMP_DIR/append.json" <<'JSON'
+{"expectedRev":1,"data":"新数据","changeNote":"补充数据"}
+JSON
 APPEND=$(curl -s -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
   -H "Content-Type: application/json" \
-  -d '{"expectedRev":1,"data":"新数据","changeNote":"补充数据"}')
+  --data-binary "@$TMP_DIR/append.json")
 [ "$(echo "$APPEND" | jq -r '.rev')" = "2" ] || fail "追加失败: $APPEND"
 DETAIL=$(curl -s "$BASE_URL/api/conclusions/$ID")
 [ "$(echo "$DETAIL" | jq -r '.revisions[1].decision')" = "旧结论：前端过滤" ] || fail "decision 未沿用"
@@ -40,28 +67,39 @@ echo "--- 4. 搜索命中历史版本 ---"
 # keyword=旧数据（只存在于 rev 1；rev 2 的 data 已是「新数据」，而 decision 按设计沿用，
 # 用「前端过滤」会连最新版一起命中，matchedRev 就不会出现）。
 # URL 必须是百分号编码：请求行里的裸 UTF-8 会被 Node 直接拒绝为 400。
-SEARCH=$(curl -s "$BASE_URL/api/conclusions?keyword=%E6%97%A7%E6%95%B0%E6%8D%AE")
+# 带 project 过滤：数据目录里若已有其他卡片（本脚本中途失败留下的孤儿等），
+# 不加限定会让 .conclusions[0] 不再是本轮的卡。
+SEARCH=$(curl -s "$BASE_URL/api/conclusions?keyword=%E6%97%A7%E6%95%B0%E6%8D%AE&project=e2e-conclusion")
 [ "$(echo "$SEARCH" | jq -r '.conclusions[0].matchedRev')" = "1" ] || fail "历史命中错误: $SEARCH"
 echo "PASS"
 
 echo "--- 5. expectedRev 冲突 ---"
-CODE=$(curl -s -o /tmp/conclusion-conflict.json -w "%{http_code}" -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
+cat > "$TMP_DIR/stale.json" <<'JSON'
+{"expectedRev":1,"data":"stale","changeNote":"stale"}
+JSON
+CODE=$(curl -s -o "$CONFLICT_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
   -H "Content-Type: application/json" \
-  -d '{"expectedRev":1,"data":"stale","changeNote":"stale"}')
-[ "$CODE" = "409" ] || fail "期望 409，实际 $CODE: $(cat /tmp/conclusion-conflict.json)"
+  --data-binary "@$TMP_DIR/stale.json")
+[ "$CODE" = "409" ] || fail "期望 409，实际 $CODE: $(cat "$CONFLICT_BODY")"
 echo "PASS"
 
 echo "--- 6. 缺 changeNote 拒绝 ---"
-CODE=$(curl -s -o /tmp/conclusion-bad.json -w "%{http_code}" -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
+cat > "$TMP_DIR/no-note.json" <<'JSON'
+{"data":"x"}
+JSON
+CODE=$(curl -s -o "$BAD_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
   -H "Content-Type: application/json" \
-  -d '{"data":"x"}')
-[ "$CODE" = "400" ] || fail "期望 400，实际 $CODE"
+  --data-binary "@$TMP_DIR/no-note.json")
+[ "$CODE" = "400" ] || fail "期望 400，实际 $CODE: $(cat "$BAD_BODY")"
 echo "PASS"
 
 echo "--- 7. 改元信息 ---"
+cat > "$TMP_DIR/patch.json" <<'JSON'
+{"title":"E2E 结论（改名）"}
+JSON
 PATCH=$(curl -s -X PATCH "$BASE_URL/api/conclusions/$ID" \
   -H "Content-Type: application/json" \
-  -d '{"title":"E2E 结论（改名）"}')
+  --data-binary "@$TMP_DIR/patch.json")
 [ "$(echo "$PATCH" | jq -r '.title')" = "E2E 结论（改名）" ] || fail "PATCH 失败: $PATCH"
 echo "PASS"
 
@@ -70,6 +108,7 @@ DEL=$(curl -s -X DELETE "$BASE_URL/api/conclusions/$ID")
 [ "$(echo "$DEL" | jq -r '.deleted')" = "true" ] || fail "删除失败: $DEL"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/conclusions/$ID")
 [ "$CODE" = "404" ] || fail "删除后应 404，实际 $CODE"
+ID=""
 echo "PASS"
 
 echo "=== 全部通过 ==="

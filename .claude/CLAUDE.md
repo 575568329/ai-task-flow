@@ -78,7 +78,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - stdio transport，入口 `backend/src/interfaces/mcp/server.ts`，产物 `backend/dist/interfaces/mcp/server.js`。
 - 12 个工具：`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
-- 工具描述与 detail 写作模板的**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里。
+- **worklog 工具**的描述与 detail 写作模板**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里；conclusion 两个工具的定义就近在 `backend/src/interfaces/mcp/tools/conclusion/`。
 - 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
 - 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。
 
@@ -86,8 +86,8 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - React 19 + Vite + TypeScript + Zustand + shadcn/ui（Radix）+ Tailwind v4；路径别名 `@/` → `frontend/src/`。
 - **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、conclusion、knowledge、vocab、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
-- 每个视图一个领域 store（`stores/*Store.ts`）；HTTP 统一走 `api/http.ts` 封装。
-- 组件按领域放在 `components/views`、`components/worklog|knowledge|mindmap|ui`。
+- 全局状态按领域拆 store（`stores/*Store.ts`）；只服务于单个视图的状态用局部 `useState`（如 conclusion 的详情/展开态，没有 conclusionStore）。HTTP 统一走 `api/http.ts` 封装。
+- 组件按领域放在 `components/views`、`components/worklog|conclusion|knowledge|mindmap|ui`。
 - 已知坑：图片预览用 YARL（不要手写蒙版）；TTS 统一用 `lib/speech.ts` 封装。
 
 ## 红线（每一条都有踩坑代价）
