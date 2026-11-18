@@ -22,6 +22,8 @@
 
 删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(9 个工具的示例话术)。
 
+长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。
+
 ## 快速启动
 
 ```bash
@@ -39,7 +41,7 @@ cd frontend && npm run dev  # 前端 :5678(vite,代理 /api → 后端)
 cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端配置无需改
 ```
 
-工具(10):`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `save_to_knowledge`
+工具(12):`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
 
 注册清单、当前版本与更新 SOP 见 **[docs/mcp-registration.md](docs/mcp-registration.md)**。
 
@@ -48,6 +50,7 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 | 模块 | 说明 |
 |---|---|
 | **工作记录**(核心) | 项目→版本→功能点;MCP 记录 + 页面人工增删改/搜索;diff 与文件行号关联 |
+| **结论卡** | 长对话结论按主题沉淀:结论/数据/待办/代码位置;逐版完整历史,默认看最新 |
 | 知识库 | markdown/文档库,目录树 + wiki 链接;MCP `save_to_knowledge` 可写 |
 | 网页剪藏 | 浏览器扩展剪藏 → LLM 拆解为任务草稿 → 入库 |
 | 生词本 / 墨墨同步 | 划词翻译生词,token 统计,墨墨背单词同步 |
@@ -64,8 +67,8 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 ## 测试
 
 ```bash
-cd backend && npx vitest run    # 213 用例(领域/锁协议/路由/MCP 工具)
-cd frontend && npm test         # 117 用例(组件/搜索过滤)
+cd backend && npx vitest run    # 255 用例(领域/锁协议/路由/MCP 工具)
+cd frontend && npm test         # 121 用例(组件/搜索过滤)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
 ```
 

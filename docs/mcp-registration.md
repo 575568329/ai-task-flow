@@ -10,15 +10,15 @@
 | 名称 | `ai-task-flow` |
 | 产物 | `D:/Study/ai-task-flow/backend/dist/interfaces/mcp/server.js`(由 `cd backend && npm run build` 生成) |
 | Transport | stdio(本地单用户;远程部署时切换 Streamable HTTP,见 docs/plans/2026-11-17-worklog-slim-design.md §10) |
-| 工具(10) | record_work / query_work / list_projects / update_work / delete_work / delete_version / delete_project / rename_version / rename_project / save_to_knowledge |
-| 数据 | `~/.ai-task-flow/worklog.json`(备份 `~/.ai-task-flow/worklog-backups/`,滚动 10 份) |
+| 工具(12) | record_work / query_work / list_projects / update_work / delete_work / delete_version / delete_project / rename_version / rename_project / record_conclusion / query_conclusions / save_to_knowledge |
+| 数据 | `~/.ai-task-flow/worklog.json`(备份 `~/.ai-task-flow/worklog-backups/`,滚动 10 份);`~/.ai-task-flow/conclusions.json`(备份 `~/.ai-task-flow/conclusion-backups/`,滚动 10 份) |
 
 ## 当前版本
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `1764e42`(feat(worklog): detail 写作规范落地——双模板+自查规则) |
-| 构建时间 | 2026-11-18 10:39 |
+| dist 构建来源 commit | `0febaba`(docs: CLAUDE.md 重写——同步 worklog 现状/命令/架构/红线) |
+| 构建时间 | 2026-11-18 16:18 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单

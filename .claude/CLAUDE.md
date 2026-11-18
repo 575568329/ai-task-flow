@@ -62,7 +62,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - 入口 `backend/src/http-server.ts` 的 `startApp()`：手工 `new` 仓储/服务并注入（**无 DI 容器**），随后启动 HTTP。新增模块的装配点就在这里。
 - 四层：`domain/`（实体、值对象、仓储接口）→ `application/`（用例服务）→ `infrastructure/`（JSON 持久化、LLM、外部客户端）→ `interfaces/`（http routes + mcp tools）。
-- 业务模块：worklog（核心）、knowledge、vocab、maimemo、mindmap、webclip、claude-profile、llm-config、system。
+- 业务模块：worklog（核心）、conclusion、knowledge、vocab、maimemo、mindmap、webclip、claude-profile、llm-config、system。
 - ESM + Node16 解析：TS 源码里的相对 import **必须带 `.js` 后缀**。
 - HTTP 路由注册集中在 `interfaces/http/server.ts`；新增模块顺序：repository → service → routes → `startApp` 装配 → 可选 MCP 工具。
 - 前后端日志落 `.logs/`；跨上下文链路必须保证日志能在后端可查。
@@ -70,14 +70,14 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## 持久化与数据目录
 
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
-- 主要数据文件：`worklog.json`、`vocab.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）。
+- 主要数据文件：`worklog.json`、`conclusions.json`、`vocab.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
 
 ## MCP Server
 
 - stdio transport，入口 `backend/src/interfaces/mcp/server.ts`，产物 `backend/dist/interfaces/mcp/server.js`。
-- 10 个工具：`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `save_to_knowledge`。
+- 12 个工具：`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
 - 工具描述与 detail 写作模板的**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里。
 - 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
 - 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。
@@ -85,7 +85,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## 前端
 
 - React 19 + Vite + TypeScript + Zustand + shadcn/ui（Radix）+ Tailwind v4；路径别名 `@/` → `frontend/src/`。
-- **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、knowledge、vocab、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
+- **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、conclusion、knowledge、vocab、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
 - 每个视图一个领域 store（`stores/*Store.ts`）；HTTP 统一走 `api/http.ts` 封装。
 - 组件按领域放在 `components/views`、`components/worklog|knowledge|mindmap|ui`。
 - 已知坑：图片预览用 YARL（不要手写蒙版）；TTS 统一用 `lib/speech.ts` 封装。
