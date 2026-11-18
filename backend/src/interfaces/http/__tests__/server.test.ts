@@ -14,6 +14,8 @@ import { JsonMindmapRepository } from '../../../infrastructure/persistence/JsonM
 import { MindmapService } from '../../../application/mindmap/MindmapService.js';
 import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
 import { WorklogService } from '../../../application/worklog/WorklogService.js';
+import { JsonConclusionRepository } from '../../../infrastructure/persistence/JsonConclusionRepository.js';
+import { ConclusionService } from '../../../application/conclusion/ConclusionService.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -61,6 +63,14 @@ describe('HTTP Server', () => {
       ),
     );
 
+    // 结论卡测试依赖（临时文件隔离）
+    const conclusionService = new ConclusionService(
+      new JsonConclusionRepository(
+        path.join(os.tmpdir(), `test-conclusions-${id}.json`),
+        path.join(os.tmpdir(), `test-conclusion-backups-${id}`),
+      ),
+    );
+
     server = await createHttpServer(
       { port: 0, host: '127.0.0.1', corsOrigin: '*' },
       llmConfigService,
@@ -70,6 +80,7 @@ describe('HTTP Server', () => {
       maimemoService,
       mindmapService,
       worklogService,
+      conclusionService,
     );
   });
 

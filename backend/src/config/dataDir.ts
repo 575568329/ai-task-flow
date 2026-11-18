@@ -168,3 +168,13 @@ export function worklogFilePath(dataDir?: string): string {
 export function worklogBackupsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'worklog-backups');
 }
+
+/** 结论卡数据文件 */
+export function conclusionFilePath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'conclusions.json');
+}
+
+/** 结论卡破坏性操作前的快照目录（滚动保留 10 份） */
+export function conclusionBackupsDirPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), 'conclusion-backups');
+}

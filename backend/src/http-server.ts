@@ -18,7 +18,15 @@ import { JsonMindmapRepository } from './infrastructure/persistence/JsonMindmapR
 import { MindmapService } from './application/mindmap/MindmapService.js';
 import { JsonWorklogRepository } from './infrastructure/persistence/JsonWorklogRepository.js';
 import { WorklogService } from './application/worklog/WorklogService.js';
-import { knowledgeDirPath, worklogFilePath, worklogBackupsDirPath } from './config/dataDir.js';
+import { JsonConclusionRepository } from './infrastructure/persistence/JsonConclusionRepository.js';
+import { ConclusionService } from './application/conclusion/ConclusionService.js';
+import {
+  knowledgeDirPath,
+  worklogFilePath,
+  worklogBackupsDirPath,
+  conclusionFilePath,
+  conclusionBackupsDirPath,
+} from './config/dataDir.js';
 
 export interface StartAppOptions {
   /** HTTP 监听端口,默认 47821 */
@@ -81,6 +89,14 @@ export async function startApp(options: StartAppOptions = {}) {
     new JsonWorklogRepository(worklogFilePath(options.dataDir), worklogBackupsDirPath(options.dataDir)),
   );
 
+  // 结论卡服务(项目/版本/个人 + 逐版完整快照;HTTP 与 MCP 共享同一存储协议)
+  const conclusionService = new ConclusionService(
+    new JsonConclusionRepository(
+      conclusionFilePath(options.dataDir),
+      conclusionBackupsDirPath(options.dataDir),
+    ),
+  );
+
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);
   // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口。
   // 需要局域网访问时显式 HOST=0.0.0.0 启动(仅限隔离网络)。
@@ -106,7 +122,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService);
+  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService, conclusionService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,
