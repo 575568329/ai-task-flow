@@ -1,5 +1,5 @@
 // frontend/src/components/SidebarNav.tsx
-// 轻量侧边导航:4 视图切换 + 主题切换 + 设置入口(storageWarn 红点)。
+// 轻量侧边导航:5 视图切换 + 主题切换 + 设置入口(storageWarn 红点)。
 // 支持折叠(localStorage 持久化,折叠后只显示图标)。
 // 不用 shadcn sidebar(那是 dashboard 布局,过重);本应用只需纵向导航条。
 import { useState } from 'react';
@@ -7,6 +7,7 @@ import {
   BookOpen,
   ClipboardList,
   Languages,
+  Lightbulb,
   Network,
   Sun,
   Moon,
@@ -21,7 +22,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/lib/utils';
 
 // worklog 转型 Step6:'worklog'(工作记录)为默认落地视图
-export type ViewKey = 'worklog' | 'knowledge' | 'vocab' | 'mindmap';
+export type ViewKey = 'worklog' | 'conclusion' | 'knowledge' | 'vocab' | 'mindmap';
 
 interface NavItem {
   key: ViewKey;
@@ -31,6 +32,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'worklog', label: '工作记录', icon: ClipboardList },
+  { key: 'conclusion', label: '结论', icon: Lightbulb },
   { key: 'knowledge', label: '知识库', icon: BookOpen },
   { key: 'vocab', label: '生词本', icon: Languages },
   { key: 'mindmap', label: '思维导图', icon: Network },

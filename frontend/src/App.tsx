@@ -6,6 +6,7 @@ import type { ComponentType } from 'react';
 import { motion, useAnimationControls } from 'motion/react';
 import { SidebarNav, type ViewKey } from '@/components/SidebarNav';
 import { WorklogView } from '@/components/views/WorklogView';
+import { ConclusionView } from '@/components/views/ConclusionView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
 import { VocabView } from '@/components/views/VocabView';
 import { MindmapView } from '@/components/views/MindmapView';
@@ -17,6 +18,7 @@ import { fetchHealth, systemApi } from '@/api/system';
 
 const VIEWS: Record<ViewKey, ComponentType> = {
   worklog: WorklogView,
+  conclusion: ConclusionView,
   knowledge: KnowledgeView,
   vocab: VocabView,
   mindmap: MindmapView,
