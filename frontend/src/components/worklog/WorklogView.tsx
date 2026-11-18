@@ -4,16 +4,17 @@
 // 审阅修复:refresh 竞态序号守卫/selection 随重命名删除跟随/视图激活静默重拉/
 // 挪版本列表按条目所属项目传入/错误提示统一收口(不再双重 toast)。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RefreshCw, BookOpenText } from 'lucide-react';
+import { Plus, RefreshCw, BookOpenText, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { useUIStore } from '@/stores/uiStore';
 import { worklogApi } from '@/api/worklog';
-import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
+import type { WorklogData } from '@ai-task-flow/shared';
 import { ProjectVersionTree, type TreeSelection } from './ProjectVersionTree';
 import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
 import { AiGuideView } from './AiGuideView';
+import { filterEntries } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -24,6 +25,7 @@ export function WorklogView() {
   const [selection, setSelection] = useState<TreeSelection>({});
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
+  const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
   const refreshSeq = useRef(0);
@@ -65,20 +67,12 @@ export function WorklogView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打点变化即意图
   }, [worklogEnterTick]);
 
-  // 选中版本的所有条目(新在前);未选版本时显示项目下/全部条目
-  const visibleEntries = useMemo(() => {
-    const result: Array<{ entry: WorklogEntry; project: string; version: string }> = [];
-    for (const project of data.projects) {
-      if (selection.project && project.name !== selection.project) continue;
-      for (const version of project.versions) {
-        if (selection.version && version.name !== selection.version) continue;
-        for (const entry of version.entries) {
-          result.push({ entry, project: project.name, version: version.name });
-        }
-      }
-    }
-    return result.sort((a, b) => b.entry.createdAt - a.entry.createdAt);
-  }, [data, selection]);
+  // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择过滤。新在前。
+  // 本地过滤(全树已在内存,个人量级零延迟),匹配语义与后端 query_work 一致。
+  const { entries: visibleEntries, isSearching } = useMemo(
+    () => filterEntries(data, selection, keyword),
+    [data, selection, keyword],
+  );
 
   // 项目名 → 版本列表(挪版本下拉按条目所属项目取,跨项目混看不错配)
   const versionsByProject = useMemo(() => {
@@ -212,15 +206,37 @@ export function WorklogView() {
         ) : (
           <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
             <div className="flex items-center gap-2">
-              <h2 className="flex-1 text-sm font-semibold">
-                {selection.project
+              <div className="relative flex-1">
+                <Search className="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4" />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setKeyword(''); }}
+                  placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分项目)"
+                  className="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border pr-8 pl-8 text-sm outline-none focus-visible:ring-[3px]"
+                  aria-label="搜索工作记录"
+                />
+                {keyword && (
+                  <button
+                    type="button" onClick={() => setKeyword('')} title="清空搜索"
+                    className="text-muted-foreground hover:text-foreground absolute top-2.5 right-2.5"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <h2 className="text-sm font-semibold">
+              {isSearching
+                ? `搜索「${keyword.trim()}」`
+                : selection.project
                   ? selection.version
                     ? `${selection.project} / ${selection.version}`
                     : `${selection.project}(全部版本)`
                   : '全部记录'}
-                <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
-              </h2>
-            </div>
+              <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
+            </h2>
 
             {creating && (
               <NewEntryForm
@@ -241,7 +257,7 @@ export function WorklogView() {
                   entry={entry}
                   projectVersions={versionsByProject.get(project) ?? [version]}
                   currentVersion={version}
-                  showVersionBadge={!selection.version}
+                  contextLabel={isSearching ? `${project} / ${version}` : (!selection.version ? version : undefined)}
                   onSave={handleSave}
                   onDelete={handleDeleteEntry}
                 />

@@ -22,14 +22,14 @@ interface EntryItemProps {
   /** 该条目所属项目的全部版本名(挪版本下拉用,按条目项目传) */
   projectVersions: string[];
   currentVersion: string;
-  /** 跨版本/全部视图下为 true:卡片头显示版本徽标 */
-  showVersionBadge?: boolean;
+  /** 上下文徽标文本(如搜索结果的「项目/版本」或跨版本视图的版本名),不传则不显示 */
+  contextLabel?: string;
   onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; version?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export function EntryItem({
-  entry, projectVersions, currentVersion, showVersionBadge, onSave, onDelete,
+  entry, projectVersions, currentVersion, contextLabel, onSave, onDelete,
 }: EntryItemProps) {
   const [editing, setEditing] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
@@ -167,8 +167,8 @@ export function EntryItem({
           <header className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">{entry.title}</h3>
             <span className="text-muted-foreground text-xs">{entry.date}</span>
-            {showVersionBadge && (
-              <Badge variant="outline" className="text-xs">{currentVersion}</Badge>
+            {contextLabel && (
+              <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
             )}
             {uniqueTags.map((tag) => (
               <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
