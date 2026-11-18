@@ -7,7 +7,11 @@ function summary(over: Partial<ConclusionSummary> = {}): ConclusionSummary {
   return {
     id: 'c_1', scope: 'project', project: 'ai-task-flow', title: '全局搜索方案',
     rev: 2, latestDate: '2026-11-18', latestDecisionExcerpt: '最新结论摘要',
-    source: { tool: 'claude-code', conversationName: '话题A' },
+    source: {
+      tool: 'claude-code',
+      conversationId: '614608ad-5990-4757-a1f6-2cdb84e83f84',
+      conversationName: '话题A',
+    },
     createdAt: 1, updatedAt: 2, ...over,
   };
 }
@@ -42,6 +46,8 @@ describe('ConclusionCardItem', () => {
     };
     const { rerender } = render(<ConclusionCardItem {...props} expanded={false} />);
     expect(screen.getByText('最新结论摘要')).toBeTruthy();
+    expect(screen.getByText(/话题A/)).toBeTruthy();
+    expect(screen.getByText(/614608ad/)).toBeTruthy();
     expect(screen.queryByText('新结论')).toBeNull();
 
     rerender(<ConclusionCardItem {...props} expanded detail={detail()} />);

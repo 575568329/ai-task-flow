@@ -38,6 +38,7 @@ function formatDetail(detail: ConclusionDetail): string {
       latest.date,
       latest.source.tool,
       latest.source.conversationName,
+      latest.source.conversationId ? `ID ${latest.source.conversationId}` : undefined,
     ].filter(Boolean).join(' · '),
     '',
     '## 结论/决策',

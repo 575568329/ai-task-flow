@@ -42,7 +42,10 @@ export const toolDef = {
       },
       date: { type: 'string' as const, description: '本版业务日期 YYYY-MM-DD，默认当天' },
       changeNote: { type: 'string' as const, description: '本版为什么更新（追加必填）' },
-      conversationName: { type: 'string' as const, description: '对话名称，如「worklog 全局搜索方案」' },
+      conversationName: {
+        type: 'string' as const,
+        description: '对话名称（建议填写本次对话主题，如「worklog 全局搜索方案」；不填则页面只显示对话 ID）',
+      },
     },
   },
 };

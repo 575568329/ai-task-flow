@@ -9,14 +9,22 @@ export function RevisionTimeline({ revisions }: Props) {
 
   return (
     <ol className="mt-3 space-y-3 border-l pl-4">
-      {newestFirst.map((revision) => (
+      {newestFirst.map((revision) => {
+        const conversationLabel = revision.source.conversationName
+          ?? (revision.source.tool === 'manual' ? '手工创建' : '未命名对话');
+        const shortConversationId = revision.source.conversationId?.slice(0, 8);
+
+        return (
         <li key={revision.rev} className="relative">
           <span className="bg-background absolute top-1.5 -left-[1.28rem] size-2 rounded-full border" />
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
             <span className="text-foreground font-medium">rev {revision.rev}</span>
             <span>{revision.date}</span>
             <span>{revision.source.tool}</span>
-            {revision.source.conversationName && <span>· {revision.source.conversationName}</span>}
+            <span>· {conversationLabel}</span>
+            {shortConversationId && (
+              <span title={revision.source.conversationId}>· ID {shortConversationId}…</span>
+            )}
           </div>
           {revision.changeNote && (
             <p className="mt-1 text-xs">变更：{revision.changeNote}</p>
@@ -57,7 +65,8 @@ export function RevisionTimeline({ revisions }: Props) {
             </div>
           </details>
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }

@@ -107,7 +107,7 @@ export interface ConclusionSummary {
   rev: number;
   latestDate: string;
   latestDecisionExcerpt: string;
-  source: Pick<ConclusionSource, 'tool' | 'conversationName'>;
+  source: Pick<ConclusionSource, 'tool' | 'conversationId' | 'conversationName'>;
   matchedRev?: number;
   createdAt: number;
   updatedAt: number;

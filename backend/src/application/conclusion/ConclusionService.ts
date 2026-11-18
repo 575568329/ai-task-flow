@@ -189,6 +189,7 @@ export class ConclusionService {
         latestDecisionExcerpt: excerpt(latest.decision),
         source: {
           tool: latest.source.tool,
+          conversationId: latest.source.conversationId,
           conversationName: latest.source.conversationName,
         },
         matchedRev,

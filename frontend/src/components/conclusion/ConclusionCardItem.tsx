@@ -1,7 +1,8 @@
 import type { Conclusion, ConclusionSummary } from '@ai-task-flow/shared';
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/components/ui/toaster';
 import { RevisionTimeline } from './RevisionTimeline';
 
 interface Props {
@@ -16,6 +17,24 @@ interface Props {
 
 export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit, onPatch, onDelete }: Props) {
   const latest = detail?.revisions[detail.revisions.length - 1];
+  const conversationId = summary.source.conversationId;
+  const conversationLabel = summary.source.conversationName
+    ?? (summary.source.tool === 'manual' ? '手工创建' : '未命名对话');
+  const shortConversationId = conversationId ? `${conversationId.slice(0, 8)}…` : undefined;
+
+  const copyConversationId = async () => {
+    if (!conversationId) return;
+    if (!navigator.clipboard) {
+      toast.error('当前环境不支持复制');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(conversationId);
+      toast.success('对话 ID 已复制');
+    } catch {
+      toast.error('复制失败');
+    }
+  };
 
   return (
     <article className="bg-card rounded-lg border p-4">
@@ -33,8 +52,21 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             {summary.version && <span>{summary.version}</span>}
             <span>{summary.latestDate}</span>
             <span>{summary.source.tool}</span>
-            {summary.source.conversationName && <span>· {summary.source.conversationName}</span>}
             {summary.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
+          </div>
+          <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+            <span>对话：{conversationLabel}</span>
+            {conversationId && shortConversationId && (
+              <button
+                type="button"
+                className="hover:text-foreground inline-flex items-center gap-1 font-mono"
+                title={conversationId}
+                onClick={() => void copyConversationId()}
+              >
+                ID {shortConversationId}
+                <Copy className="size-3" />
+              </button>
+            )}
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggle} title="展开/收起">

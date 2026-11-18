@@ -88,6 +88,7 @@ describe('ConclusionService', () => {
     expect(byOld).toHaveLength(1);
     expect(byOld[0].latestDecisionExcerpt).toContain('新结论');
     expect(byOld[0].matchedRev).toBe(1);
+    expect(byOld[0].source.conversationId).toBe('sess-1');
 
     const byNew = await service.query({ keyword: '服务端过滤' });
     expect(byNew[0].matchedRev).toBeUndefined();
