@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `ede1f36`(fix(worklog): 三路审阅修复——P0 裂树双源/编辑表单 label/竞态守卫/DomainError 错误映射) |
-| 构建时间 | 2026-11-18 10:23 |
+| dist 构建来源 commit | `6db81e6`(feat(worklog): detail 写作规范落地——双模板+自查规则) |
+| 构建时间 | 2026-11-18 10:39 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单

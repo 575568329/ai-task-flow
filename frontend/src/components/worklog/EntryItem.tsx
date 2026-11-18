@@ -131,7 +131,7 @@ export function EntryItem({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor={`et-detail-${entry.id}`} className="text-xs">详细说明(markdown:改了什么/为什么/影响面)</Label>
+            <Label htmlFor={`et-detail-${entry.id}`} className="text-xs">详细说明(建议格式:改了什么 1.2.3. → 为什么改 → 影响面)</Label>
             <Textarea
               id={`et-detail-${entry.id}`}
               value={detail}

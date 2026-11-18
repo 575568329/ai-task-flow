@@ -117,8 +117,11 @@ export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreat
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="nf-detail" className="text-xs">详细说明(markdown:改了什么/为什么/影响面)</Label>
-        <Textarea id="nf-detail" value={detail} onChange={(e) => setDetail(e.target.value)} rows={5} className="text-sm" />
+        <Label htmlFor="nf-detail" className="text-xs">详细说明(Bug→问题/原因/解决/验证;任务→需求/方案/实现/验证,分条 1.2.3.)</Label>
+        <Textarea
+          id="nf-detail" value={detail} onChange={(e) => setDetail(e.target.value)} rows={8} className="text-sm"
+          placeholder={'例(Bug):\n### 问题\n某页面打开白屏,控制台报 xx 未定义\n\n### 原因\n…\n\n### 解决\n1. 改了什么(文件+行为)\n\n### 验证\n…(完整模板见左上「AI 使用指南」)'}
+        />
       </div>
 
       <div className="space-y-1.5">
