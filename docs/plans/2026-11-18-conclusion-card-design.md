@@ -51,6 +51,9 @@
 | 8 | 页面位置 | 侧边栏独立视图 |
 | 9 | 搜索范围 | keyword 覆盖标题 + 全部历史版本 |
 | 10 | 领域命名 | 领域层 `Conclusion`；UI 称“结论卡” |
+| 11 | 更新前读取 | `query_conclusions({cardId})` 返回最新版完整内容与演进摘要 |
+| 12 | 追加语义 | 省略的字段沿用上一版；显式空值（`""` / `[]`）表示清空；服务端仍存完整快照 |
+| 13 | 并发保护 | 追加可带 `expectedRev`；与当前版本不一致返回 409，要求重读 |
 
 ## 4. 数据模型
 
@@ -128,8 +131,9 @@ export interface ConclusionData {
 2. `scope=project` → `project` 去空格后非空；`scope=personal` → 不得有 `project` 与 `version`。
 3. `version` 只在 `scope=project` 时允许。
 4. `decision` 每版必填；`title` 新建必填。
-5. 追加时 `changeNote` 必填。
-6. `rev` 由服务端在写锁内生成，调用方不可指定。
+5. 追加时 `changeNote` 必填，且至少提交一个变化字段（内容或元信息）。
+6. 追加时未提交的内容字段沿用上一版；显式空字符串/空数组表示清空该节。
+7. `rev` 由服务端在写锁内生成，调用方不可指定；传入 `expectedRev` 时，必须等于当前最新版，否则 409。
 
 ### 4.3 校验限制
 
@@ -187,31 +191,43 @@ export interface ConclusionData {
 
 ### 7.1 `record_conclusion`
 
-**描述必须包含的三条约束：**
+**描述必须包含的四条约束：**
 
 1. 仅当用户明确要求记录结论时调用；不要主动捕获。
-2. 每次提交的 `decision/data/openItems/codeRefs` 是该版**完整内容**，不是增量。
-3. 追加时必须提供 `changeNote`。
+2. 追加前先用 `query_conclusions({ cardId })` 读取最新版与演进摘要；同一会话已读过并持有 `rev` 可跳过。
+3. 追加时省略的字段**沿用上一版**，显式传 `""` / `[]` 表示清空；服务端仍存完整快照。
+4. 追加必须提供 `changeNote`，建议同时带 `expectedRev`（读取到的版本号）；不一致时返回 409，需重读后再写。
 
 **入参：**
 
 ```jsonc
 {
   "cardId": "c_abc123",       // 可选；有 = 追加，无 = 新建
+  "expectedRev": 3,            // 可选；追加时建议传，防并发覆盖
   "scope": "project",          // project | personal
   "project": "ai-task-flow",   // scope=project 必填
   "version": "v0.3",           // 可选
   "title": "结论主题",          // 新建必填；追加时可更新
   "tags": ["架构"],
-  "decision": "结论/决策 + 理由",
-  "data": "关键数据/命令结果",
+  "decision": "结论/决策 + 理由",   // 新建必填；追加时省略 = 沿用
+  "data": "关键数据/命令结果",      // 追加时省略 = 沿用；传 "" = 清空
   "openItems": "待办/未决问题",
   "codeRefs": [{ "path": "backend/src/x.ts", "startLine": 10, "endLine": 30, "note": "..." }],
-  "date": "2026-11-18",
+  "date": "2026-11-18",        // 本版业务日期，默认当天
   "changeNote": "补了澳门环境返回，结论从 A 改为 B", // 追加必填
   "conversationName": "worklog 全局搜索方案"
 }
 ```
+
+**追加合并规则：**
+
+| 提交情况 | 结果 |
+|---|---|
+| 字段未出现 | 沿用上一版值 |
+| `decision: "..."` | 替换该节 |
+| `data: ""` / `codeRefs: []` | 清空该节 |
+| 只改了 `title` / `tags` 等元信息 | 允许，但仍需 `changeNote` |
+| 没有任何变化 | 400，不产生空版本 |
 
 **返回：**
 
@@ -234,13 +250,18 @@ export interface ConclusionData {
 
 ### 7.2 `query_conclusions`
 
-**用途**：为追加定位 `cardId`；同时作为未来 AI 召回入口（v1 不注入上下文）。
+**用途**：为追加定位卡并**读取当前进度**；同时作为未来 AI 召回入口（v1 不注入上下文）。两种模式：
+
+| 模式 | 条件 | 返回 |
+|---|---|---|
+| 搜索 | 不传 `cardId` | 匹配卡的摘要列表（含 `cardId`、`rev`、最新结论摘要、`matchedRev`） |
+| 详情 | 传 `cardId` | 该卡**最新版完整四节** + 演进摘要列表 |
 
 **入参：**
 
 ```jsonc
 {
-  "cardId": "c_abc123",      // 可选，精确取一张
+  "cardId": "c_abc123",      // 可选；传 = 详情模式
   "scope": "project",
   "project": "ai-task-flow",
   "version": "v0.3",
@@ -249,11 +270,36 @@ export interface ConclusionData {
   "dateFrom": "2026-11-01",  // 按最新版 date 过滤
   "dateTo": "2026-11-30",
   "limit": 20,               // 默认 20，最大 50
-  "includeFull": false       // false 时 decision 截断 1500 字
+  "includeHistory": false    // 仅详情模式生效；true 时额外返回每版全文
 }
 ```
 
-**返回摘要字段：**
+**详情模式返回：**
+
+```ts
+interface ConclusionDetail {
+  id: string;
+  scope: ProblemScope;
+  project?: string;
+  version?: string;
+  title: string;
+  tags?: string[];
+  rev: number;
+  /** 最新版完整内容——AI 更新前据此判断改哪一节 */
+  latest: ConclusionRevision;
+  /** 演进摘要（不含各版全文） */
+  revisions: Array<Pick<ConclusionRevision, 'rev' | 'date' | 'changeNote' | 'createdAt'> & {
+    tool: string;
+    conversationName?: string;
+  }>;
+  /** includeHistory=true 时才有，按 rev 升序 */
+  history?: ConclusionRevision[];
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+**搜索模式返回** `ConclusionSummary[]`：
 
 ```ts
 interface ConclusionSummary {
@@ -265,7 +311,7 @@ interface ConclusionSummary {
   tags?: string[];
   rev: number;
   latestDate: string;
-  latestDecisionExcerpt: string;
+  latestDecisionExcerpt: string;   // 截断 1500 字
   source: Pick<ConclusionSource, 'tool' | 'conversationName'>;
   /** keyword 命中的历史版本号；未命中历史则为 undefined */
   matchedRev?: number;
@@ -294,6 +340,8 @@ interface ConclusionSummary {
 - `dateFrom/dateTo` 按**最新版** `date` 过滤；`date` 缺省为服务端本地当天。
 - `cardId` 精确查询优先于其他过滤条件，命中即返回单张。
 - 人工追加：服务端强制 `source.tool='manual'`；`changeNote` 默认“人工修订”（前端填入，后端仍要求非空）。
+- 追加合并语义与 MCP 一致：省略字段沿用上一版，显式空值清空；前端编辑表单加载完整最新版后提交，行为可预测。
+- 追加可带 `expectedRev`；与当前最新版不一致 → 409，前端提示“已被其他操作更新，请刷新后重试”。
 - PATCH 不允许修改 `revisions`；同样执行第 4.2 节全部不变量校验；修改标题等元信息不产生新版本，但 PATCH 前备份。
 - DELETE 返回 `{ deleted: true, backupPath: string }`。
 
@@ -305,6 +353,7 @@ interface ConclusionSummary {
 | `scope=personal` 却传 `project`/`version` | 400 | `ConclusionValidationError` |
 | `decision` 为空 | 400 | `ConclusionValidationError` |
 | 追加缺 `changeNote` | 400 | `ConclusionValidationError` |
+| 追加时 `expectedRev` 与当前版本不一致 | 409 | `ConclusionConflictError` |
 | `cardId` 不存在 | 404 | `ConclusionNotFoundError` |
 | JSON 损坏 / 写盘失败 / 锁超时 | 500 | `ConclusionStorageError` |
 
@@ -398,12 +447,12 @@ frontend/src/api/conclusion.ts
 | 层 | 用例 |
 |---|---|
 | domain | 新建不变量；追加 rev 单调；latest 取最后一版；非法字段拒绝 |
-| application | 创建/追加/查询；keyword 覆盖全部历史并返回 `matchedRev`；日期边界；`includeFull` 截断；人工追加来源为 manual |
+| application | 创建/追加/查询；keyword 覆盖全部历史并返回 `matchedRev`；日期边界；搜索模式摘要截断；详情模式返回最新版完整内容；省略字段沿用/空值清空；`expectedRev` 冲突；人工追加来源为 manual |
 | repository | 原子写；两进程并发追加不丢版本；损坏 JSON 不被覆盖；备份滚动 10 份 |
 | HTTP | 6 端点正常/异常；400/404/500 映射；过滤组合 |
-| MCP | 工具清单 12 个；创建/追加；缺 `changeNote` 拒绝；来源解析优先级；`query_conclusions` 定位 |
+| MCP | 工具清单 12 个；创建/追加；缺 `changeNote` 拒绝；来源解析优先级；`query_conclusions` 搜索定位与详情读取；省略字段合并；`expectedRev` 409 |
 | frontend | 项目/个人分组；历史命中高亮；空节隐藏；演进展开；表单校验；编辑=追加 |
-| E2E curl | `tests/curl/test_conclusion_crud.sh`：创建 → 追加 → 查询命中历史 → PATCH → 删除 |
+| E2E curl | `tests/curl/test_conclusion_crud.sh`：创建 → 详情读取 → 部分字段追加（验证沿用/清空）→ 查询命中历史 → `expectedRev` 冲突 → PATCH → 删除 |
 | 并发冒烟 | HTTP 与 MCP 同时追加同一张卡，`rev` 不重复、无丢更新 |
 | 手工 | Claude Code / ZCode 各说一次“记一下”，页面可见且来源字段正确 |
 
@@ -436,6 +485,8 @@ frontend/src/api/conclusion.ts
 | 用户忘记触发记录 | 空状态提示词；侧边栏入口；工具描述给出示例话术 |
 | 单 JSON 文件增长 | v1 可接受；超过 1 万张卡或 50MB 再拆文件/分页 |
 | 进程指纹不直观 | 主视觉只显示工具 + 对话名；ID 收进 tooltip |
+| AI 基于过期内容追加，覆盖他处更新 | 工具描述强制先读；`expectedRev` 提供乐观锁，不匹配 409 |
+| AI 漏传某节导致信息丢失 | 省略=沿用上一版；只有显式空值才清空 |
 | 历史版本过多导致卡片过长 | 演进默认折叠；详情只渲染最新版 |
 | 误删 | 删除前备份 + 二次确认 + 恢复步骤文档化 |
 
