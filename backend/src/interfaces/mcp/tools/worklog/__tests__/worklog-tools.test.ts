@@ -22,6 +22,8 @@ describe('worklog MCP tools', () => {
       worklogService: new WorklogService(
         new JsonWorklogRepository(path.join(tmpDir, 'worklog.json'), path.join(tmpDir, 'backups')),
       ),
+      conclusionService: {} as ToolDeps['conclusionService'],
+      mcpSource: { tool: 'manual' },
     };
   });
 
@@ -31,7 +33,7 @@ describe('worklog MCP tools', () => {
 
   it('registered tools should match catalog names/descriptions (single source of truth)', () => {
     const registered = new Map(ALL_TOOLS.map((t) => [t.name, t.description]));
-    expect(registered.size).toBe(10); // 9 worklog + save_to_knowledge
+    expect(registered.size).toBe(12); // 9 worklog + 2 conclusion + save_to_knowledge
     for (const meta of WORKLOG_TOOL_CATALOG) {
       expect(registered.has(meta.name)).toBe(true);
       expect(registered.get(meta.name)).toBe(meta.description);

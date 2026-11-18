@@ -12,6 +12,8 @@ import { toolDef as deleteVersionDef, handle as deleteVersionHandler } from './w
 import { toolDef as deleteProjectDef, handle as deleteProjectHandler } from './worklog/delete-project.js';
 import { toolDef as renameVersionDef, handle as renameVersionHandler } from './worklog/rename-version.js';
 import { toolDef as renameProjectDef, handle as renameProjectHandler } from './worklog/rename-project.js';
+import { toolDef as recordConclusionDef, handle as recordConclusionHandler } from './conclusion/record-conclusion.js';
+import { toolDef as queryConclusionsDef, handle as queryConclusionsHandler } from './conclusion/query-conclusions.js';
 
 export type ToolHandler = (
   args: Record<string, unknown> | undefined,
@@ -29,6 +31,8 @@ export const ALL_TOOLS = [
   deleteProjectDef,
   renameVersionDef,
   renameProjectDef,
+  recordConclusionDef,
+  queryConclusionsDef,
   knowledgeDef,
 ];
 
@@ -43,5 +47,7 @@ export const HANDLERS: Record<string, ToolHandler> = {
   delete_project: deleteProjectHandler,
   rename_version: renameVersionHandler,
   rename_project: renameProjectHandler,
+  record_conclusion: recordConclusionHandler,
+  query_conclusions: queryConclusionsHandler,
   save_to_knowledge: knowledgeHandler,
 };

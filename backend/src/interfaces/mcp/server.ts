@@ -9,8 +9,17 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
 import { WorklogService } from '../../application/worklog/WorklogService.js';
+import { ConclusionService } from '../../application/conclusion/ConclusionService.js';
 import { JsonWorklogRepository } from '../../infrastructure/persistence/JsonWorklogRepository.js';
-import { knowledgeDirPath, worklogFilePath, worklogBackupsDirPath } from '../../config/dataDir.js';
+import { JsonConclusionRepository } from '../../infrastructure/persistence/JsonConclusionRepository.js';
+import {
+  knowledgeDirPath,
+  worklogFilePath,
+  worklogBackupsDirPath,
+  conclusionFilePath,
+  conclusionBackupsDirPath,
+} from '../../config/dataDir.js';
+import { resolveMcpSource } from '../source.js';
 import { ALL_TOOLS, HANDLERS } from './tools/index.js';
 
 /**
@@ -19,12 +28,15 @@ import { ALL_TOOLS, HANDLERS } from './tools/index.js';
  * 提供给 Claude Code/ZCode 的 MCP 工具：
  * - worklog 九工具(record_work/query_work/list_projects/update_work/delete_work/
  *   delete_version/delete_project/rename_version/rename_project)
+ * - 结论卡双工具(record_conclusion/query_conclusions)
  * - save_to_knowledge: 写入知识库
+ * 共 12 个工具。
  */
 class AITaskFlowServer {
   private server: Server;
   private knowledgeService: KnowledgeService;
   private worklogService: WorklogService;
+  private conclusionService: ConclusionService;
 
   constructor() {
     this.server = new Server(
@@ -37,6 +49,9 @@ class AITaskFlowServer {
     this.knowledgeService = new KnowledgeService(knowledgeDirPath());
     this.worklogService = new WorklogService(
       new JsonWorklogRepository(worklogFilePath(), worklogBackupsDirPath()),
+    );
+    this.conclusionService = new ConclusionService(
+      new JsonConclusionRepository(conclusionFilePath(), conclusionBackupsDirPath()),
     );
 
     this.setupHandlers();
@@ -58,6 +73,8 @@ class AITaskFlowServer {
       return handler(args, {
         knowledgeService: this.knowledgeService,
         worklogService: this.worklogService,
+        conclusionService: this.conclusionService,
+        mcpSource: resolveMcpSource(this.server.getClientVersion()),
       });
     });
 
