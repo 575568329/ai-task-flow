@@ -101,6 +101,33 @@ describe('appendRevision', () => {
       .toThrow(ConclusionConflictError);
   });
 
+  it('should reject append from a different conversation by default', () => {
+    const c = make();
+    expect(() => appendRevision(
+      c,
+      { data: 'x', changeNote: '跨对话' },
+      { ...source, conversationId: 'sess-2' },
+    )).toThrow(ConclusionConflictError);
+  });
+
+  it('should allow cross-conversation append with explicit flag', () => {
+    const c = make();
+    const rev = appendRevision(
+      c,
+      { data: 'x', changeNote: '跨对话', allowCrossConversation: true },
+      { ...source, conversationId: 'sess-2' },
+    );
+    expect(rev.rev).toBe(2);
+    expect(rev.source.conversationId).toBe('sess-2');
+  });
+
+  it('should allow manual append without conversationId', () => {
+    const c = make();
+    const rev = appendRevision(c, { data: 'x', changeNote: '人工修订' }, { tool: 'manual' });
+    expect(rev.rev).toBe(2);
+    expect(rev.source.tool).toBe('manual');
+  });
+
   it('should allow metadata-only append', () => {
     const c = make();
     const rev = appendRevision(c, { title: '新标题', changeNote: '改名' }, source, 2000);

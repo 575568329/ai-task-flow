@@ -67,6 +67,27 @@ describe('conclusion MCP tools', () => {
     expect(bad.content[0].text).toContain('变更说明');
   });
 
+  it('should reject cross-conversation append by default and allow with flag', async () => {
+    const created = await record({
+      scope: 'project', project: 'p', title: 't', decision: 'd',
+    }, deps);
+    const id = (created.content[0].text.match(/c_[a-z0-9]+/) ?? [])[0];
+    const otherDeps: ToolDeps = {
+      ...deps,
+      mcpSource: { ...deps.mcpSource, conversationId: 'sess-2' },
+    };
+
+    const rejected = await record({ cardId: id, data: 'x', changeNote: '跨对话' }, otherDeps);
+    expect(rejected.isError).toBe(true);
+    expect(rejected.content[0].text).toContain('默认一对话一卡');
+
+    const allowed = await record({
+      cardId: id, data: 'x', changeNote: '跨对话', allowCrossConversation: true,
+    }, otherDeps);
+    expect(allowed.isError).toBeFalsy();
+    expect(allowed.content[0].text).toContain('rev 2');
+  });
+
   it('should search and return matchedRev for history hits', async () => {
     const created = await record({
       scope: 'project', project: 'p', title: 't', decision: '旧结论：前端',

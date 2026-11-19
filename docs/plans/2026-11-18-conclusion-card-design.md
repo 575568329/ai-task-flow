@@ -42,18 +42,19 @@
 | # | 决策 | 结论 |
 |---|---|---|
 | 1 | 第一消费者 | 人回看优先，AI 召回推迟 |
-| 2 | 记录单位 | 主题结论卡（一次讨论/一个主题一张卡） |
+| 2 | 记录单位 | 一次对话一张卡（同一对话内按主题演进；跨对话默认新建卡） |
 | 3 | 卡片内容 | 结论/理由、关键数据、待办/未决、代码位置，四节固定 |
 | 4 | 归属 | 挂项目；另支持“个人”问题 |
 | 5 | 写入触发 | 仅用户明确要求时，AI 不主动记录 |
 | 6 | 历史保留 | 每版完整快照 |
-| 7 | 更新定位 | 按 `cardId` 追加；跨会话先用查询工具定位 |
+| 7 | 更新定位 | 按 `cardId` 追加；同一对话内可直接追加；跨对话默认拒绝，显式 `allowCrossConversation` 才允许 |
 | 8 | 页面位置 | 侧边栏独立视图 |
 | 9 | 搜索范围 | keyword 覆盖标题 + 全部历史版本 |
 | 10 | 领域命名 | 领域层 `Conclusion`；UI 称“结论卡” |
 | 11 | 更新前读取 | `query_conclusions({cardId})` 返回最新版完整内容与演进摘要 |
 | 12 | 追加语义 | 省略的字段沿用上一版；显式空值（`""` / `[]`）表示清空；服务端仍存完整快照 |
 | 13 | 并发保护 | 追加可带 `expectedRev`；与当前版本不一致返回 409，要求重读 |
+| 14 | 对话边界 | 追加时来源 `conversationId` 与上一版不同 → 409；人工写入无 ID 放行；显式 `allowCrossConversation=true` 才允许跨对话续写 |
 
 ## 4. 数据模型
 
@@ -170,7 +171,7 @@ export interface ConclusionData {
 
 - 卡片列表显示工具徽标 + 对话名称 + 对话 ID 前 8 位；短 ID 悬停可看全文、点击复制完整 ID。
 - 无对话名称时显示「未命名对话」；人工创建显示「手工创建」。
-- 演进时间线逐版显示工具、对话名称、对话 ID 短号、日期（同一张卡可能跨对话追加，必须按版记录）。
+- 演进时间线逐版显示工具、对话名称、对话 ID 短号、日期（默认一对话一卡；显式跨对话续写时仍按版记录来源）。
 
 ## 6. 存储与并发
 
@@ -227,6 +228,7 @@ export interface ConclusionData {
 | `decision: "..."` | 替换该节 |
 | `data: ""` / `codeRefs: []` | 清空该节 |
 | 只改了 `title` / `tags` 等元信息 | 允许，但仍需 `changeNote` |
+| 来源 `conversationId` 与上一版不同 | 409（默认一对话一卡）；显式 `allowCrossConversation=true` 才允许 |
 | 没有任何变化 | 400，不产生空版本 |
 
 **返回：**
@@ -342,6 +344,7 @@ interface ConclusionSummary {
 - 人工追加：服务端强制 `source.tool='manual'`；`changeNote` 默认“人工修订”（前端填入，后端仍要求非空）。
 - 追加合并语义与 MCP 一致：省略字段沿用上一版，显式空值清空；前端编辑表单加载完整最新版后提交，行为可预测。
 - 追加可带 `expectedRev`；与当前最新版不一致 → 409，前端提示“已被其他操作更新，请刷新后重试”。
+- 默认一对话一卡：AI 追加时若来源对话与上一版不同 → 409；人工编辑（`manual`，无 conversationId）放行；用户确认跨对话续写时才传 `allowCrossConversation=true`。
 - PATCH 不允许修改 `revisions`；同样执行第 4.2 节全部不变量校验；修改标题等元信息不产生新版本，但 PATCH 前备份。
 - DELETE 返回 `{ deleted: true }`；备份路径不返回，页面只提示“已自动备份”。
 
@@ -354,6 +357,7 @@ interface ConclusionSummary {
 | `decision` 为空 | 400 | `ConclusionValidationError` |
 | 追加缺 `changeNote` | 400 | `ConclusionValidationError` |
 | 追加时 `expectedRev` 与当前版本不一致 | 409 | `ConclusionConflictError` |
+| 追加时来源对话与上一版不同且未显式允许 | 409 | `ConclusionConflictError` |
 | `cardId` 不存在 | 404 | `ConclusionNotFoundError` |
 | JSON 损坏 / 写盘失败 / 锁超时 | 500 | `ConclusionStorageError` |
 

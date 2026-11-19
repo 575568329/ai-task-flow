@@ -62,6 +62,8 @@ export interface ConclusionCreateRequest {
 
 export interface ConclusionAppendRequest {
   expectedRev?: number;
+  /** 默认一对话一卡：跨对话追加会 409；确认续写同一卡时显式置 true */
+  allowCrossConversation?: boolean;
   scope?: ProblemScope;
   project?: string;
   version?: string;

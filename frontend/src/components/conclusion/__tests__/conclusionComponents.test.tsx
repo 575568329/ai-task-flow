@@ -3,6 +3,14 @@ import { render, screen } from '@testing-library/react';
 import type { Conclusion, ConclusionSummary } from '@ai-task-flow/shared';
 import { ConclusionCardItem } from '../ConclusionCardItem';
 
+// react-markdown CJS 链在 node 层解析到根 react@18（monorepo 双 React 历史）。
+// 组件测试聚焦交互，Markdown 展示由页面端到端覆盖。
+vi.mock('@/components/common/MessageContent', () => ({
+  MessageContent: ({ content }: { content: string }) => (
+    <div data-testid="md-content">{content}</div>
+  ),
+}));
+
 function summary(over: Partial<ConclusionSummary> = {}): ConclusionSummary {
   return {
     id: 'c_1', scope: 'project', project: 'ai-task-flow', title: '全局搜索方案',

@@ -7,6 +7,13 @@ import type { Conclusion, ConclusionSummary } from '@ai-task-flow/shared';
 import { ConclusionView } from '../ConclusionView';
 import { conclusionApi } from '@/api/conclusion';
 
+// 同 worklog 测试：避免 react-markdown 的 CJS 链解析到根 react@18。
+vi.mock('@/components/common/MessageContent', () => ({
+  MessageContent: ({ content }: { content: string }) => (
+    <div data-testid="md-content">{content}</div>
+  ),
+}));
+
 vi.mock('@/api/conclusion', () => ({
   conclusionApi: {
     list: vi.fn(),

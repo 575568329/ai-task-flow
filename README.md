@@ -22,7 +22,7 @@
 
 删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 9 个工具的示例话术)。
 
-长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。
+长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。默认**一对话一卡**,跨对话续写需显式允许。
 
 ## 快速启动
 
@@ -67,7 +67,7 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 ## 测试
 
 ```bash
-cd backend && npx vitest run    # 257 用例(领域/锁协议/路由/MCP 工具)
+cd backend && npx vitest run    # 261 用例(领域/锁协议/路由/MCP 工具)
 cd frontend && npm test         # 123 用例(组件/搜索过滤)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
 node tests/mcp/conclusion-stdio-smoke.mjs              # MCP stdio 冒烟(需先 cd backend && npm run build)

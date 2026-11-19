@@ -165,6 +165,22 @@ export function appendRevision(
     );
   }
 
+  // 默认一对话一卡：人工编辑没有 conversationId，视为显式操作放行；
+  // AI 写入若来自另一个会话，必须显式 allowCrossConversation 才允许续写同一张卡。
+  const previousConversationId = latest.source.conversationId;
+  const incomingConversationId = source.conversationId;
+  if (
+    !input.allowCrossConversation
+    && previousConversationId
+    && incomingConversationId
+    && previousConversationId !== incomingConversationId
+  ) {
+    throw new ConclusionConflictError(
+      `该结论卡属于对话 ${previousConversationId}，当前对话是 ${incomingConversationId}。`
+      + '默认一对话一卡，请新建结论卡；如确认要在同一张卡跨对话续写，请显式传 allowCrossConversation=true。',
+    );
+  }
+
   const changeNote = requiredText(input.changeNote, '变更说明', CHANGE_NOTE_MAX);
   const beforeMeta = JSON.stringify({
     scope: conclusion.scope,

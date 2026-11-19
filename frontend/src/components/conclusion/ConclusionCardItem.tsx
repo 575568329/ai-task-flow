@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
+import { MessageContent } from '@/components/common/MessageContent';
 import { RevisionTimeline } from './RevisionTimeline';
 
 interface Props {
@@ -85,24 +86,24 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
         <div className="mt-4 space-y-3 text-sm">
           <section>
             <h4 className="text-xs font-semibold">结论/决策</h4>
-            <p className="mt-1 whitespace-pre-wrap">{latest.decision}</p>
+            <div className="mt-1"><MessageContent content={latest.decision} /></div>
           </section>
           {latest.data && (
-            <section>
-              <h4 className="text-xs font-semibold">关键数据</h4>
-              <p className="mt-1 whitespace-pre-wrap">{latest.data}</p>
-            </section>
+            <details className="rounded border px-3 py-2">
+              <summary className="cursor-pointer text-xs font-semibold">关键数据</summary>
+              <div className="mt-2"><MessageContent content={latest.data} /></div>
+            </details>
           )}
           {latest.openItems && (
-            <section>
-              <h4 className="text-xs font-semibold">待办/未决</h4>
-              <p className="mt-1 whitespace-pre-wrap">{latest.openItems}</p>
-            </section>
+            <details className="rounded border px-3 py-2">
+              <summary className="cursor-pointer text-xs font-semibold">待办/未决</summary>
+              <div className="mt-2"><MessageContent content={latest.openItems} /></div>
+            </details>
           )}
           {latest.codeRefs?.length ? (
-            <section>
-              <h4 className="text-xs font-semibold">代码/文件位置</h4>
-              <ul className="mt-1 font-mono text-xs">
+            <details className="rounded border px-3 py-2">
+              <summary className="cursor-pointer text-xs font-semibold">代码/文件位置</summary>
+              <ul className="mt-2 font-mono text-xs">
                 {latest.codeRefs.map((ref, index) => (
                   <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`}>
                     {ref.path}
@@ -111,7 +112,7 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
                   </li>
                 ))}
               </ul>
-            </section>
+            </details>
           ) : null}
           <RevisionTimeline revisions={detail.revisions} />
           <div className="flex gap-2 pt-2">

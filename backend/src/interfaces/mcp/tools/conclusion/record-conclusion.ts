@@ -18,6 +18,10 @@ export const toolDef = {
     properties: {
       cardId: { type: 'string' as const, description: '已有结论卡 id（c_xxx）；传入=追加新版，不传=新建' },
       expectedRev: { type: 'number' as const, description: '追加时建议传：读取到的当前版本号，不一致返回冲突' },
+      allowCrossConversation: {
+        type: 'boolean' as const,
+        description: '默认 false（一对话一卡）：来源对话与卡上一版不同则拒绝追加；仅当用户明确要求跨对话续写同一张卡时传 true',
+      },
       scope: { type: 'string' as const, enum: ['project', 'personal'], description: '项目问题还是个人问题' },
       project: { type: 'string' as const, description: '项目名（scope=project 必填）' },
       version: { type: 'string' as const, description: '版本名（可选，仅项目问题）' },
@@ -73,6 +77,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       // 追加:注意对象里不含 cardId 字段(它在 append 的入参位置,不属于请求体)
       const append: ConclusionAppendRequest = {
         expectedRev: num(args.expectedRev),
+        allowCrossConversation: args.allowCrossConversation === true,
         scope,
         project: text(args.project),
         version: text(args.version),

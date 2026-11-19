@@ -1,4 +1,5 @@
 import type { ConclusionRevision } from '@ai-task-flow/shared';
+import { MessageContent } from '@/components/common/MessageContent';
 
 interface Props {
   revisions: ConclusionRevision[];
@@ -34,18 +35,18 @@ export function RevisionTimeline({ revisions }: Props) {
             <div className="mt-2 space-y-2 text-sm">
               <section>
                 <h4 className="text-xs font-semibold">结论/决策</h4>
-                <p className="whitespace-pre-wrap">{revision.decision}</p>
+                <MessageContent content={revision.decision} />
               </section>
               {revision.data && (
                 <section>
                   <h4 className="text-xs font-semibold">关键数据</h4>
-                  <p className="whitespace-pre-wrap">{revision.data}</p>
+                  <MessageContent content={revision.data} />
                 </section>
               )}
               {revision.openItems && (
                 <section>
                   <h4 className="text-xs font-semibold">待办/未决</h4>
-                  <p className="whitespace-pre-wrap">{revision.openItems}</p>
+                  <MessageContent content={revision.openItems} />
                 </section>
               )}
               {revision.codeRefs?.length ? (

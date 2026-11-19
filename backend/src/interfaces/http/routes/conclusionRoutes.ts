@@ -107,6 +107,12 @@ function assertExpectedRev(body: Record<string, unknown>): void {
   }
 }
 
+function assertAllowCrossConversation(body: Record<string, unknown>): void {
+  if (body.allowCrossConversation !== undefined && typeof body.allowCrossConversation !== 'boolean') {
+    throw new ConclusionValidationError('allowCrossConversation 必须为 boolean');
+  }
+}
+
 const CREATE_STRING_FIELDS = [
   'scope', 'project', 'version', 'title', 'decision', 'data', 'openItems',
   'date', 'changeNote', 'conversationName',
@@ -133,6 +139,7 @@ function validateAppendBody(body: unknown): ConclusionAppendRequest {
   assertTags(obj);
   assertCodeRefs(obj);
   assertExpectedRev(obj);
+  assertAllowCrossConversation(obj);
   return obj as unknown as ConclusionAppendRequest;
 }
 
