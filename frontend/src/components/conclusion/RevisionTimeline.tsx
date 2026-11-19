@@ -1,5 +1,6 @@
 import type { ConclusionRevision } from '@ai-task-flow/shared';
 import { MessageContent } from '@/components/common/MessageContent';
+import { conversationDisplay } from './conversationSource';
 
 interface Props {
   revisions: ConclusionRevision[];
@@ -11,9 +12,7 @@ export function RevisionTimeline({ revisions }: Props) {
   return (
     <ol className="mt-3 space-y-3 border-l pl-4">
       {newestFirst.map((revision) => {
-        const conversationLabel = revision.source.conversationName
-          ?? (revision.source.tool === 'manual' ? '手工创建' : '未命名对话');
-        const shortConversationId = revision.source.conversationId?.slice(0, 8);
+        const conversation = conversationDisplay(revision.source);
 
         return (
         <li key={revision.rev} className="relative">
@@ -22,9 +21,9 @@ export function RevisionTimeline({ revisions }: Props) {
             <span className="text-foreground font-medium">rev {revision.rev}</span>
             <span>{revision.date}</span>
             <span>{revision.source.tool}</span>
-            <span>· {conversationLabel}</span>
-            {shortConversationId && (
-              <span title={revision.source.conversationId}>· ID {shortConversationId}…</span>
+            <span>· {conversation.label}</span>
+            {conversation.shortId && (
+              <span title={revision.source.conversationId}>· ID {conversation.shortId}</span>
             )}
           </div>
           {revision.changeNote && (
@@ -35,18 +34,18 @@ export function RevisionTimeline({ revisions }: Props) {
             <div className="mt-2 space-y-2 text-sm">
               <section>
                 <h4 className="text-xs font-semibold">结论/决策</h4>
-                <MessageContent content={revision.decision} />
+                <MessageContent allowHtml={false} content={revision.decision} />
               </section>
               {revision.data && (
                 <section>
                   <h4 className="text-xs font-semibold">关键数据</h4>
-                  <MessageContent content={revision.data} />
+                  <MessageContent allowHtml={false} content={revision.data} />
                 </section>
               )}
               {revision.openItems && (
                 <section>
                   <h4 className="text-xs font-semibold">待办/未决</h4>
-                  <MessageContent content={revision.openItems} />
+                  <MessageContent allowHtml={false} content={revision.openItems} />
                 </section>
               )}
               {revision.codeRefs?.length ? (

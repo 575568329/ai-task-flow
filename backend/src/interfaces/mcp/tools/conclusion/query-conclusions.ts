@@ -37,8 +37,10 @@ function formatDetail(detail: ConclusionDetail): string {
       detail.version,
       latest.date,
       latest.source.tool,
-      latest.source.conversationName,
-      latest.source.conversationId ? `ID ${latest.source.conversationId}` : undefined,
+      detail.conversationName ?? latest.source.conversationName,
+      detail.conversationId
+        ? `ID ${detail.conversationId}`
+        : latest.source.conversationId ? `ID ${latest.source.conversationId}` : undefined,
     ].filter(Boolean).join(' · '),
     '',
     '## 结论/决策',
@@ -52,13 +54,20 @@ function formatDetail(detail: ConclusionDetail): string {
   }
   lines.push('', '## 演进');
   for (const revision of [...detail.revisions].reverse()) {
-    lines.push(`- rev ${revision.rev} · ${revision.date} · ${revision.tool}${revision.conversationName ? ` · ${revision.conversationName}` : ''}${revision.changeNote ? ` — ${revision.changeNote}` : ''}`);
+    lines.push(
+      `- rev ${revision.rev} · ${revision.date} · ${revision.tool}`
+      + `${revision.conversationName ? ` · ${revision.conversationName}` : ''}`
+      + `${revision.conversationId ? ` · ID ${revision.conversationId}` : ''}`
+      + `${revision.changeNote ? ` — ${revision.changeNote}` : ''}`,
+    );
   }
   if (detail.history?.length) {
     lines.push('', '## 历史全文');
     for (const revision of [...detail.history].reverse()) {
       lines.push(
         `### rev ${revision.rev} · ${revision.date} · ${revision.source.tool}` +
+        `${revision.source.conversationName ? ` · ${revision.source.conversationName}` : ''}` +
+        `${revision.source.conversationId ? ` · ID ${revision.source.conversationId}` : ''}` +
         `${revision.changeNote ? ` — ${revision.changeNote}` : ''}`,
         '',
         revision.decision,

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { ConclusionSource } from '@ai-task-flow/shared';
-import { appendRevision, createConclusion, patchConclusionMeta } from '../ConclusionRules.js';
+import {
+  appendRevision,
+  createConclusion,
+  ensureConversationOwner,
+  patchConclusionMeta,
+} from '../ConclusionRules.js';
 import { ConclusionConflictError, ConclusionValidationError } from '../errors.js';
 
 const source: ConclusionSource = {
@@ -35,6 +40,7 @@ describe('createConclusion', () => {
     expect(c.revisions[0].source.conversationId).toBe('sess-1');
     expect(c.revisions[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(c.createdAt).toBe(1000);
+    expect(c.conversationId).toBe('sess-1');
   });
 
   it('should reject personal scope with project or version', () => {
@@ -126,6 +132,36 @@ describe('appendRevision', () => {
     const rev = appendRevision(c, { data: 'x', changeNote: '人工修订' }, { tool: 'manual' });
     expect(rev.rev).toBe(2);
     expect(rev.source.tool).toBe('manual');
+  });
+
+  it('should keep card ownership after a manual revision', () => {
+    const c = make();
+    appendRevision(c, { data: 'manual', changeNote: '人工修订' }, { tool: 'manual' });
+    expect(() => appendRevision(
+      c,
+      { data: 'B', changeNote: 'B' },
+      { ...source, conversationId: 'sess-2' },
+    )).toThrow(ConclusionConflictError);
+  });
+
+  it('should keep original owner after explicit cross-conversation append', () => {
+    const c = make();
+    appendRevision(
+      c,
+      { data: 'B', changeNote: 'B', allowCrossConversation: true },
+      { ...source, conversationId: 'sess-2' },
+    );
+    const rev = appendRevision(c, { data: 'A2', changeNote: 'A again' }, source);
+    expect(rev.rev).toBe(3);
+    expect(c.conversationId).toBe('sess-1');
+  });
+
+  it('should backfill owner from the first revision with conversationId', () => {
+    const c = make();
+    delete c.conversationId;
+    delete c.conversationName;
+    ensureConversationOwner(c);
+    expect(c.conversationId).toBe('sess-1');
   });
 
   it('should allow metadata-only append', () => {

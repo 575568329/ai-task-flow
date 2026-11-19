@@ -14,6 +14,11 @@ import { cn } from '@/lib/utils';
 
 interface MessageContentProps {
   content: string;
+  /**
+   * 是否允许 raw HTML。聊天/知识库保持 true；
+   * 结论卡内容可能来自网页摘要等不可信来源，调用方应传 false 关闭 rehype-raw。
+   */
+  allowHtml?: boolean;
 }
 
 const components: Components = {
@@ -90,13 +95,16 @@ const components: Components = {
 };
 
 // memo:content 不变跳过 ReactMarkdown 重新解析(滚动/父级重渲时不重复解析 markdown,显著降 CPU)
-export const MessageContent = memo(function MessageContent({ content }: MessageContentProps) {
+export const MessageContent = memo(function MessageContent({
+  content,
+  allowHtml = true,
+}: MessageContentProps) {
   return (
     <div className="text-sm break-words">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        remarkRehypeOptions={{ allowDangerousHtml: true }}
-        rehypePlugins={[rehypeRaw]}
+        remarkRehypeOptions={{ allowDangerousHtml: allowHtml }}
+        rehypePlugins={allowHtml ? [rehypeRaw] : []}
         components={components}
       >
         {content}

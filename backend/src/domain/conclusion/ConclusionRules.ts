@@ -125,6 +125,14 @@ export function createConclusion(
   now = Date.now(),
 ): Conclusion {
   const meta = validateScope(input.scope, input.project, input.version);
+  const conversationId = source.conversationId?.trim() || undefined;
+  const conversationName = input.conversationName?.trim() || source.conversationName?.trim() || undefined;
+  const revisionSource: ConclusionSource = { ...source };
+  if (conversationId) revisionSource.conversationId = conversationId;
+  else delete revisionSource.conversationId;
+  if (conversationName) revisionSource.conversationName = conversationName;
+  else delete revisionSource.conversationName;
+
   const revision: ConclusionRevision = {
     rev: 1,
     decision: requiredText(input.decision, '结论/决策'),
@@ -134,7 +142,7 @@ export function createConclusion(
     changeNote: input.changeNote
       ? requiredText(input.changeNote, '变更说明', CHANGE_NOTE_MAX)
       : undefined,
-    source: { ...source, conversationName: input.conversationName ?? source.conversationName },
+    source: revisionSource,
     date: validateDate(input.date),
     createdAt: now,
   };
@@ -143,12 +151,33 @@ export function createConclusion(
     scope: input.scope,
     project: meta.project,
     version: meta.version,
+    conversationId,
+    conversationName,
     title: normalizeTitle(input.title),
     tags: validateTags(input.tags),
     revisions: [revision],
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** 旧数据/人工先建的卡没有卡片级归属，从第一版带 ID 的 revision 回填。 */
+export function ensureConversationOwner(conclusion: Conclusion): void {
+  if (conclusion.conversationId) {
+    if (!conclusion.conversationName) {
+      const name = conclusion.revisions
+        .find((r) => r.source.conversationName?.trim())
+        ?.source.conversationName?.trim();
+      if (name) conclusion.conversationName = name;
+    }
+    return;
+  }
+  const firstWithId = conclusion.revisions.find((r) => r.source.conversationId?.trim())?.source;
+  if (!firstWithId?.conversationId) return;
+  conclusion.conversationId = firstWithId.conversationId.trim();
+  if (firstWithId.conversationName?.trim()) {
+    conclusion.conversationName = firstWithId.conversationName.trim();
+  }
 }
 
 export function appendRevision(
@@ -159,26 +188,35 @@ export function appendRevision(
 ): ConclusionRevision {
   const latest = conclusion.revisions[conclusion.revisions.length - 1];
   if (!latest) throw new ConclusionValidationError('结论卡没有历史版本');
+  ensureConversationOwner(conclusion);
   if (input.expectedRev !== undefined && input.expectedRev !== latest.rev) {
     throw new ConclusionConflictError(
       `版本已更新：期望 rev ${input.expectedRev}，当前 rev ${latest.rev}`,
     );
   }
 
-  // 默认一对话一卡：人工编辑没有 conversationId，视为显式操作放行；
-  // AI 写入若来自另一个会话，必须显式 allowCrossConversation 才允许续写同一张卡。
-  const previousConversationId = latest.source.conversationId;
-  const incomingConversationId = source.conversationId;
+  // 默认一对话一卡：归属看卡片级 owner，而不是 latest——
+  // 否则一次人工编辑（无 conversationId）就会把边界重置。
+  const ownerConversationId = conclusion.conversationId;
+  const incomingConversationId = source.conversationId?.trim() || undefined;
   if (
     !input.allowCrossConversation
-    && previousConversationId
+    && ownerConversationId
     && incomingConversationId
-    && previousConversationId !== incomingConversationId
+    && ownerConversationId !== incomingConversationId
   ) {
     throw new ConclusionConflictError(
-      `该结论卡属于对话 ${previousConversationId}，当前对话是 ${incomingConversationId}。`
+      `该结论卡属于对话 ${ownerConversationId}，当前对话是 ${incomingConversationId}。`
       + '默认一对话一卡，请新建结论卡；如确认要在同一张卡跨对话续写，请显式传 allowCrossConversation=true。',
     );
+  }
+
+  // 人工先建的卡还没有归属：第一次由 AI 追加时补上（人工编辑不会改变已有归属）。
+  if (!conclusion.conversationId && incomingConversationId) {
+    conclusion.conversationId = incomingConversationId;
+    if (source.conversationName?.trim()) {
+      conclusion.conversationName = source.conversationName.trim();
+    }
   }
 
   const changeNote = requiredText(input.changeNote, '变更说明', CHANGE_NOTE_MAX);
@@ -220,6 +258,13 @@ export function appendRevision(
     throw new ConclusionValidationError('没有任何变化，未生成新版本');
   }
 
+  const revisionConversationName = input.conversationName?.trim() || source.conversationName?.trim() || undefined;
+  const revisionSource: ConclusionSource = { ...source };
+  if (incomingConversationId) revisionSource.conversationId = incomingConversationId;
+  else delete revisionSource.conversationId;
+  if (revisionConversationName) revisionSource.conversationName = revisionConversationName;
+  else delete revisionSource.conversationName;
+
   const revision: ConclusionRevision = {
     rev: latest.rev + 1,
     decision: merged.decision,
@@ -227,7 +272,7 @@ export function appendRevision(
     openItems: merged.openItems,
     codeRefs: merged.codeRefs,
     changeNote,
-    source: { ...source, conversationName: input.conversationName ?? source.conversationName },
+    source: revisionSource,
     date: validateDate(input.date),
     createdAt: now,
   };

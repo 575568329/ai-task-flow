@@ -33,6 +33,9 @@ export interface Conclusion {
   scope: ProblemScope;
   project?: string;
   version?: string;
+  /** 卡片归属对话：创建时确定，人工编辑不改变（一对话一卡的守卫依据） */
+  conversationId?: string;
+  conversationName?: string;
   title: string;
   tags?: string[];
   revisions: ConclusionRevision[];
@@ -121,6 +124,7 @@ export interface ConclusionRevisionSummary {
   changeNote?: string;
   createdAt: number;
   tool: string;
+  conversationId?: string;
   conversationName?: string;
 }
 
@@ -129,6 +133,8 @@ export interface ConclusionDetail {
   scope: ProblemScope;
   project?: string;
   version?: string;
+  conversationId?: string;
+  conversationName?: string;
   title: string;
   tags?: string[];
   rev: number;

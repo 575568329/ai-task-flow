@@ -112,6 +112,9 @@ export interface Conclusion {
   project?: string;
   /** 仅项目问题可有，可选 */
   version?: string;
+  /** 卡片归属对话：创建时确定，人工编辑不改变；一对话一卡的守卫依据 */
+  conversationId?: string;
+  conversationName?: string;
   title: string;
   tags?: string[];
   /** 按 rev 升序；最新 = 最后一版 */
@@ -228,7 +231,7 @@ export interface ConclusionData {
 | `decision: "..."` | 替换该节 |
 | `data: ""` / `codeRefs: []` | 清空该节 |
 | 只改了 `title` / `tags` 等元信息 | 允许，但仍需 `changeNote` |
-| 来源 `conversationId` 与上一版不同 | 409（默认一对话一卡）；显式 `allowCrossConversation=true` 才允许 |
+| 来源 `conversationId` 与卡片归属不同 | 409（默认一对话一卡，归属看卡片级字段而非 latest）；显式 `allowCrossConversation=true` 才允许 |
 | 没有任何变化 | 400，不产生空版本 |
 
 **返回：**
@@ -344,7 +347,7 @@ interface ConclusionSummary {
 - 人工追加：服务端强制 `source.tool='manual'`；`changeNote` 默认“人工修订”（前端填入，后端仍要求非空）。
 - 追加合并语义与 MCP 一致：省略字段沿用上一版，显式空值清空；前端编辑表单加载完整最新版后提交，行为可预测。
 - 追加可带 `expectedRev`；与当前最新版不一致 → 409，前端提示“已被其他操作更新，请刷新后重试”。
-- 默认一对话一卡：AI 追加时若来源对话与上一版不同 → 409；人工编辑（`manual`，无 conversationId）放行；用户确认跨对话续写时才传 `allowCrossConversation=true`。
+- 默认一对话一卡：AI 追加时若来源对话与**卡片归属**（创建时确定）不同 → 409；人工编辑（`manual`，无 conversationId）放行且不改变归属；用户确认跨对话续写时才传 `allowCrossConversation=true`，该次追加也不改变归属。
 - PATCH 不允许修改 `revisions`；同样执行第 4.2 节全部不变量校验；修改标题等元信息不产生新版本，但 PATCH 前备份。
 - DELETE 返回 `{ deleted: true }`；备份路径不返回，页面只提示“已自动备份”。
 

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
+import { conversationDisplay } from './conversationSource';
 import { RevisionTimeline } from './RevisionTimeline';
 
 interface Props {
@@ -18,10 +19,8 @@ interface Props {
 
 export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit, onPatch, onDelete }: Props) {
   const latest = detail?.revisions[detail.revisions.length - 1];
-  const conversationId = summary.source.conversationId;
-  const conversationLabel = summary.source.conversationName
-    ?? (summary.source.tool === 'manual' ? '手工创建' : '未命名对话');
-  const shortConversationId = conversationId ? `${conversationId.slice(0, 8)}…` : undefined;
+  const conversationId = summary.source.conversationId?.trim();
+  const conversation = conversationDisplay(summary.source);
 
   const copyConversationId = async () => {
     if (!conversationId) return;
@@ -32,8 +31,9 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
     try {
       await navigator.clipboard.writeText(conversationId);
       toast.success('对话 ID 已复制');
-    } catch {
-      toast.error('复制失败');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`复制失败：${message}`);
     }
   };
 
@@ -56,15 +56,15 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             {summary.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
           </div>
           <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-            <span>对话：{conversationLabel}</span>
-            {conversationId && shortConversationId && (
+            <span>对话：{conversation.label}</span>
+            {conversationId && conversation.shortId && (
               <button
                 type="button"
                 className="hover:text-foreground inline-flex items-center gap-1 font-mono"
                 title={conversationId}
                 onClick={() => void copyConversationId()}
               >
-                ID {shortConversationId}
+                ID {conversation.shortId}
                 <Copy className="size-3" />
               </button>
             )}
@@ -86,18 +86,18 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
         <div className="mt-4 space-y-3 text-sm">
           <section>
             <h4 className="text-xs font-semibold">结论/决策</h4>
-            <div className="mt-1"><MessageContent content={latest.decision} /></div>
+            <div className="mt-1"><MessageContent allowHtml={false} content={latest.decision} /></div>
           </section>
           {latest.data && (
             <details className="rounded border px-3 py-2">
               <summary className="cursor-pointer text-xs font-semibold">关键数据</summary>
-              <div className="mt-2"><MessageContent content={latest.data} /></div>
+              <div className="mt-2"><MessageContent allowHtml={false} content={latest.data} /></div>
             </details>
           )}
           {latest.openItems && (
             <details className="rounded border px-3 py-2">
               <summary className="cursor-pointer text-xs font-semibold">待办/未决</summary>
-              <div className="mt-2"><MessageContent content={latest.openItems} /></div>
+              <div className="mt-2"><MessageContent allowHtml={false} content={latest.openItems} /></div>
             </details>
           )}
           {latest.codeRefs?.length ? (

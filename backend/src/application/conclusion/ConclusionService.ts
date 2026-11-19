@@ -19,6 +19,7 @@ import type { ConclusionRepository } from '../../domain/conclusion/repositories/
 import {
   appendRevision,
   createConclusion,
+  ensureConversationOwner,
   patchConclusionMeta,
 } from '../../domain/conclusion/ConclusionRules.js';
 import { ConclusionNotFoundError } from '../../domain/conclusion/errors.js';
@@ -109,7 +110,9 @@ export class ConclusionService {
 
   async get(cardId: string): Promise<Conclusion> {
     const data = await this.repo.load();
-    return findConclusion(data, cardId);
+    const card = findConclusion(data, cardId);
+    ensureConversationOwner(card);
+    return card;
   }
 
   async getDetail(cardId: string, includeHistory = false): Promise<ConclusionDetail> {
@@ -120,6 +123,8 @@ export class ConclusionService {
       scope: card.scope,
       project: card.project,
       version: card.version,
+      conversationId: card.conversationId,
+      conversationName: card.conversationName,
       title: card.title,
       tags: card.tags,
       rev: latest.rev,
@@ -130,6 +135,7 @@ export class ConclusionService {
         changeNote: revision.changeNote,
         createdAt: revision.createdAt,
         tool: revision.source.tool,
+        conversationId: revision.source.conversationId,
         conversationName: revision.source.conversationName,
       })),
       ...(includeHistory ? { history: card.revisions } : {}),
@@ -150,6 +156,7 @@ export class ConclusionService {
     }> = [];
 
     for (const card of data.conclusions) {
+      ensureConversationOwner(card);
       if (input.cardId && card.id !== input.cardId) continue;
       if (input.scope && card.scope !== input.scope) continue;
       if (input.project && card.project !== input.project) continue;
@@ -189,8 +196,8 @@ export class ConclusionService {
         latestDecisionExcerpt: excerpt(latest.decision),
         source: {
           tool: latest.source.tool,
-          conversationId: latest.source.conversationId,
-          conversationName: latest.source.conversationName,
+          conversationId: card.conversationId ?? latest.source.conversationId,
+          conversationName: card.conversationName ?? latest.source.conversationName,
         },
         matchedRev,
         createdAt: card.createdAt,
