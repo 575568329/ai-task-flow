@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `ea6a920`(feat(conclusion): MCP 写入默认新建——已知 cardId 才追加，keyword 仅用于查询) |
-| 构建时间 | 2026-11-19 13:42 |
+| dist 构建来源 commit | `0c1f2b9`(feat(conclusion): 按会话自动 upsert——有卡续写/无卡新建) |
+| 构建时间 | 2026-11-19 14:01 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
