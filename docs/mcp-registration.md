@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `af7ddc2`(feat(conclusion): 卡片展示对话名称与ID——短ID可复制) |
-| 构建时间 | 2026-11-18 18:04 |
+| dist 构建来源 commit | `4b0ee0c`(feat(conclusion): 一对话一卡 + 卡片 Markdown 折叠展示) |
+| 构建时间 | 2026-11-19 10:09 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
