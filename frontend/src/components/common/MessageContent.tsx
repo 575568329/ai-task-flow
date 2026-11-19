@@ -19,6 +19,8 @@ interface MessageContentProps {
    * 结论卡内容可能来自网页摘要等不可信来源，调用方应传 false 关闭 rehype-raw。
    */
   allowHtml?: boolean;
+  /** 外层追加样式（如结论卡的阅读宽度/行高/列表缩进） */
+  className?: string;
 }
 
 const components: Components = {
@@ -98,9 +100,10 @@ const components: Components = {
 export const MessageContent = memo(function MessageContent({
   content,
   allowHtml = true,
+  className,
 }: MessageContentProps) {
   return (
-    <div className="text-sm break-words">
+    <div className={cn('text-sm break-words', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         remarkRehypeOptions={{ allowDangerousHtml: allowHtml }}

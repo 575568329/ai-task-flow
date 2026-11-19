@@ -1,11 +1,18 @@
+import { useState } from 'react';
 import type { Conclusion, ConclusionSummary } from '@ai-task-flow/shared';
-import { ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
+import {
+  ChevronDown, ChevronRight, Code2, Copy, Database, ListTodo, Pencil, Target, Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
 import { conversationDisplay } from './conversationSource';
+import { CONCLUSION_MARKDOWN_CLASS, stripSectionHeading } from './contentFormat';
 import { RevisionTimeline } from './RevisionTimeline';
+
+/** 超过这个长度的结论默认折叠，避免一屏被长文占满 */
+const LONG_TEXT_THRESHOLD = 1200;
 
 interface Props {
   summary: ConclusionSummary;
@@ -15,6 +22,29 @@ interface Props {
   onEdit: () => void;
   onPatch: () => void;
   onDelete: () => void;
+}
+
+function LongMarkdown({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+  const text = stripSectionHeading(content);
+
+  if (text.length <= LONG_TEXT_THRESHOLD) {
+    return <MessageContent allowHtml={false} content={text} className={CONCLUSION_MARKDOWN_CLASS} />;
+  }
+
+  return (
+    <div>
+      <div className={open ? '' : 'relative max-h-72 overflow-hidden'}>
+        <MessageContent allowHtml={false} content={text} className={CONCLUSION_MARKDOWN_CLASS} />
+        {!open && (
+          <div className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t to-transparent" />
+        )}
+      </div>
+      <Button variant="ghost" size="sm" className="mt-1" onClick={() => setOpen((value) => !value)}>
+        {open ? '收起' : '展开全文'}
+      </Button>
+    </div>
+  );
 }
 
 export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit, onPatch, onDelete }: Props) {
@@ -55,20 +85,22 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             <span>{summary.source.tool}</span>
             {summary.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
           </div>
-          <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-            <span>对话：{conversation.label}</span>
-            {conversationId && conversation.shortId && (
-              <button
-                type="button"
-                className="hover:text-foreground inline-flex items-center gap-1 font-mono"
-                title={conversationId}
-                onClick={() => void copyConversationId()}
-              >
-                ID {conversation.shortId}
-                <Copy className="size-3" />
-              </button>
-            )}
-          </div>
+          {!expanded && (
+            <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <span>对话：{conversation.label}</span>
+              {conversationId && conversation.shortId && (
+                <button
+                  type="button"
+                  className="hover:text-foreground inline-flex items-center gap-1 font-mono"
+                  title={conversationId}
+                  onClick={() => void copyConversationId()}
+                >
+                  ID {conversation.shortId}
+                  <Copy className="size-3" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <Button variant="ghost" size="sm" onClick={onToggle} title="展开/收起">
           {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
@@ -83,49 +115,115 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
       )}
 
       {expanded && latest && (
-        <div className="mt-4 space-y-3 text-sm">
-          <section>
-            <h4 className="text-xs font-semibold">结论/决策</h4>
-            <div className="mt-1"><MessageContent allowHtml={false} content={latest.decision} /></div>
-          </section>
-          {latest.data && (
-            <details className="rounded border px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold">关键数据</summary>
-              <div className="mt-2"><MessageContent allowHtml={false} content={latest.data} /></div>
-            </details>
-          )}
-          {latest.openItems && (
-            <details className="rounded border px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold">待办/未决</summary>
-              <div className="mt-2"><MessageContent allowHtml={false} content={latest.openItems} /></div>
-            </details>
-          )}
-          {latest.codeRefs?.length ? (
-            <details className="rounded border px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold">代码/文件位置</summary>
-              <ul className="mt-2 font-mono text-xs">
-                {latest.codeRefs.map((ref, index) => (
-                  <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`}>
-                    {ref.path}
-                    {ref.startLine ? `:${ref.startLine}${ref.endLine ? `-${ref.endLine}` : ''}` : ''}
-                    {ref.note ? ` — ${ref.note}` : ''}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-          <RevisionTimeline revisions={detail.revisions} />
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Pencil className="mr-1 size-3.5" />编辑（追加新版）
-            </Button>
-            <Button variant="outline" size="sm" onClick={onPatch}>
-              改信息
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onDelete}>
-              <Trash2 className="mr-1 size-3.5" />删除
-            </Button>
+        <div className="mt-4 grid gap-6 @4xl:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="min-w-0 space-y-5">
+            <section>
+              <h4 className="flex items-center gap-2 border-b pb-1 text-sm font-semibold">
+                <Target className="size-4" />结论/决策
+              </h4>
+              <div className="mt-2"><LongMarkdown content={latest.decision} /></div>
+            </section>
+
+            {latest.data && (
+              <details className="bg-muted/20 rounded-lg border">
+                <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
+                  <Database className="size-4" />关键数据
+                </summary>
+                <div className="px-3 pb-3">
+                  <MessageContent
+                    allowHtml={false}
+                    content={stripSectionHeading(latest.data)}
+                    className={CONCLUSION_MARKDOWN_CLASS}
+                  />
+                </div>
+              </details>
+            )}
+
+            {latest.openItems && (
+              <details className="bg-muted/20 rounded-lg border">
+                <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
+                  <ListTodo className="size-4" />待办/未决
+                </summary>
+                <div className="px-3 pb-3">
+                  <MessageContent
+                    allowHtml={false}
+                    content={stripSectionHeading(latest.openItems)}
+                    className={CONCLUSION_MARKDOWN_CLASS}
+                  />
+                </div>
+              </details>
+            )}
+
+            {latest.codeRefs?.length ? (
+              <details className="bg-muted/20 rounded-lg border">
+                <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
+                  <Code2 className="size-4" />代码/文件位置
+                </summary>
+                <ul className="px-3 pb-3 font-mono text-xs leading-6">
+                  {latest.codeRefs.map((ref, index) => (
+                    <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`}>
+                      {ref.path}
+                      {ref.startLine ? `:${ref.startLine}${ref.endLine ? `-${ref.endLine}` : ''}` : ''}
+                      {ref.note ? ` — ${ref.note}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
+
+          <aside className="space-y-4 border-t pt-4 @4xl:border-t-0 @4xl:border-l @4xl:pl-5 @4xl:pt-0">
+            <div className="rounded-lg border p-3">
+              <h4 className="text-xs font-semibold">来源</h4>
+              <dl className="text-muted-foreground mt-2 space-y-1 text-xs">
+                <div className="flex justify-between gap-2">
+                  <dt>工具</dt>
+                  <dd>{summary.source.tool}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>对话</dt>
+                  <dd className="truncate text-right" title={conversation.label}>{conversation.label}</dd>
+                </div>
+                {conversationId && conversation.shortId && (
+                  <div className="flex justify-between gap-2">
+                    <dt>ID</dt>
+                    <dd>
+                      <button
+                        type="button"
+                        className="hover:text-foreground inline-flex items-center gap-1 font-mono"
+                        title={conversationId}
+                        onClick={() => void copyConversationId()}
+                      >
+                        {conversation.shortId}
+                        <Copy className="size-3" />
+                      </button>
+                    </dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-2">
+                  <dt>日期</dt>
+                  <dd>{summary.latestDate}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div>
+              <h4 className="mb-2 text-xs font-semibold">演进 ({summary.rev})</h4>
+              <RevisionTimeline revisions={detail.revisions} compact />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Button variant="outline" size="sm" onClick={onEdit}>
+                <Pencil className="mr-1 size-3.5" />编辑（追加新版）
+              </Button>
+              <Button variant="outline" size="sm" onClick={onPatch}>
+                改信息
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onDelete}>
+                <Trash2 className="mr-1 size-3.5" />删除
+              </Button>
+            </div>
+          </aside>
         </div>
       )}
     </article>

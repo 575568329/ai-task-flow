@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { conversationDisplay, shortConversationId } from '../conversationSource';
+import { stripSectionHeading } from '../contentFormat';
 
 describe('shortConversationId', () => {
   it('should keep tool:pid for process fingerprints', () => {
@@ -12,6 +13,17 @@ describe('shortConversationId', () => {
 
   it('should not add an ellipsis to already-short ids', () => {
     expect(shortConversationId('sess-1')).toBe('sess-1');
+  });
+});
+
+describe('stripSectionHeading', () => {
+  it('should remove a leading duplicated section heading', () => {
+    expect(stripSectionHeading('## 结论/决策\n1. 内容')).toBe('1. 内容');
+    expect(stripSectionHeading('### 关键数据\n- 数据')).toBe('- 数据');
+  });
+
+  it('should keep content without a leading section heading', () => {
+    expect(stripSectionHeading('1. 内容')).toBe('1. 内容');
   });
 });
 
