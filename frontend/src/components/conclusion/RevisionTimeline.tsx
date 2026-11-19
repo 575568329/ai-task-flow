@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ConclusionRevision } from '@ai-task-flow/shared';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Code2, Database, ListTodo, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { MessageContent } from '@/components/common/MessageContent';
@@ -57,7 +57,10 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
       </ol>
 
       <Sheet open={active !== null} onOpenChange={(open) => { if (!open) setActive(null); }}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-2xl">
+        <SheetContent
+          side="right"
+          className="w-full overflow-y-auto p-6 sm:w-[min(1400px,92vw)] sm:max-w-none"
+        >
           {active && (
             <>
               <SheetHeader>
@@ -71,40 +74,58 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
                 </SheetDescription>
               </SheetHeader>
 
-              <div className="mt-5 space-y-5">
+              <div className="mt-5 space-y-3">
                 <WorkStageBadge stage={active.stage} />
-                <section>
-                  <h4 className="text-sm font-semibold">结论/决策</h4>
-                  <MessageContent
-                    allowHtml={false}
-                    content={normalizeLegacyMarkdown(active.decision)}
-                    className={CONCLUSION_MARKDOWN_CLASS}
-                  />
-                </section>
+
+                <details open className="bg-muted/20 rounded-lg border">
+                  <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-semibold">
+                    <Target className="size-4" />结论/决策
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <MessageContent
+                      allowHtml={false}
+                      content={normalizeLegacyMarkdown(active.decision)}
+                      className={CONCLUSION_MARKDOWN_CLASS}
+                    />
+                  </div>
+                </details>
+
                 {active.data && (
-                  <section>
-                    <h4 className="text-sm font-semibold">关键数据</h4>
-                    <MessageContent
-                      allowHtml={false}
-                      content={normalizeLegacyMarkdown(active.data)}
-                      className={CONCLUSION_MARKDOWN_CLASS}
-                    />
-                  </section>
+                  <details className="bg-muted/20 rounded-lg border">
+                    <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-semibold">
+                      <Database className="size-4" />关键数据
+                    </summary>
+                    <div className="px-4 pb-4">
+                      <MessageContent
+                        allowHtml={false}
+                        content={normalizeLegacyMarkdown(active.data)}
+                        className={CONCLUSION_MARKDOWN_CLASS}
+                      />
+                    </div>
+                  </details>
                 )}
+
                 {active.openItems && (
-                  <section>
-                    <h4 className="text-sm font-semibold">待办/未决</h4>
-                    <MessageContent
-                      allowHtml={false}
-                      content={normalizeLegacyMarkdown(active.openItems)}
-                      className={CONCLUSION_MARKDOWN_CLASS}
-                    />
-                  </section>
+                  <details className="bg-muted/20 rounded-lg border">
+                    <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-semibold">
+                      <ListTodo className="size-4" />待办/未决
+                    </summary>
+                    <div className="px-4 pb-4">
+                      <MessageContent
+                        allowHtml={false}
+                        content={normalizeLegacyMarkdown(active.openItems)}
+                        className={CONCLUSION_MARKDOWN_CLASS}
+                      />
+                    </div>
+                  </details>
                 )}
+
                 {active.codeRefs?.length ? (
-                  <section>
-                    <h4 className="text-sm font-semibold">代码/文件位置</h4>
-                    <ul className="mt-2 divide-y rounded-md border text-xs">
+                  <details className="bg-muted/20 rounded-lg border">
+                    <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-semibold">
+                      <Code2 className="size-4" />代码/文件位置
+                    </summary>
+                    <ul className="mx-4 mb-4 divide-y rounded-md border text-xs">
                       {active.codeRefs.map((ref, index) => (
                         <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`} className="px-3 py-2">
                           <code className="break-all font-mono">
@@ -115,7 +136,7 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
                         </li>
                       ))}
                     </ul>
-                  </section>
+                  </details>
                 ) : null}
               </div>
             </>

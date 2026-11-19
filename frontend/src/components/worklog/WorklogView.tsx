@@ -233,7 +233,7 @@ export function WorklogView() {
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">
                 {isSearching
                   ? `搜索「${keyword.trim()}」`
@@ -255,9 +255,9 @@ export function WorklogView() {
                 />
                 {visibleEntries.length > 0 && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-6 px-2 text-xs"
+                    className="h-8 shrink-0 px-3 text-xs"
                     onClick={() => setExpandAll((value) => !(value ?? false))}
                   >
                     {expandAll ? '全部收起' : '全部展开'}
