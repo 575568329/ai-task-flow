@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
 import { conversationDisplay } from './conversationSource';
-import { CONCLUSION_MARKDOWN_CLASS, stripSectionHeading } from './contentFormat';
+import { CONCLUSION_MARKDOWN_CLASS, plainTextExcerpt, stripSectionHeading } from './contentFormat';
 import { RevisionTimeline } from './RevisionTimeline';
 
 /** 超过这个长度的结论默认折叠，避免一屏被长文占满 */
@@ -109,8 +109,8 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
       </div>
 
       {!expanded && (
-        <p className="text-muted-foreground mt-3 line-clamp-3 text-sm whitespace-pre-wrap">
-          {summary.latestDecisionExcerpt}
+        <p className="text-muted-foreground mt-3 line-clamp-3 text-sm">
+          {plainTextExcerpt(summary.latestDecisionExcerpt)}
         </p>
       )}
 

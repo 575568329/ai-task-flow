@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { conversationDisplay, shortConversationId } from '../conversationSource';
-import { stripSectionHeading } from '../contentFormat';
+import { plainTextExcerpt, stripSectionHeading } from '../contentFormat';
 
 describe('shortConversationId', () => {
   it('should keep tool:pid for process fingerprints', () => {
@@ -24,6 +24,17 @@ describe('stripSectionHeading', () => {
 
   it('should keep content without a leading section heading', () => {
     expect(stripSectionHeading('1. 内容')).toBe('1. 内容');
+  });
+});
+
+describe('plainTextExcerpt', () => {
+  it('should strip markdown markers for the collapsed preview', () => {
+    expect(plainTextExcerpt('**目标**：\n1. 第一点\n2. 第二点')).toBe('目标： 第一点 第二点');
+    expect(plainTextExcerpt('使用 `code` 验证')).toBe('使用 code 验证');
+  });
+
+  it('should truncate long excerpts', () => {
+    expect(plainTextExcerpt('一二三四五', 3)).toBe('一二三…');
   });
 });
 
