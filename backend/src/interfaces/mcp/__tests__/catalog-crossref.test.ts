@@ -36,4 +36,11 @@ describe('MCP tool catalog cross-references', () => {
     expect(description).toContain('已知 cardId');
     expect(description).toContain('禁止在已知 cardId 时再用 keyword');
   });
+
+  it('should include the conclusion format contract', () => {
+    const description = descriptionOf(CONCLUSION_TOOL_CATALOG, 'record_conclusion');
+    expect(description).toContain('禁止用 ①②③');
+    expect(description).toContain('data 也必须一条一行');
+    expect(description).toContain('排查/对账类骨架');
+  });
 });

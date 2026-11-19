@@ -177,6 +177,14 @@ try {
     'record_conclusion 描述应禁止写前 keyword 预搜索',
   );
   assert(
+    byName.get('record_conclusion').description.includes('禁止用 ①②③'),
+    'record_conclusion 描述应包含正文格式契约（禁止 ①②③）',
+  );
+  assert(
+    byName.get('record_conclusion').description.includes('data 也必须一条一行'),
+    'record_conclusion 描述应要求 data 分条',
+  );
+  assert(
     byName.get('query_conclusions').description.includes('已知 cardId'),
     'query_conclusions 描述应优先使用 cardId',
   );

@@ -5,6 +5,16 @@ export interface ConclusionToolMeta {
   userPromptExample: string;
 }
 
+/** 结论卡正文格式契约：写进 record_conclusion 描述，Claude/ZCode 共同遵守。 */
+export const CONCLUSION_FORMAT_GUIDE =
+  '正文格式：decision 只写结论/决策/发现（1–3 句总结 + 3–6 条编号列表），' +
+  '证据/指标/日志放 data，待办放 openItems，文件放 codeRefs。' +
+  '列表用 1./-，列表前后空行，二级缩进两个空格；禁止用 ①②③ 串成一段，' +
+  '禁止在正文重复「结论/决策」「关键数据」「待办」等节标题。' +
+  'data 也必须一条一行，按主题加小标题，禁止长段落。' +
+  '功能建设类骨架：背景 → 结论 → 关键决策 → 实现/影响 → 验证；' +
+  '排查/对账类骨架：现象 → 结论 → 处置 → 证据 → 遗留。';
+
 export const CONCLUSION_TOOL_CATALOG: ConclusionToolMeta[] = [
   {
     name: 'record_conclusion',
@@ -16,6 +26,7 @@ export const CONCLUSION_TOOL_CATALOG: ConclusionToolMeta[] = [
       '只有用户明确要求更新另一张指定卡时才传 cardId；显式跨对话更新需 allowCrossConversation=true。' +
       '追加时省略的字段沿用上一版，显式传 "" 或 [] 表示清空。' +
       '建议填写 conversationName（本次对话主题），便于人区分来源；对话 ID 会自动采集。' +
+      CONCLUSION_FORMAT_GUIDE +
       '禁止记录密钥、令牌、个人敏感信息。' +
       '本工具不记录 diff；代码变更/文件/行号请用 record_work。',
     whenToUse:
