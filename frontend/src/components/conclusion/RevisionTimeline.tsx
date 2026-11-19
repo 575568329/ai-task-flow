@@ -2,7 +2,7 @@ import type { ConclusionRevision } from '@ai-task-flow/shared';
 import { MessageContent } from '@/components/common/MessageContent';
 import { cn } from '@/lib/utils';
 import { conversationDisplay } from './conversationSource';
-import { CONCLUSION_MARKDOWN_CLASS, stripSectionHeading } from './contentFormat';
+import { CONCLUSION_MARKDOWN_CLASS, normalizeLegacyMarkdown } from './contentFormat';
 
 interface Props {
   revisions: ConclusionRevision[];
@@ -41,7 +41,7 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
                 <h4 className="text-xs font-semibold">结论/决策</h4>
                 <MessageContent
                   allowHtml={false}
-                  content={stripSectionHeading(revision.decision)}
+                  content={normalizeLegacyMarkdown(revision.decision)}
                   className={CONCLUSION_MARKDOWN_CLASS}
                 />
               </section>
@@ -50,7 +50,7 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
                   <h4 className="text-xs font-semibold">关键数据</h4>
                   <MessageContent
                     allowHtml={false}
-                    content={stripSectionHeading(revision.data)}
+                    content={normalizeLegacyMarkdown(revision.data)}
                     className={CONCLUSION_MARKDOWN_CLASS}
                   />
                 </section>
@@ -60,7 +60,7 @@ export function RevisionTimeline({ revisions, compact = false }: Props) {
                   <h4 className="text-xs font-semibold">待办/未决</h4>
                   <MessageContent
                     allowHtml={false}
-                    content={stripSectionHeading(revision.openItems)}
+                    content={normalizeLegacyMarkdown(revision.openItems)}
                     className={CONCLUSION_MARKDOWN_CLASS}
                   />
                 </section>

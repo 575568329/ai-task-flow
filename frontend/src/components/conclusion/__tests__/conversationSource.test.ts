@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { conversationDisplay, shortConversationId } from '../conversationSource';
-import { plainTextExcerpt, stripSectionHeading } from '../contentFormat';
+import { normalizeLegacyMarkdown, plainTextExcerpt, stripSectionHeading } from '../contentFormat';
 
 describe('shortConversationId', () => {
   it('should keep tool:pid for process fingerprints', () => {
@@ -24,6 +24,30 @@ describe('stripSectionHeading', () => {
 
   it('should keep content without a leading section heading', () => {
     expect(stripSectionHeading('1. 内容')).toBe('1. 内容');
+  });
+});
+
+describe('normalizeLegacyMarkdown', () => {
+  it('should split inline circled enumerations into bullet lines', () => {
+    expect(normalizeLegacyMarkdown('开头①第一点 ②第二点'))
+      .toBe('开头\n\n- ① 第一点\n\n- ② 第二点');
+  });
+
+  it('should split inline numbered items after semicolons', () => {
+    expect(normalizeLegacyMarkdown('a; 2. b; 3. c')).toBe('a\n2. b\n3. c');
+  });
+
+  it('should add the missing space after ordered-list numbers', () => {
+    expect(normalizeLegacyMarkdown('1.**a**; 2.**b**; 3.真要'))
+      .toBe('1. **a**\n2. **b**\n3. 真要');
+  });
+
+  it('should turn inline star headings into markdown headings', () => {
+    expect(normalizeLegacyMarkdown('前文★标题\n后文')).toBe('前文\n\n### 标题\n后文');
+  });
+
+  it('should keep standard markdown lists unchanged', () => {
+    expect(normalizeLegacyMarkdown('1. a\n2. b')).toBe('1. a\n2. b');
   });
 });
 

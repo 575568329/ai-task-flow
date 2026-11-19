@@ -8,7 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
 import { conversationDisplay } from './conversationSource';
-import { CONCLUSION_MARKDOWN_CLASS, plainTextExcerpt, stripSectionHeading } from './contentFormat';
+import {
+  CONCLUSION_MARKDOWN_CLASS,
+  normalizeLegacyMarkdown,
+  plainTextExcerpt,
+} from './contentFormat';
 import { RevisionTimeline } from './RevisionTimeline';
 
 /** 超过这个长度的结论默认折叠，避免一屏被长文占满 */
@@ -26,7 +30,7 @@ interface Props {
 
 function LongMarkdown({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
-  const text = stripSectionHeading(content);
+  const text = normalizeLegacyMarkdown(content);
 
   if (text.length <= LONG_TEXT_THRESHOLD) {
     return <MessageContent allowHtml={false} content={text} className={CONCLUSION_MARKDOWN_CLASS} />;
@@ -51,6 +55,20 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
   const latest = detail?.revisions[detail.revisions.length - 1];
   const conversationId = summary.source.conversationId?.trim();
   const conversation = conversationDisplay(summary.source);
+
+  const copyCodePath = async (path: string) => {
+    if (!navigator.clipboard) {
+      toast.error('当前环境不支持复制');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(path);
+      toast.success('路径已复制');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`复制失败：${message}`);
+    }
+  };
 
   const copyConversationId = async () => {
     if (!conversationId) return;
@@ -129,10 +147,10 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
                 <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
                   <Database className="size-4" />关键数据
                 </summary>
-                <div className="px-3 pb-3">
+                <div className="mt-2 max-h-96 overflow-y-auto px-3 pb-3 pr-2">
                   <MessageContent
                     allowHtml={false}
-                    content={stripSectionHeading(latest.data)}
+                    content={normalizeLegacyMarkdown(latest.data)}
                     className={CONCLUSION_MARKDOWN_CLASS}
                   />
                 </div>
@@ -144,10 +162,10 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
                 <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
                   <ListTodo className="size-4" />待办/未决
                 </summary>
-                <div className="px-3 pb-3">
+                <div className="mt-2 max-h-96 overflow-y-auto px-3 pb-3 pr-2">
                   <MessageContent
                     allowHtml={false}
-                    content={stripSectionHeading(latest.openItems)}
+                    content={normalizeLegacyMarkdown(latest.openItems)}
                     className={CONCLUSION_MARKDOWN_CLASS}
                   />
                 </div>
@@ -159,14 +177,30 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
                 <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold">
                   <Code2 className="size-4" />代码/文件位置
                 </summary>
-                <ul className="px-3 pb-3 font-mono text-xs leading-6">
-                  {latest.codeRefs.map((ref, index) => (
-                    <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`}>
-                      {ref.path}
-                      {ref.startLine ? `:${ref.startLine}${ref.endLine ? `-${ref.endLine}` : ''}` : ''}
-                      {ref.note ? ` — ${ref.note}` : ''}
-                    </li>
-                  ))}
+                <ul className="max-h-96 divide-y overflow-y-auto px-3 pb-3 text-xs">
+                  {latest.codeRefs.map((ref, index) => {
+                    const range = ref.startLine
+                      ? `:${ref.startLine}${ref.endLine ? `-${ref.endLine}` : ''}`
+                      : '';
+                    return (
+                      <li key={`${ref.path}:${ref.startLine ?? ''}:${index}`} className="py-2 first:pt-0 last:pb-0">
+                        <div className="flex items-start gap-2">
+                          <code className="min-w-0 break-all font-mono text-xs">{ref.path}{range}</code>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
+                            title="复制路径"
+                            onClick={() => void copyCodePath(ref.path)}
+                          >
+                            <Copy className="size-3" />
+                          </button>
+                        </div>
+                        {ref.note && (
+                          <p className="text-muted-foreground mt-1 text-xs leading-5">{ref.note}</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </details>
             ) : null}

@@ -16,6 +16,25 @@ export function stripSectionHeading(content: string): string {
   );
 }
 
+/**
+ * 旧卡/旧提示词留下的内联排版：①②③ 串段、`; 2.` 串行、`★` 夹在段落中。
+ * 只在展示层归一化，不改落库内容；新内容应直接写成标准 Markdown 列表。
+ */
+export function normalizeLegacyMarkdown(content: string): string {
+  let text = stripSectionHeading(content);
+  // 星标小标题：先断行，再转成三级标题。
+  text = text.replace(/([^\n])\s*★/g, '$1\n\n★');
+  text = text.replace(/^★\s*/gm, '### ');
+  // 内联圆圈编号 → 独立行 + 列表项。
+  text = text.replace(/([^\n])\s*([①-⑳])/g, '$1\n\n$2');
+  text = text.replace(/^([①-⑳])\s*/gm, '- $1 ');
+  // `; 2.` / `；2.` 这类内联编号 → 新行，让 Markdown 识别为有序列表。
+  text = text.replace(/[;；]\s*(?=\d+\.)/g, '\n');
+  // `2.**加粗**` / `3.真要` 数字后缺空格，Markdown 不识别；补一个空格。
+  text = text.replace(/^(\d+)\.(?=\S)/gm, '$1. ');
+  return text;
+}
+
 /** 折叠态预览：去掉 Markdown 标记，避免列表/加粗符号直接露在卡片上。 */
 export function plainTextExcerpt(markdown: string, maxLength = 240): string {
   const text = markdown

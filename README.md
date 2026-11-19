@@ -68,7 +68,7 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 
 ```bash
 cd backend && npx vitest run    # 269 用例(领域/锁协议/路由/MCP 工具)
-cd frontend && npm test         # 133 用例(组件/搜索过滤)
+cd frontend && npm test         # 138 用例(组件/搜索过滤)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
 node tests/mcp/conclusion-stdio-smoke.mjs              # MCP stdio 冒烟(需先 cd backend && npm run build)
 ```
