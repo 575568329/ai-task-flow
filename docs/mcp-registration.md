@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `1a4cfc3`(fix(conclusion): 审查修复——卡片级对话归属/关闭 raw HTML/短 ID 与逐版来源) |
-| 构建时间 | 2026-11-19 11:06 |
+| dist 构建来源 commit | `ea6a920`(feat(conclusion): MCP 写入默认新建——已知 cardId 才追加，keyword 仅用于查询) |
+| 构建时间 | 2026-11-19 13:42 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
