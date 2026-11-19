@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { useUIStore } from '@/stores/uiStore';
 import { worklogApi } from '@/api/worklog';
-import type { WorklogData } from '@ai-task-flow/shared';
+import type { WorklogData, WorkStage } from '@ai-task-flow/shared';
 import { ProjectVersionTree, type TreeSelection } from './ProjectVersionTree';
 import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
 import { AiGuideView } from './AiGuideView';
-import { filterEntries } from './searchFilter';
+import { WorkStageSelect } from '@/components/common/WorkStageSelect';
+import { filterEntries, type WorkStageFilter } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -26,6 +27,7 @@ export function WorklogView() {
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
+  const [stageFilter, setStageFilter] = useState<WorkStageFilter>('all');
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
@@ -71,8 +73,8 @@ export function WorklogView() {
   // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择过滤。新在前。
   // 本地过滤(全树已在内存,个人量级零延迟),匹配语义与后端 query_work 一致。
   const { entries: visibleEntries, isSearching } = useMemo(
-    () => filterEntries(data, selection, keyword),
-    [data, selection, keyword],
+    () => filterEntries(data, selection, keyword, stageFilter),
+    [data, selection, keyword, stageFilter],
   );
   const noSelection = !isSearching && !selection.project;
 
@@ -88,7 +90,7 @@ export function WorklogView() {
     [data],
   );
 
-  const handleCreate = async (input: { project: string; version: string; title: string; detail: string; tags?: string[] }) => {
+  const handleCreate = async (input: { project: string; version: string; title: string; detail: string; tags?: string[]; stage?: WorkStage }) => {
     try {
       await worklogApi.create(input);
       setCreating(false);
@@ -101,7 +103,7 @@ export function WorklogView() {
     }
   };
 
-  const handleSave = async (id: string, patch: { title?: string; detail?: string; tags?: string[]; version?: string }) => {
+  const handleSave = async (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage; version?: string }) => {
     try {
       await worklogApi.update(id, patch);
       await refresh();
@@ -244,16 +246,24 @@ export function WorklogView() {
                   <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
                 )}
               </h2>
-              {visibleEntries.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setExpandAll((value) => !(value ?? false))}
-                >
-                  {expandAll ? '全部收起' : '全部展开'}
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                <WorkStageSelect
+                  mode="filter"
+                  value={stageFilter}
+                  onChange={(value) => setStageFilter(value as WorkStageFilter)}
+                  ariaLabel="按阶段筛选"
+                />
+                {visibleEntries.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setExpandAll((value) => !(value ?? false))}
+                  >
+                    {expandAll ? '全部收起' : '全部展开'}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {creating && (

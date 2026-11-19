@@ -2,6 +2,7 @@
 // 工作记录(worklog)三层模型:项目 → 版本 → 功能点条目。
 // 写入者/查询者主要是 AI(MCP),人类阅读走前端工作记录页渲染。
 // 存储:~/.ai-task-flow/worklog.json(单文件,原子写+跨进程文件锁,见 backend JsonWorklogRepository)。
+import type { WorkStage } from './stage.js';
 
 /** 条目关联的文件引用(行号是记录时刻的快照,只展示不承诺跳转) */
 export interface WorklogEntryFile {
@@ -27,6 +28,8 @@ export interface WorklogEntry {
   files?: WorklogEntryFile[];
   /** 标签,约定 feat/fix/refactor/docs(可选) */
   tags?: string[];
+  /** 唯一阶段标签；旧数据可能为空 */
+  stage?: WorkStage;
   /** 记录当天本地日期 YYYY-MM-DD */
   date: string;
   createdAt: number;
@@ -65,6 +68,7 @@ export interface WorklogRecordRequest {
   files?: WorklogEntryFile[];
   diff?: string;
   tags?: string[];
+  stage?: WorkStage;
 }
 
 /** record 响应:createdXxx 告知调用方是否新建了层(防拼写错误的版本名裂树) */
@@ -84,6 +88,8 @@ export interface WorklogQueryRequest {
   keyword?: string;
   /** 命中任一 tag 即可 */
   tags?: string[];
+  /** 按唯一阶段过滤 */
+  stage?: WorkStage;
   /** 过滤 entry.date(YYYY-MM-DD,含边界) */
   dateFrom?: string;
   dateTo?: string;
@@ -101,6 +107,7 @@ export interface WorklogQueryResultEntry {
   project: string;
   version: string;
   tags?: string[];
+  stage?: WorkStage;
   files?: string[];
   diff?: string;
 }
@@ -123,6 +130,7 @@ export interface WorklogUpdateRequest {
   title?: string;
   detail?: string;
   tags?: string[];
+  stage?: WorkStage;
   files?: WorklogEntryFile[];
   diff?: string;
   date?: string;

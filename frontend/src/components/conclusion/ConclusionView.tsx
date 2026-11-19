@@ -10,7 +10,13 @@ import { ConclusionProjectList } from './ConclusionProjectList';
 import { ConclusionCardItem } from './ConclusionCardItem';
 import { ConclusionForm, type ConclusionFormValue } from './ConclusionForm';
 import { ConclusionMetaForm, type ConclusionMetaValue } from './ConclusionMetaForm';
-import { filterConclusions, type ConclusionSelection } from './searchFilter';
+import { WorkStageSelect } from '@/components/common/WorkStageSelect';
+import {
+  filterConclusions,
+  filterConclusionsByStage,
+  type ConclusionSelection,
+  type ConclusionStageFilter,
+} from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -19,6 +25,7 @@ export function ConclusionView() {
   const [loading, setLoading] = useState(true);
   const [selection, setSelection] = useState<ConclusionSelection>({ type: 'all' });
   const [keyword, setKeyword] = useState('');
+  const [stageFilter, setStageFilter] = useState<ConclusionStageFilter>('all');
   const [searchResults, setSearchResults] = useState<ConclusionSummary[] | null>(null);
   /** 写操作/刷新后自增:让带关键词的搜索结果重新拉取,避免列表已更新、搜索仍是旧快照 */
   const [searchTick, setSearchTick] = useState(0);
@@ -76,8 +83,8 @@ export function ConclusionView() {
   }, [keyword, searchTick]);
 
   const visible = useMemo(
-    () => searchResults ?? filterConclusions(cards, selection),
-    [searchResults, cards, selection],
+    () => filterConclusionsByStage(searchResults ?? filterConclusions(cards, selection), stageFilter),
+    [searchResults, cards, selection, stageFilter],
   );
   const projects = useMemo(
     () => [...new Set(cards.filter((c) => c.scope === 'project').map((c) => c.project ?? '未归类'))],
@@ -117,6 +124,7 @@ export function ConclusionView() {
           openItems: value.openItems,
           codeRefs: value.codeRefs,
           changeNote: value.changeNote ?? '人工修订',
+          stage: value.stage,
         });
         toast.success('已追加新版');
       } else {
@@ -130,6 +138,7 @@ export function ConclusionView() {
           data: value.data,
           openItems: value.openItems,
           codeRefs: value.codeRefs,
+          stage: value.stage,
         });
         toast.success('已创建结论卡');
       }
@@ -195,6 +204,13 @@ export function ConclusionView() {
               onChange={(e) => setKeyword(e.target.value)}
             />
           </div>
+          <WorkStageSelect
+            mode="filter"
+            value={stageFilter}
+            onChange={(value) => setStageFilter(value as ConclusionStageFilter)}
+            className="mt-2 h-8 w-full text-xs"
+            ariaLabel="按阶段筛选结论卡"
+          />
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           <ConclusionProjectList cards={cards} selection={selection} onSelect={setSelection} />

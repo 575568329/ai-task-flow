@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Conclusion, ConclusionCodeRef } from '@ai-task-flow/shared';
+import type { Conclusion, ConclusionCodeRef, WorkStage } from '@ai-task-flow/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { WorkStageSelect } from '@/components/common/WorkStageSelect';
 
 export interface ConclusionFormValue {
   scope: 'project' | 'personal';
@@ -15,6 +16,7 @@ export interface ConclusionFormValue {
   openItems?: string;
   codeRefs?: ConclusionCodeRef[];
   changeNote?: string;
+  stage?: WorkStage;
   expectedRev?: number;
 }
 
@@ -58,6 +60,7 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
   const [data, setData] = useState(latest?.data ?? '');
   const [openItems, setOpenItems] = useState(latest?.openItems ?? '');
   const [codeRefs, setCodeRefs] = useState(formatCodeRefs(latest?.codeRefs));
+  const [stage, setStage] = useState<WorkStage | ''>(latest?.stage ?? '');
   const [changeNote, setChangeNote] = useState(mode === 'append' ? '人工修订' : '');
   const [saving, setSaving] = useState(false);
 
@@ -75,6 +78,7 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
         openItems,
         codeRefs: parseCodeRefs(codeRefs),
         changeNote: changeNote.trim() || undefined,
+        stage: stage || undefined,
         expectedRev: latest?.rev,
       });
     } finally {
@@ -109,6 +113,11 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
 
       <Input placeholder="标题" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Input placeholder="标签（逗号分隔）" value={tags} onChange={(e) => setTags(e.target.value)} />
+
+      <div className="space-y-1">
+        <label className="block text-xs font-semibold">阶段（唯一标签；缺陷修改用 fix 标签）</label>
+        <WorkStageSelect value={stage} onChange={(value) => setStage(value as WorkStage | '')} className="w-56" />
+      </div>
 
       <label className="block text-xs font-semibold">结论/决策 + 理由（必填）</label>
       <Textarea rows={4} value={decision} onChange={(e) => setDecision(e.target.value)} />

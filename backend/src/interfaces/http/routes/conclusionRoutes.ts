@@ -5,12 +5,14 @@
 // body 类型防御是必需的:领域校验用 `value.trim()` / 数组方法,若 HTTP 传来
 // `decision: 123` 这类错误类型会抛 TypeError → 500;这里提前拦成 400。
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { isWorkStage } from '@ai-task-flow/shared';
 import type {
   ConclusionAppendRequest,
   ConclusionCreateRequest,
   ConclusionPatchRequest,
   ConclusionQueryRequest,
   ProblemScope,
+  WorkStage,
 } from '@ai-task-flow/shared';
 import type { ConclusionService } from '../../../application/conclusion/ConclusionService.js';
 import { DomainError } from '../../../domain/_shared/DomainError.js';
@@ -43,6 +45,12 @@ function parseLimit(value: unknown): number | undefined {
   return Math.trunc(parsed);
 }
 
+function parseStage(value: unknown): WorkStage | undefined {
+  if (value === undefined || value === '') return undefined;
+  if (!isWorkStage(value)) throw new ConclusionValidationError('stage 非法');
+  return value;
+}
+
 function queryFrom(raw: Record<string, unknown>): ConclusionQueryRequest {
   // includeHistory 只在 detail 模式有意义;本路由的列表查询不消费它,故不解析、不对外承诺。
   return {
@@ -53,6 +61,7 @@ function queryFrom(raw: Record<string, unknown>): ConclusionQueryRequest {
     version: typeof raw.version === 'string' ? raw.version : undefined,
     keyword: typeof raw.keyword === 'string' ? raw.keyword : undefined,
     tags: parseTags(raw.tags),
+    stage: parseStage(raw.stage),
     dateFrom: typeof raw.dateFrom === 'string' ? raw.dateFrom : undefined,
     dateTo: typeof raw.dateTo === 'string' ? raw.dateTo : undefined,
     limit: parseLimit(raw.limit),

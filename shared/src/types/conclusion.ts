@@ -1,4 +1,6 @@
 // 结论卡共享类型：项目/版本/个人 + 逐版完整快照。
+import type { WorkStage } from './stage.js';
+
 export type ProblemScope = 'project' | 'personal';
 
 export interface ConclusionCodeRef {
@@ -23,6 +25,8 @@ export interface ConclusionRevision {
   openItems?: string;
   codeRefs?: ConclusionCodeRef[];
   changeNote?: string;
+  /** 本版对应的唯一阶段标签 */
+  stage?: WorkStage;
   source: ConclusionSource;
   date: string;
   createdAt: number;
@@ -61,6 +65,7 @@ export interface ConclusionCreateRequest {
   date?: string;
   changeNote?: string;
   conversationName?: string;
+  stage?: WorkStage;
 }
 
 export interface ConclusionAppendRequest {
@@ -79,6 +84,7 @@ export interface ConclusionAppendRequest {
   date?: string;
   changeNote: string;
   conversationName?: string;
+  stage?: WorkStage;
 }
 
 /**
@@ -98,6 +104,7 @@ export interface ConclusionRecordRequest {
   date?: string;
   changeNote?: string;
   conversationName?: string;
+  stage?: WorkStage;
   expectedRev?: number;
   allowCrossConversation?: boolean;
 }
@@ -125,6 +132,7 @@ export interface ConclusionQueryRequest {
   version?: string;
   keyword?: string;
   tags?: string[];
+  stage?: WorkStage;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -141,6 +149,7 @@ export interface ConclusionSummary {
   rev: number;
   latestDate: string;
   latestDecisionExcerpt: string;
+  stage?: WorkStage;
   source: Pick<ConclusionSource, 'tool' | 'conversationId' | 'conversationName'>;
   matchedRev?: number;
   createdAt: number;
@@ -155,6 +164,7 @@ export interface ConclusionRevisionSummary {
   tool: string;
   conversationId?: string;
   conversationName?: string;
+  stage?: WorkStage;
 }
 
 export interface ConclusionDetail {
@@ -167,6 +177,7 @@ export interface ConclusionDetail {
   title: string;
   tags?: string[];
   rev: number;
+  stage?: WorkStage;
   latest: ConclusionRevision;
   revisions: ConclusionRevisionSummary[];
   history?: ConclusionRevision[];

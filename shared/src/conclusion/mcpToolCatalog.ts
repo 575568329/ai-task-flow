@@ -7,6 +7,9 @@ export interface ConclusionToolMeta {
 
 /** 结论卡正文格式契约：写进 record_conclusion 描述，Claude/ZCode 共同遵守。 */
 export const CONCLUSION_FORMAT_GUIDE =
+  'stage 唯一单值：req 获取需求 / design 设计文档与实施计划 / dev 开发 / self-test 自测 / ' +
+  'review 代码评审 / coverage 覆盖度测试 / release 上线 / retro 复盘；新建建议填写，追加省略=沿用上一版。' +
+  '缺陷修改用 tags 的 fix 表示，不占 stage。' +
   '正文格式：decision 只写结论/决策/发现（1–3 句总结 + 3–6 条编号列表），' +
   '证据/指标/日志放 data，待办放 openItems，文件放 codeRefs。' +
   '列表用 1./-，列表前后空行，二级缩进两个空格；禁止用 ①②③ 串成一段，' +
@@ -39,7 +42,7 @@ export const CONCLUSION_TOOL_CATALOG: ConclusionToolMeta[] = [
     description:
       '查询结论卡，只有两种用途：' +
       '① 已知 cardId：直接传 cardId，返回该卡最新版完整四节与演进摘要（追加前读取当前进度）；' +
-      '② 不知道 cardId 且用户明确要求查找/回看时，才用 keyword 等项目/日期条件做全库搜索，返回摘要用于定位。' +
+      '② 不知道 cardId 且用户明确要求查找/回看时，才用 keyword/项目/阶段/日期条件做全库搜索，返回摘要用于定位。' +
       '禁止在已知 cardId 时再用 keyword 搜索；keyword 不是写前自动匹配/复用旧卡的手段。' +
       'includeHistory=true 时额外返回全部历史版本全文。',
     whenToUse:

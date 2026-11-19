@@ -7,8 +7,10 @@ import type {
   ConclusionRecordRequest,
   ConclusionSource,
   ProblemScope,
+  WorkStage,
 } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
+import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -50,6 +52,7 @@ export const toolDef = {
       },
       date: { type: 'string' as const, description: '本版业务日期 YYYY-MM-DD，默认当天' },
       changeNote: { type: 'string' as const, description: '本版为什么更新（同一会话后续记录必填；新建时可省略）' },
+      stage: { ...STAGE_SCHEMA, description: `${STAGE_SCHEMA.description}新建建议填写；同一对话追加省略=沿用上一版` },
       conversationName: {
         type: 'string' as const,
         description: '对话名称（建议填写本次对话主题，如「worklog 全局搜索方案」；不填则页面只显示对话 ID）',
@@ -94,6 +97,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
         date: text(args.date),
         changeNote: text(args.changeNote) ?? '',
         conversationName: text(args.conversationName),
+        stage: args.stage as WorkStage | undefined,
       };
       const result = await deps.conclusionService.append(args.cardId, append, source);
       return ok([
@@ -116,6 +120,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       date: text(args.date),
       changeNote: text(args.changeNote),
       conversationName: text(args.conversationName),
+      stage: args.stage as WorkStage | undefined,
       expectedRev: num(args.expectedRev),
       allowCrossConversation: args.allowCrossConversation === true,
     };

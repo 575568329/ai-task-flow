@@ -11,10 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/common/MessageContent';
+import { WorkStageBadge } from '@/components/common/WorkStageBadge';
+import { WorkStageSelect } from '@/components/common/WorkStageSelect';
 import { toast } from '@/components/ui/toaster';
 import { plainTextExcerpt } from '@/lib/markdownText';
 import { cn } from '@/lib/utils';
-import type { WorklogEntry } from '@ai-task-flow/shared';
+import type { WorklogEntry, WorkStage } from '@ai-task-flow/shared';
 
 /** 下拉「挪到新版本」选项的哨兵值(不可直接提交,需在二级输入框填新名) */
 const NEW_VERSION = '__new_version__';
@@ -28,7 +30,7 @@ interface EntryItemProps {
   contextLabel?: string;
   /** 全局展开/收起信号：true=全部展开，false=全部收起，null/undefined=各卡自管 */
   expandAll?: boolean | null;
-  onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; version?: string }) => Promise<void>;
+  onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage; version?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -45,6 +47,7 @@ export function EntryItem({
   const [title, setTitle] = useState(entry.title);
   const [detail, setDetail] = useState(entry.detail);
   const [tagsText, setTagsText] = useState((entry.tags ?? []).join(', '));
+  const [stage, setStage] = useState<WorkStage | ''>(entry.stage ?? '');
   const [moveTo, setMoveTo] = useState('');                 // 既有版本名 或 NEW_VERSION 哨兵
   const [newVersionText, setNewVersionText] = useState(''); // 哨兵激活后的新版本名输入
 
@@ -57,6 +60,7 @@ export function EntryItem({
     setTitle(entry.title);
     setDetail(entry.detail);
     setTagsText((entry.tags ?? []).join(', '));
+    setStage(entry.stage ?? '');
     setMoveTo('');
     setNewVersionText('');
     setEditing(true);
@@ -80,6 +84,7 @@ export function EntryItem({
         title: title.trim(),
         detail,
         tags,
+        ...(stage ? { stage } : {}),
         ...(targetVersion ? { version: targetVersion } : {}),
       });
       setEditing(false);
@@ -108,6 +113,16 @@ export function EntryItem({
               onChange={(e) => setTitle(e.target.value)}
               className="font-medium"
               autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`et-stage-${entry.id}`} className="text-xs">阶段（唯一标签；缺陷修改用 fix 标签）</Label>
+            <WorkStageSelect
+              value={stage}
+              onChange={(value) => setStage(value as WorkStage | '')}
+              className="w-56"
+              ariaLabel="选择阶段"
             />
           </div>
 
@@ -184,6 +199,7 @@ export function EntryItem({
               </div>
               <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
                 <span>{entry.date}</span>
+                <WorkStageBadge stage={entry.stage} />
                 {contextLabel && (
                   <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
                 )}
@@ -279,6 +295,18 @@ export function EntryItem({
               )}
             </div>
           ) : null}
+
+          <div className="border-t pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground h-7 w-full text-xs"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              {expanded ? '收起' : '展开全文'}
+            </Button>
+          </div>
         </>
       )}
     </article>

@@ -11,6 +11,15 @@ vi.mock('@/components/common/MessageContent', () => ({
   ),
 }));
 
+// Sheet 基于 @radix-ui/react-dialog，在 vitest 下会解析到根 react@18（双 React）。
+vi.mock('@/components/ui/sheet', () => ({
+  Sheet: ({ open, children }: { open?: boolean; children?: React.ReactNode }) => (open ? <div>{children}</div> : null),
+  SheetContent: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetHeader: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+}));
+
 function summary(over: Partial<ConclusionSummary> = {}): ConclusionSummary {
   return {
     id: 'c_1', scope: 'project', project: 'ai-task-flow', title: '全局搜索方案',

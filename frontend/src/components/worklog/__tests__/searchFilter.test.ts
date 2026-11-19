@@ -17,11 +17,11 @@ const data: WorklogData = {
       name: '搜题平台', createdAt: 1,
       versions: [
         { name: 'V8.0.5', createdAt: 1, entries: [
-          entry({ id: 'e_a', title: '澳门试题管理页与检索域切换', detail: '字典域切换改造', files: [{ path: 'src/exam/SearchPanel.vue' }], createdAt: 3 }),
+          entry({ id: 'e_a', title: '澳门试题管理页与检索域切换', detail: '字典域切换改造', files: [{ path: 'src/exam/SearchPanel.vue' }], createdAt: 3, stage: 'dev' }),
           entry({ id: 'e_b', title: '相似题接题库引擎', detail: 'SimilarQuestionFacade 接入' }),
         ] },
         { name: 'V8.0.6', createdAt: 2, entries: [
-          entry({ id: 'e_c', title: 'AI 搜题显式排序生效', detail: '两道重排守卫', createdAt: 5 }),
+          entry({ id: 'e_c', title: 'AI 搜题显式排序生效', detail: '两道重排守卫', createdAt: 5, stage: 'review' }),
         ] },
       ],
     },
@@ -79,6 +79,15 @@ describe('filterEntries', () => {
   it('should sort newest first within a project', () => {
     const { entries } = filterEntries(data, { project: '搜题平台' }, '');
     expect(entries.map((e) => e.entry.id)).toEqual(['e_c', 'e_a', 'e_b']);
+  });
+
+  it('should filter by stage and unset stage', () => {
+    expect(filterEntries(data, { project: '搜题平台' }, '', 'dev').entries.map((e) => e.entry.id))
+      .toEqual(['e_a']);
+    expect(filterEntries(data, { project: '搜题平台' }, '', 'review').entries.map((e) => e.entry.id))
+      .toEqual(['e_c']);
+    expect(filterEntries(data, { project: '搜题平台' }, '', 'unset').entries.map((e) => e.entry.id))
+      .toEqual(['e_b']);
   });
 
   it('should return empty with friendly flag when nothing matches', () => {

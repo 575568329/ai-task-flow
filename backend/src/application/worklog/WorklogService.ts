@@ -2,6 +2,7 @@
 // 工作记录应用服务:MCP 工具与 HTTP API 的唯一入口(partial/建层/重名规则单点)。
 // 写协议(双层锁/备份)由 JsonWorklogRepository 承担,本类只做业务规则与查询过滤。
 import { randomUUID } from 'node:crypto';
+import { isWorkStage } from '@ai-task-flow/shared';
 import type {
   WorklogData,
   WorklogProject,
@@ -14,6 +15,7 @@ import type {
   WorklogQueryResultEntry,
   WorklogProjectSummary,
   WorklogUpdateRequest,
+  WorkStage,
 } from '@ai-task-flow/shared';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
 import {
@@ -29,6 +31,12 @@ function validateName(name: string, label: string): string {
   if (trimmed.includes('/')) throw new WorklogValidationError(`${label}不能包含 "/"`);
   if (trimmed.length > NAME_MAX_LEN) throw new WorklogValidationError(`${label}长度不能超过 ${NAME_MAX_LEN}`);
   return trimmed;
+}
+
+function validateStage(value: unknown): WorkStage | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (!isWorkStage(value)) throw new WorklogValidationError(`stage 非法：${String(value)}`);
+  return value;
 }
 
 /** 本地日期 YYYY-MM-DD(entry.date 的取值口径) */
@@ -111,6 +119,7 @@ export class WorklogService {
       }
       if (input.diff) entry.diff = input.diff;
       if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
+      if (input.stage !== undefined) entry.stage = validateStage(input.stage);
       ver.entries.push(entry);
 
       return {
@@ -136,6 +145,7 @@ export class WorklogService {
         if (input.version && version.name !== input.version) continue;
         for (const entry of version.entries) {
           if (input.tags?.length && !entry.tags?.some((t) => input.tags!.includes(t))) continue;
+          if (input.stage && entry.stage !== input.stage) continue;
           if (input.dateFrom && entry.date < input.dateFrom) continue;
           if (input.dateTo && entry.date > input.dateTo) continue;
           if (keyword) {
@@ -152,6 +162,7 @@ export class WorklogService {
             project: project.name,
             version: version.name,
             tags: entry.tags,
+            stage: entry.stage,
             files: entry.files?.map((f: WorklogEntryFile) => f.path),
             ...(input.includeDiff && entry.diff ? { diff: entry.diff } : {}),
             __createdAt: entry.createdAt,
@@ -193,6 +204,7 @@ export class WorklogService {
       }
       if (patch.detail !== undefined) entry.detail = String(patch.detail);
       if (patch.tags !== undefined) entry.tags = patch.tags.map((t) => t.trim()).filter(Boolean);
+      if (patch.stage !== undefined) entry.stage = validateStage(patch.stage);
       if (patch.files !== undefined) {
         if (!Array.isArray(patch.files) || patch.files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
           throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');

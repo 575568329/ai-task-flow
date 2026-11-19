@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
+import { WorkStageBadge } from '@/components/common/WorkStageBadge';
 import { conversationDisplay } from './conversationSource';
 import {
   CONCLUSION_MARKDOWN_CLASS,
@@ -100,6 +101,7 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             <span>{summary.project ?? '个人'}</span>
             {summary.version && <span>{summary.version}</span>}
             <span>{summary.latestDate}</span>
+            <WorkStageBadge stage={summary.stage} />
             <span>{summary.source.tool}</span>
             {summary.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
           </div>
@@ -260,6 +262,18 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
           </aside>
         </div>
       )}
+
+      <div className="mt-4 border-t pt-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground h-7 w-full text-xs"
+          onClick={onToggle}
+        >
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          {expanded ? '收起' : '展开全文'}
+        </Button>
+      </div>
     </article>
   );
 }

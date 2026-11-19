@@ -3,6 +3,7 @@ export * from './types/claude-session.js';
 export * from './types/webclip.js';
 export * from './types/system.js';
 export * from './types/knowledge.js';
+export * from './types/stage.js';
 export * from './types/worklog.js';
 export * from './worklog/mcpToolCatalog.js';
 export * from './types/vocab.js';

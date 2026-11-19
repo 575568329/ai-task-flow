@@ -1,5 +1,7 @@
 // backend/src/interfaces/mcp/tools/worklog/record-work.ts
+import type { WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
+import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -28,10 +30,11 @@ export const toolDef = {
       diff: { type: 'string' as const, description: 'git diff 原始文本(记录时快照),可选' },
       tags: {
         type: 'array' as const, items: { type: 'string' as const },
-        description: '标签,约定 feat/fix/refactor/docs,可选',
+        description: '标签,约定 feat/fix/refactor/docs,可选(缺陷修改用 fix)',
       },
+      stage: STAGE_SCHEMA,
     },
-    required: ['project', 'version', 'title', 'detail'],
+    required: ['project', 'version', 'title', 'detail', 'stage'],
   },
 };
 
@@ -46,6 +49,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       files: args.files as never,
       diff: args.diff ? String(args.diff) : undefined,
       tags: args.tags as string[] | undefined,
+      stage: args.stage as WorkStage | undefined,
     });
     const notes: string[] = ['✅ 已记录'];
     if (result.createdProject) notes.push(`(已新建项目 "${String(args.project)}")`);

@@ -1,7 +1,14 @@
 // backend/src/interfaces/mcp/tools/conclusion/query-conclusions.ts
 // query_conclusions:无 cardId=按条件搜索摘要(用于定位);有 cardId=读最新版完整内容+演进摘要。
-import type { ConclusionDetail, ConclusionQueryRequest, ProblemScope } from '@ai-task-flow/shared';
+import {
+  WORK_STAGE_LABELS,
+  type ConclusionDetail,
+  type ConclusionQueryRequest,
+  type ProblemScope,
+  type WorkStage,
+} from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
+import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -22,6 +29,7 @@ export const toolDef = {
         description: '仅在不知道 cardId 且用户明确要求查找时使用；匹配标题 + 全部历史版本内容。不要用于写前自动定位',
       },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签任一命中' },
+      stage: { ...STAGE_SCHEMA, description: `${STAGE_SCHEMA.description}按最新版阶段过滤,可选` },
       dateFrom: { type: 'string' as const, description: '起始日期 YYYY-MM-DD（按最新版日期）' },
       dateTo: { type: 'string' as const, description: '结束日期 YYYY-MM-DD' },
       limit: { type: 'number' as const, description: '返回条数上限，默认 20' },
@@ -42,6 +50,7 @@ function formatDetail(detail: ConclusionDetail): string {
       detail.project ?? '个人',
       detail.version,
       latest.date,
+      latest.stage ? WORK_STAGE_LABELS[latest.stage] : '未标注',
       latest.source.tool,
       detail.conversationName ?? latest.source.conversationName,
       detail.conversationId
@@ -61,7 +70,7 @@ function formatDetail(detail: ConclusionDetail): string {
   lines.push('', '## 演进');
   for (const revision of [...detail.revisions].reverse()) {
     lines.push(
-      `- rev ${revision.rev} · ${revision.date} · ${revision.tool}`
+      `- rev ${revision.rev} · ${revision.date} · ${revision.stage ? WORK_STAGE_LABELS[revision.stage] : '未标注'} · ${revision.tool}`
       + `${revision.conversationName ? ` · ${revision.conversationName}` : ''}`
       + `${revision.conversationId ? ` · ID ${revision.conversationId}` : ''}`
       + `${revision.changeNote ? ` — ${revision.changeNote}` : ''}`,
@@ -71,7 +80,7 @@ function formatDetail(detail: ConclusionDetail): string {
     lines.push('', '## 历史全文');
     for (const revision of [...detail.history].reverse()) {
       lines.push(
-        `### rev ${revision.rev} · ${revision.date} · ${revision.source.tool}` +
+        `### rev ${revision.rev} · ${revision.date} · ${revision.stage ? WORK_STAGE_LABELS[revision.stage] : '未标注'} · ${revision.source.tool}` +
         `${revision.source.conversationName ? ` · ${revision.source.conversationName}` : ''}` +
         `${revision.source.conversationId ? ` · ID ${revision.source.conversationId}` : ''}` +
         `${revision.changeNote ? ` — ${revision.changeNote}` : ''}`,
@@ -100,6 +109,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       version: text(args.version),
       keyword: text(args.keyword),
       tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
+      stage: args.stage as WorkStage | undefined,
       dateFrom: text(args.dateFrom),
       dateTo: text(args.dateTo),
       limit: typeof args.limit === 'number' ? args.limit : 20,

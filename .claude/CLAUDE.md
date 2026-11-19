@@ -82,6 +82,13 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 - 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
 - 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。
 
+### 阶段标签（唯一单值）
+
+- `record_work` / `record_conclusion` 的 `stage` 是唯一单值：`req` 获取需求 / `design` 设计文档与实施计划 / `dev` 开发 / `self-test` 自测 / `review` 代码评审 / `coverage` 覆盖度测试 / `release` 上线 / `retro` 复盘。
+- **缺陷修改不占 stage**，用 `tags` 里的 `fix` 表示工作类型。
+- 枚举与 harness 0–5 映射在 `shared/src/types/stage.ts`；旧记录可为空（页面显示未标注）。
+- 结论卡的 stage 存在每个 revision 上；工作记录存在条目上。
+
 ## 前端
 
 - React 19 + Vite + TypeScript + Zustand + shadcn/ui（Radix）+ Tailwind v4；路径别名 `@/` → `frontend/src/`。

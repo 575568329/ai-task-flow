@@ -67,6 +67,8 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
       '任务功能按「### 需求→### 方案→### 实现(1.2.3.分点)→### 验证」。' +
       '内容要完善可追溯:文件路径/版本号/数字必须属实,禁止臆造。' +
       '提交前自查一遍:有无写错/矛盾/遗漏,确认无误再调用。' +
+      'stage 必填且唯一:req 获取需求 / design 设计文档与实施计划 / dev 开发 / self-test 自测 / ' +
+      'review 代码评审 / coverage 覆盖度测试 / release 上线 / retro 复盘；缺陷修改用 tags 的 fix 表示,不占 stage。' +
       '本工具只记录代码变更(diff/文件/行号);讨论结论、决策理由、关键数据请用 record_conclusion。',
     whenToUse: 'AI 完成一波代码修改、准备汇报时——先记录再汇报,别让成果只留在对话里。',
     userPromptExample: '「把这次改动记录到 ai-task-flow 的 v1.2.0,带上 diff 和改动文件,Bug 按问题/原因/解决/验证 格式写清楚」',
@@ -75,7 +77,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
     name: 'query_work',
     description:
       '回溯查询工作记录。支持项目/版本精确过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、' +
-      '标签、日期范围(dateFrom/dateTo);diff 默认不返回,includeDiff:true 时携带。',
+      '标签、阶段(stage)、日期范围(dateFrom/dateTo);diff 默认不返回,includeDiff:true 时携带。',
     whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的"时,先查记录再回答。',
     userPromptExample: '「查一下 ai-task-flow 上周关于登录页的改动记录」',
   },
@@ -88,7 +90,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
   {
     name: 'update_work',
     description:
-      '部分更新一条记录(只改传入的字段:title/detail/tags/files/diff/date)。version 传新值=把条目挪到该版本(不存在则自动创建)。' +
+      '部分更新一条记录(只改传入的字段:title/detail/tags/stage/files/diff/date)。version 传新值=把条目挪到该版本(不存在则自动创建)。' +
       '补写 detail 时遵循与 record_work 相同的结构化模板与自查规则。',
     whenToUse: '记录写错了要改、要补充内容、或要把条目挪到别的版本时。',
     userPromptExample: '「把刚才那条记录的标题改准确一点,diff 也补上」',

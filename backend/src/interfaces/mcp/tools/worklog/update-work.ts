@@ -1,5 +1,7 @@
 // backend/src/interfaces/mcp/tools/worklog/update-work.ts
+import type { WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
+import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -12,6 +14,7 @@ export const toolDef = {
       title: { type: 'string' as const, description: '新标题,可选' },
       detail: { type: 'string' as const, description: '新详细说明,可选' },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '新标签,可选' },
+      stage: { ...STAGE_SCHEMA, description: `${STAGE_SCHEMA.description}传新值则修改阶段,可选` },
       files: { type: 'array' as const, description: '新文件引用,可选', items: { type: 'object' as const, properties: { path: { type: 'string' as const }, startLine: { type: 'number' as const }, endLine: { type: 'number' as const } }, required: ['path'] } },
       diff: { type: 'string' as const, description: '新 diff 原文,可选' },
       date: { type: 'string' as const, description: '新日期 YYYY-MM-DD,可选' },
@@ -28,6 +31,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       title: args.title !== undefined ? String(args.title) : undefined,
       detail: args.detail !== undefined ? String(args.detail) : undefined,
       tags: args.tags as string[] | undefined,
+      stage: args.stage as WorkStage | undefined,
       files: args.files as never,
       diff: args.diff !== undefined ? String(args.diff) : undefined,
       date: args.date !== undefined ? String(args.date) : undefined,

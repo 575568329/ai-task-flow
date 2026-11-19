@@ -169,6 +169,25 @@ describe('ConclusionService', () => {
     expect(backups.filter((n) => n.startsWith('backup-'))).toHaveLength(1);
   });
 
+  it('should store stage per revision and filter by latest stage', async () => {
+    const { id } = await service.create({ ...createInput(), stage: 'design' }, source);
+    await service.append(id, {
+      decision: '进入开发', changeNote: '设计完成', stage: 'dev',
+    }, source);
+
+    const detail = await service.getDetail(id);
+    expect(detail.stage).toBe('dev');
+    expect(detail.revisions.map((r) => r.stage)).toEqual(['design', 'dev']);
+
+    expect(await service.query({ stage: 'dev' })).toHaveLength(1);
+    expect(await service.query({ stage: 'design' })).toHaveLength(0);
+  });
+
+  it('should reject an invalid stage', async () => {
+    await expect(service.create({ ...createInput(), stage: 'bad' as never }, source))
+      .rejects.toThrow();
+  });
+
   it('should serialize concurrent appends from two repository instances', async () => {
     const file = path.join(tmpDir, 'conclusions.json');
     const backups = path.join(tmpDir, 'backups');

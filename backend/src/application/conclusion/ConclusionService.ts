@@ -112,6 +112,7 @@ export class ConclusionService {
           date: input.date,
           changeNote: input.changeNote,
           conversationName: input.conversationName,
+          stage: input.stage,
         }, source);
         data.conclusions.push(card);
         return {
@@ -137,6 +138,7 @@ export class ConclusionService {
         date: input.date,
         changeNote: input.changeNote ?? '',
         conversationName: input.conversationName,
+        stage: input.stage,
       }, source);
       return {
         id: existing.id,
@@ -202,6 +204,7 @@ export class ConclusionService {
       title: card.title,
       tags: card.tags,
       rev: latest.rev,
+      stage: latest.stage,
       latest,
       revisions: card.revisions.map((revision) => ({
         rev: revision.rev,
@@ -211,6 +214,7 @@ export class ConclusionService {
         tool: revision.source.tool,
         conversationId: revision.source.conversationId,
         conversationName: revision.source.conversationName,
+        stage: revision.stage,
       })),
       ...(includeHistory ? { history: card.revisions } : {}),
       createdAt: card.createdAt,
@@ -238,6 +242,7 @@ export class ConclusionService {
       if (input.tags?.length && !card.tags?.some((tag) => input.tags!.includes(tag))) continue;
 
       const latest = latestOf(card);
+      if (input.stage && latest.stage !== input.stage) continue;
       if (input.dateFrom && latest.date < input.dateFrom) continue;
       if (input.dateTo && latest.date > input.dateTo) continue;
 
@@ -268,6 +273,7 @@ export class ConclusionService {
         rev: latest.rev,
         latestDate: latest.date,
         latestDecisionExcerpt: excerpt(latest.decision),
+        stage: latest.stage,
         source: {
           tool: latest.source.tool,
           conversationId: card.conversationId ?? latest.source.conversationId,

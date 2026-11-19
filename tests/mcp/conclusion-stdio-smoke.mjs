@@ -185,6 +185,10 @@ try {
     'record_conclusion 描述应要求 data 分条',
   );
   assert(
+    byName.get('record_conclusion').description.includes('stage 唯一单值'),
+    'record_conclusion 描述应包含阶段标签契约',
+  );
+  assert(
     byName.get('query_conclusions').description.includes('已知 cardId'),
     'query_conclusions 描述应优先使用 cardId',
   );
@@ -202,6 +206,7 @@ try {
       title: 'stdio 冒烟结论',
       decision: DECISION,
       changeNote: 'stdio 冒烟',
+      stage: 'dev',
     },
   });
   assert(!created.isError, `record_conclusion 返回错误：${created.content?.[0]?.text}`);
@@ -236,7 +241,8 @@ try {
   // 来源 tool 必须是 initialize 里的 clientInfo.name(smoke),证明确实贯穿到了持久化与展示
   assert(/(^|\s|·)\s*smoke(\s|$)/m.test(queryText), `查询结果应包含来源工具 smoke，实际：\n${queryText}`);
   assert(queryText.includes('stdio 冒烟结论'), '查询结果应包含卡片标题');
-  log('query_conclusions OK: decision + source tool smoke');
+  assert(queryText.includes('开发'), '查询结果应包含阶段标签「开发」');
+  log('query_conclusions OK: decision + source tool smoke + stage');
 
   // 7. 落盘位置:必须在临时目录,证明没写 ~/.ai-task-flow
   const data = JSON.parse(await readFile(path.join(tempDir, 'conclusions.json'), 'utf8'));
@@ -244,6 +250,7 @@ try {
   assert(stored, '临时目录 conclusions.json 中应存在新建的结论卡');
   const latest = stored.revisions[stored.revisions.length - 1];
   assert(latest.source.tool === 'smoke', `持久化来源 tool 应为 smoke，实际 ${latest.source.tool}`);
+  assert(latest.stage === 'dev', `持久化阶段应为 dev，实际 ${latest.stage}`);
   log(`persisted in temp dir: ${path.join(tempDir, 'conclusions.json')}`);
 
   log('PASS');

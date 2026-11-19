@@ -9,13 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { WorkStageSelect } from '@/components/common/WorkStageSelect';
 import { toast } from '@/components/ui/toaster';
+import type { WorkStage } from '@ai-task-flow/shared';
 
 interface NewEntryFormProps {
   projects: { name: string; versions: string[] }[];
   defaultProject: string;
   defaultVersion: string;
-  onCreate: (input: { project: string; version: string; title: string; detail: string; tags?: string[] }) => Promise<void>;
+  onCreate: (input: { project: string; version: string; title: string; detail: string; tags?: string[]; stage?: WorkStage }) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -37,6 +39,7 @@ export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreat
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const [tagsText, setTagsText] = useState('');
+  const [stage, setStage] = useState<WorkStage | ''>('');
   const [saving, setSaving] = useState(false);
 
   const currentVersions = projects.find((p) => p.name === project)?.versions ?? [];
@@ -53,7 +56,14 @@ export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreat
     setSaving(true);
     try {
       const tags = [...new Set(tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean))];
-      await onCreate({ project: finalProject, version: finalVersion, title: title.trim(), detail, tags });
+      await onCreate({
+        project: finalProject,
+        version: finalVersion,
+        title: title.trim(),
+        detail,
+        tags,
+        ...(stage ? { stage } : {}),
+      });
     } finally {
       setSaving(false);
     }
@@ -114,6 +124,11 @@ export function NewEntryForm({ projects, defaultProject, defaultVersion, onCreat
       <div className="space-y-1.5">
         <Label htmlFor="nf-title" className="text-xs">标题(一句话功能点)</Label>
         <Input id="nf-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如:登录页加记住密码" className="text-sm font-medium" autoFocus={project !== NEW_OPTION} />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">阶段（唯一标签；缺陷修改用 fix 标签）</Label>
+        <WorkStageSelect value={stage} onChange={(value) => setStage(value as WorkStage | '')} className="w-56" />
       </div>
 
       <div className="space-y-1.5">

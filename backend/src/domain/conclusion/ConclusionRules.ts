@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isWorkStage } from '@ai-task-flow/shared';
 import type {
   Conclusion,
   ConclusionAppendRequest,
@@ -8,6 +9,7 @@ import type {
   ConclusionRevision,
   ConclusionSource,
   ProblemScope,
+  WorkStage,
 } from '@ai-task-flow/shared';
 import {
   ConclusionConflictError,
@@ -105,6 +107,14 @@ function normalizeTitle(title: string | undefined): string {
   return requiredText(title, '标题', TITLE_MAX);
 }
 
+function validateStage(value: unknown): WorkStage | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (!isWorkStage(value)) {
+    throw new ConclusionValidationError(`stage 非法：${String(value)}`);
+  }
+  return value;
+}
+
 function resolveMeta(
   current: Pick<Conclusion, 'scope' | 'project' | 'version'>,
   patch: { scope?: ProblemScope; project?: string; version?: string },
@@ -142,6 +152,7 @@ export function createConclusion(
     changeNote: input.changeNote
       ? requiredText(input.changeNote, '变更说明', CHANGE_NOTE_MAX)
       : undefined,
+    stage: validateStage(input.stage),
     source: revisionSource,
     date: validateDate(input.date),
     createdAt: now,
@@ -272,6 +283,7 @@ export function appendRevision(
     openItems: merged.openItems,
     codeRefs: merged.codeRefs,
     changeNote,
+    stage: input.stage === undefined ? latest.stage : (validateStage(input.stage) ?? latest.stage),
     source: revisionSource,
     date: validateDate(input.date),
     createdAt: now,

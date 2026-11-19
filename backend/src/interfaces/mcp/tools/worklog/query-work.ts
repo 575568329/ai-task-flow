@@ -1,5 +1,7 @@
 // backend/src/interfaces/mcp/tools/worklog/query-work.ts
+import { WORK_STAGE_LABELS, type WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
+import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -12,6 +14,7 @@ export const toolDef = {
       version: { type: 'string' as const, description: '按版本精确过滤,可选' },
       keyword: { type: 'string' as const, description: '关键词,对标题/详情/文件路径不区分大小写模糊,可选' },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签任一命中,可选' },
+      stage: { ...STAGE_SCHEMA, description: `${STAGE_SCHEMA.description}按该阶段过滤,可选` },
       dateFrom: { type: 'string' as const, description: '起始日期 YYYY-MM-DD(含),可选' },
       dateTo: { type: 'string' as const, description: '结束日期 YYYY-MM-DD(含),可选' },
       limit: { type: 'number' as const, description: '返回条数上限,默认 20' },
@@ -28,6 +31,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       version: args.version ? String(args.version) : undefined,
       keyword: args.keyword ? String(args.keyword) : undefined,
       tags: args.tags as string[] | undefined,
+      stage: args.stage as WorkStage | undefined,
       dateFrom: args.dateFrom ? String(args.dateFrom) : undefined,
       dateTo: args.dateTo ? String(args.dateTo) : undefined,
       limit: typeof args.limit === 'number' ? args.limit : undefined,
@@ -38,7 +42,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
 
     const lines = entries.map((e) => {
       const head = `### ${e.title}`;
-      const meta = [`${e.project}/${e.version}`, e.date, ...(e.tags ?? [])].join(' · ');
+      const stage = e.stage ? WORK_STAGE_LABELS[e.stage] : '未标注';
+      const meta = [`${e.project}/${e.version}`, e.date, `阶段:${stage}`, ...(e.tags ?? [])].join(' · ');
       const files = e.files?.length ? `\n文件: ${e.files.join(', ')}` : '';
       const diff = e.diff ? `\n\n\`\`\`diff\n${e.diff}\n\`\`\`` : '';
       return `${head}\n${meta}${files}\n\n${e.detail}${diff}`;

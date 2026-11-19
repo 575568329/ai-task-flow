@@ -267,6 +267,25 @@ describe('WorklogService', () => {
   // ---------------------------------------------------------------
   // 双实例(模拟 HTTP 进程与 MCP 进程)并发
   // ---------------------------------------------------------------
+  it('should persist and filter by stage', async () => {
+    const created = await service.record({
+      project: 'p', version: 'v', title: 't', detail: 'd', stage: 'dev',
+    });
+    const dev = await service.query({ project: 'p', stage: 'dev' });
+    expect(dev).toHaveLength(1);
+    expect(dev[0].stage).toBe('dev');
+
+    await service.update(created.entryId, { stage: 'review' });
+    expect(await service.query({ project: 'p', stage: 'review' })).toHaveLength(1);
+    expect(await service.query({ project: 'p', stage: 'dev' })).toHaveLength(0);
+  });
+
+  it('should reject an invalid stage', async () => {
+    await expect(service.record({
+      project: 'p', version: 'v', title: 't', detail: 'd', stage: 'bad' as never,
+    })).rejects.toThrow();
+  });
+
   it('should not lose updates across two repository instances', async () => {
     const serviceB = new WorklogService(new JsonWorklogRepository(filePath, backupsDir));
     // 同项目同版本并发写 20 条,两实例各 10

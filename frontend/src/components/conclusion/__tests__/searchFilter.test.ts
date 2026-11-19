@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ConclusionSummary } from '@ai-task-flow/shared';
-import { filterConclusions, groupConclusions } from '../searchFilter';
+import { filterConclusions, filterConclusionsByStage, groupConclusions } from '../searchFilter';
 
 function card(over: Partial<ConclusionSummary>): ConclusionSummary {
   return {
@@ -11,9 +11,9 @@ function card(over: Partial<ConclusionSummary>): ConclusionSummary {
 }
 
 const cards: ConclusionSummary[] = [
-  card({ id: 'c_a', project: 'ai-task-flow', latestDate: '2026-11-18', updatedAt: 9 }),
+  card({ id: 'c_a', project: 'ai-task-flow', latestDate: '2026-11-18', updatedAt: 9, stage: 'dev' }),
   card({ id: 'c_b', project: 'ai-task-flow', latestDate: '2026-11-17', updatedAt: 1 }),
-  card({ id: 'c_c', project: 'rpp', latestDate: '2026-11-16', updatedAt: 2 }),
+  card({ id: 'c_c', project: 'rpp', latestDate: '2026-11-16', updatedAt: 2, stage: 'review' }),
   card({ id: 'c_d', scope: 'personal', project: undefined, latestDate: '2026-11-15', updatedAt: 3 }),
 ];
 
@@ -33,5 +33,11 @@ describe('filterConclusions', () => {
     expect(filterConclusions(cards, { type: 'personal' }).map((c) => c.id))
       .toEqual(['c_d']);
     expect(filterConclusions(cards, { type: 'all' })).toHaveLength(4);
+  });
+
+  it('should filter by stage and unset', () => {
+    expect(filterConclusionsByStage(cards, 'dev').map((c) => c.id)).toEqual(['c_a']);
+    expect(filterConclusionsByStage(cards, 'review').map((c) => c.id)).toEqual(['c_c']);
+    expect(filterConclusionsByStage(cards, 'unset').map((c) => c.id)).toEqual(['c_b', 'c_d']);
   });
 });
