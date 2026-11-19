@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `4b0ee0c`(feat(conclusion): 一对话一卡 + 卡片 Markdown 折叠展示) |
-| 构建时间 | 2026-11-19 10:09 |
+| dist 构建来源 commit | `1a4cfc3`(fix(conclusion): 审查修复——卡片级对话归属/关闭 raw HTML/短 ID 与逐版来源) |
+| 构建时间 | 2026-11-19 11:06 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
