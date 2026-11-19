@@ -23,7 +23,7 @@ export function matchesKeyword(entry: WorklogEntry, keyword: string): boolean {
 /**
  * 计算右栏可见条目(新在前)。
  * - keyword 非空:全局搜索(忽略 selection),命中即显示——方便"想看的需求是怎么做的"直接定位;
- * - 否则:按树选择过滤(项目精确/版本精确),未选则全部。
+ * - 否则:按树选择过滤(项目精确/版本精确);未选不加载全部(数据量大,避免默认渲染 60+ 条)。
  */
 export function filterEntries(
   data: WorklogData,
@@ -31,6 +31,7 @@ export function filterEntries(
   keyword: string,
 ): { entries: VisibleEntry[]; isSearching: boolean } {
   const isSearching = keyword.trim().length > 0;
+  if (!isSearching && !selection.project) return { entries: [], isSearching };
   const result: VisibleEntry[] = [];
 
   for (const project of data.projects) {

@@ -26,6 +26,7 @@ export function WorklogView() {
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
+  const [expandAll, setExpandAll] = useState<boolean | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
   const refreshSeq = useRef(0);
@@ -73,6 +74,7 @@ export function WorklogView() {
     () => filterEntries(data, selection, keyword),
     [data, selection, keyword],
   );
+  const noSelection = !isSearching && !selection.project;
 
   // 项目名 → 版本列表(挪版本下拉按条目所属项目取,跨项目混看不错配)
   const versionsByProject = useMemo(() => {
@@ -146,7 +148,9 @@ export function WorklogView() {
 
   const emptyHint = loadFailed
     ? '加载失败,点左上角刷新重试(后端可能未启动)。'
-    : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
+    : noSelection
+      ? '数据量较大,默认不加载全部。请在左侧展开项目,选择版本查看记录。'
+      : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
 
   return (
     <div className="flex h-full">
@@ -227,16 +231,30 @@ export function WorklogView() {
                 )}
               </div>
             </div>
-            <h2 className="text-sm font-semibold">
-              {isSearching
-                ? `搜索「${keyword.trim()}」`
-                : selection.project
-                  ? selection.version
-                    ? `${selection.project} / ${selection.version}`
-                    : `${selection.project}(全部版本)`
-                  : '全部记录'}
-              <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                {isSearching
+                  ? `搜索「${keyword.trim()}」`
+                  : selection.project
+                    ? selection.version
+                      ? `${selection.project} / ${selection.version}`
+                      : `${selection.project}(全部版本)`
+                    : '工作记录'}
+                {!noSelection && (
+                  <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
+                )}
+              </h2>
+              {visibleEntries.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setExpandAll((value) => !(value ?? false))}
+                >
+                  {expandAll ? '全部收起' : '全部展开'}
+                </Button>
+              )}
+            </div>
 
             {creating && (
               <NewEntryForm
@@ -258,6 +276,7 @@ export function WorklogView() {
                   projectVersions={versionsByProject.get(project) ?? [version]}
                   currentVersion={version}
                   contextLabel={isSearching ? `${project} / ${version}` : (!selection.version ? version : undefined)}
+                  expandAll={expandAll}
                   onSave={handleSave}
                   onDelete={handleDeleteEntry}
                 />

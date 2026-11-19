@@ -72,9 +72,13 @@ describe('filterEntries', () => {
     expect(entries[0].version).toBe('V8.0.5');
   });
 
-  it('should sort newest first', () => {
-    const { entries } = filterEntries(data, {}, '');
-    expect(entries[0].entry.id).toBe('e_d'); // createdAt 9 最大
+  it('should not load all entries when no selection and no keyword', () => {
+    expect(filterEntries(data, {}, '').entries).toEqual([]);
+  });
+
+  it('should sort newest first within a project', () => {
+    const { entries } = filterEntries(data, { project: '搜题平台' }, '');
+    expect(entries.map((e) => e.entry.id)).toEqual(['e_c', 'e_a', 'e_b']);
   });
 
   it('should return empty with friendly flag when nothing matches', () => {

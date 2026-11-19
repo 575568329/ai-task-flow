@@ -96,6 +96,7 @@ describe('EntryItem', () => {
   it('should toggle diff panel with DiffViewer content', () => {
     render(<EntryItem {...baseProps} entry={makeEntry()} onSave={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.queryByText(/diff --git/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('展开'));
     fireEvent.click(screen.getByText('展开 diff'));
     expect(screen.getByText(/diff --git a\/backend\/src\/server\.ts/)).toBeInTheDocument();
   });

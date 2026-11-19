@@ -2,7 +2,7 @@
 // 条目卡:title/tags/date/版本徽标/files 徽标 + detail markdown + diff 折叠 + 内联编辑/删除。
 // 编辑为 partial 提交:表单外字段(diff/files)不回传即保留,不会被抹掉。
 // 版本列表按条目所属项目传入(P1 修复:跨项目混看时挪版本不再错配)。
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2, Check, X, FileCode2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/common/MessageContent';
 import { toast } from '@/components/ui/toaster';
+import { plainTextExcerpt } from '@/lib/markdownText';
 import { cn } from '@/lib/utils';
 import type { WorklogEntry } from '@ai-task-flow/shared';
 
@@ -25,13 +26,16 @@ interface EntryItemProps {
   currentVersion: string;
   /** 上下文徽标文本(如搜索结果的「项目/版本」或跨版本视图的版本名),不传则不显示 */
   contextLabel?: string;
+  /** 全局展开/收起信号：true=全部展开，false=全部收起，null/undefined=各卡自管 */
+  expandAll?: boolean | null;
   onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; version?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export function EntryItem({
-  entry, projectVersions, currentVersion, contextLabel, onSave, onDelete,
+  entry, projectVersions, currentVersion, contextLabel, expandAll, onSave, onDelete,
 }: EntryItemProps) {
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -44,7 +48,12 @@ export function EntryItem({
   const [moveTo, setMoveTo] = useState('');                 // 既有版本名 或 NEW_VERSION 哨兵
   const [newVersionText, setNewVersionText] = useState(''); // 哨兵激活后的新版本名输入
 
+  useEffect(() => {
+    if (expandAll !== null && expandAll !== undefined) setExpanded(expandAll);
+  }, [expandAll]);
+
   const startEdit = () => {
+    setExpanded(true);
     setTitle(entry.title);
     setDetail(entry.detail);
     setTagsText((entry.tags ?? []).join(', '));
@@ -165,68 +174,95 @@ export function EntryItem({
         </div>
       ) : (
         <>
-          <header className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold">{entry.title}</h3>
-            <span className="text-muted-foreground text-xs">{entry.date}</span>
-            {contextLabel && (
-              <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
-            )}
-            {uniqueTags.map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
-            ))}
-            {entry.updatedAt > entry.createdAt && (
-              <span className="text-muted-foreground text-xs">(已编辑)</span>
-            )}
-            <span className="flex-1" />
-            <div
-              className={cn(
-                'flex shrink-0 items-center gap-1 transition-opacity',
-                confirmDelete
-                  ? 'opacity-100'                            // 确认删除进行中:常驻
-                  : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100', // hover/键盘聚焦才显示
-              )}
-            >
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={startEdit}>
-              <Pencil className="size-3" /> 编辑
-            </Button>
-            {confirmDelete ? (
-              <>
-                <Button variant="destructive" size="sm" className="h-6 px-2 text-xs" onClick={() => onDelete(entry.id)}>
-                  <Check className="size-3" /> 确认删除
+          <header className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-sm font-semibold" title={entry.title}>{entry.title}</h3>
+                {entry.updatedAt > entry.createdAt && (
+                  <span className="text-muted-foreground shrink-0 text-xs">(已编辑)</span>
+                )}
+              </div>
+              <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span>{entry.date}</span>
+                {contextLabel && (
+                  <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
+                )}
+                {uniqueTags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                ))}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <div
+                className={cn(
+                  'flex shrink-0 items-center gap-1 transition-opacity',
+                  confirmDelete
+                    ? 'opacity-100'                            // 确认删除进行中:常驻
+                    : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100', // hover/键盘聚焦才显示
+                )}
+              >
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={startEdit}>
+                  <Pencil className="size-3" /> 编辑
                 </Button>
-                <Button variant="ghost" size="sm" className="size-6 p-0" title="取消删除" onClick={() => setConfirmDelete(false)}>
-                  <X className="size-3" />
-                </Button>
-              </>
-            ) : (
-              <Button variant="ghost" size="sm" className="text-destructive h-6 px-2 text-xs" onClick={() => setConfirmDelete(true)}>
-                <Trash2 className="size-3" /> 删除
+                {confirmDelete ? (
+                  <>
+                    <Button variant="destructive" size="sm" className="h-6 px-2 text-xs" onClick={() => onDelete(entry.id)}>
+                      <Check className="size-3" /> 确认删除
+                    </Button>
+                    <Button variant="ghost" size="sm" className="size-6 p-0" title="取消删除" onClick={() => setConfirmDelete(false)}>
+                      <X className="size-3" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" size="sm" className="text-destructive h-6 px-2 text-xs" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 className="size-3" /> 删除
+                  </Button>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 shrink-0 px-2 text-xs"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                {expanded ? '收起' : '展开'}
               </Button>
-            )}
             </div>
           </header>
 
           {entry.files?.length ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <FileCode2 className="text-muted-foreground size-3.5" />
-              {entry.files.map((f, i) => (
-                <code
-                  key={`${f.path}:${f.startLine ?? i}`}
-                  title={f.startLine ? `${f.path}:${f.startLine}${f.endLine && f.endLine !== f.startLine ? `-${f.endLine}` : ''}` : f.path}
-                  className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
-                >
-                  {f.path}
-                  {f.startLine ? `:${f.startLine}` : ''}
-                </code>
-              ))}
-            </div>
+            <details className="text-xs">
+              <summary className="text-muted-foreground flex cursor-pointer items-center gap-1">
+                <FileCode2 className="size-3.5" />
+                涉及文件 ({entry.files.length})
+              </summary>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {entry.files.map((f, i) => (
+                  <code
+                    key={`${f.path}:${f.startLine ?? i}`}
+                    title={f.startLine ? `${f.path}:${f.startLine}${f.endLine && f.endLine !== f.startLine ? `-${f.endLine}` : ''}` : f.path}
+                    className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
+                  >
+                    {f.path}
+                    {f.startLine ? `:${f.startLine}` : ''}
+                  </code>
+                ))}
+              </div>
+            </details>
           ) : null}
 
-          <div className="text-sm leading-relaxed">
-            <MessageContent content={entry.detail} />
-          </div>
+          {expanded ? (
+            <div className="text-sm leading-relaxed">
+              <MessageContent content={entry.detail} />
+            </div>
+          ) : (
+            <p className="text-muted-foreground line-clamp-3 text-sm">
+              {entry.detail.trim() ? plainTextExcerpt(entry.detail) : '无详细说明'}
+            </p>
+          )}
 
-          {entry.diff ? (
+          {expanded && entry.diff ? (
             <div>
               <button
                 type="button"

@@ -1,6 +1,6 @@
 // frontend/src/components/worklog/ProjectVersionTree.tsx
 // 左栏:项目/版本树(计数徽标 + 右键 重命名/删除)。重命名与删除均内联/确认态,零二级弹窗。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ChevronDown, ChevronRight, FolderGit2, Tag, Pencil, Trash2, Check, X,
 } from 'lucide-react';
@@ -36,18 +36,30 @@ export function ProjectVersionTree({
   data, selection, onSelect,
   onRenameVersion, onRenameProject, onDeleteVersion, onDeleteProject,
 }: ProjectVersionTreeProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** 默认全部收起；只记录“已展开”的项目，新项目/新加载的项目也默认收起。 */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const toggle = (project: string) => {
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(project)) next.delete(project);
       else next.add(project);
       return next;
     });
   };
+
+  // 外部选择（建任务、搜索定位等）落到某项目时，自动展开该项目。
+  useEffect(() => {
+    if (!selection.project) return;
+    setExpanded((prev) => {
+      if (prev.has(selection.project!)) return prev;
+      const next = new Set(prev);
+      next.add(selection.project!);
+      return next;
+    });
+  }, [selection.project]);
 
   const confirmPending = async () => {
     if (!pending) return;
@@ -68,7 +80,11 @@ export function ProjectVersionTree({
   return (
     <div className="space-y-0.5">
       {data.projects.map((project) => {
-        const isCollapsed = collapsed.has(project.name);
+        const isCollapsed = !expanded.has(project.name);
+        // 版本新→旧：数字感知排序，V8.0.10 排在 V8.0.9 前。
+        const sortedVersions = [...project.versions].sort((a, b) =>
+          b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }),
+        );
         const isProjectActive = selection.project === project.name && !selection.version;
         const totalEntries = project.versions.reduce((sum, v) => sum + v.entries.length, 0);
         return (
@@ -126,7 +142,7 @@ export function ProjectVersionTree({
               />
             )}
 
-            {!isCollapsed && project.versions.map((version) => {
+            {!isCollapsed && sortedVersions.map((version) => {
               const isVersionActive = selection.project === project.name && selection.version === version.name;
               return (
                 <div key={version.name} className="pl-5">
