@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `0c1f2b9`(feat(conclusion): 按会话自动 upsert——有卡续写/无卡新建) |
-| 构建时间 | 2026-11-19 14:01 |
+| dist 构建来源 commit | `a8008e4`(feat(conclusion): 正文格式契约定稿——两套骨架 + data 分条) |
+| 构建时间 | 2026-11-19 16:34 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
