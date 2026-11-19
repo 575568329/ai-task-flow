@@ -11,6 +11,8 @@ import type {
   ConclusionDetail,
   ConclusionPatchRequest,
   ConclusionQueryRequest,
+  ConclusionRecordRequest,
+  ConclusionRecordResponse,
   ConclusionRevision,
   ConclusionSource,
   ConclusionSummary,
@@ -55,6 +57,17 @@ function latestOf(card: Conclusion): ConclusionRevision {
   return latest;
 }
 
+/** 一对话一卡：按卡片归属找当前会话的卡；旧数据先回填归属。 */
+function findConversationCard(data: ConclusionData, conversationId: string): Conclusion | undefined {
+  let best: Conclusion | undefined;
+  for (const card of data.conclusions) {
+    ensureConversationOwner(card);
+    if (card.conversationId !== conversationId) continue;
+    if (!best || card.updatedAt > best.updatedAt) best = card;
+  }
+  return best;
+}
+
 export class ConclusionService {
   constructor(private readonly repo: ConclusionRepository) {}
 
@@ -69,6 +82,67 @@ export class ConclusionService {
         id: card.id,
         rev: 1,
         path: `${card.project ?? '个人'}/${card.title}#1`,
+      };
+    });
+  }
+
+  /**
+   * MCP 自动写入入口：不传 cardId 时按当前会话自动 upsert。
+   * 同一会话已有卡 → 追加新版；没有 → 新建。查找/创建/追加全部在文件锁内完成。
+   */
+  async record(
+    input: ConclusionRecordRequest,
+    source: ConclusionSource,
+  ): Promise<ConclusionRecordResponse> {
+    return this.repo.mutate((data) => {
+      const conversationId = source.conversationId?.trim();
+      const existing = conversationId ? findConversationCard(data, conversationId) : undefined;
+
+      if (!existing) {
+        const card = createConclusion({
+          scope: input.scope ?? (input.project ? 'project' : 'personal'),
+          project: input.project,
+          version: input.version,
+          title: input.title ?? '',
+          tags: input.tags,
+          decision: input.decision ?? '',
+          data: input.data,
+          openItems: input.openItems,
+          codeRefs: input.codeRefs,
+          date: input.date,
+          changeNote: input.changeNote,
+          conversationName: input.conversationName,
+        }, source);
+        data.conclusions.push(card);
+        return {
+          id: card.id,
+          rev: 1,
+          path: `${card.project ?? '个人'}/${card.title}#1`,
+          created: true,
+        };
+      }
+
+      const revision = appendRevision(existing, {
+        expectedRev: input.expectedRev,
+        allowCrossConversation: input.allowCrossConversation,
+        scope: input.scope,
+        project: input.project,
+        version: input.version,
+        title: input.title,
+        tags: input.tags,
+        decision: input.decision,
+        data: input.data,
+        openItems: input.openItems,
+        codeRefs: input.codeRefs,
+        date: input.date,
+        changeNote: input.changeNote ?? '',
+        conversationName: input.conversationName,
+      }, source);
+      return {
+        id: existing.id,
+        rev: revision.rev,
+        path: `${existing.project ?? '个人'}/${existing.title}#${revision.rev}`,
+        created: false,
       };
     });
   }

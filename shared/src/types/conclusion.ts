@@ -81,6 +81,35 @@ export interface ConclusionAppendRequest {
   conversationName?: string;
 }
 
+/**
+ * record_conclusion 自动 upsert 入参：不传 cardId 时按当前会话查找，
+ * 已存在则追加新版，不存在则新建。
+ */
+export interface ConclusionRecordRequest {
+  scope?: ProblemScope;
+  project?: string;
+  version?: string;
+  title?: string;
+  tags?: string[];
+  decision?: string;
+  data?: string;
+  openItems?: string;
+  codeRefs?: ConclusionCodeRef[];
+  date?: string;
+  changeNote?: string;
+  conversationName?: string;
+  expectedRev?: number;
+  allowCrossConversation?: boolean;
+}
+
+export interface ConclusionRecordResponse {
+  id: string;
+  rev: number;
+  path: string;
+  /** true=本次新建，false=同一会话自动续写 */
+  created: boolean;
+}
+
 export interface ConclusionPatchRequest {
   scope?: ProblemScope;
   project?: string;

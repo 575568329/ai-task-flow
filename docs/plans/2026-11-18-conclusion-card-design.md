@@ -195,12 +195,17 @@ export interface ConclusionData {
 
 ### 7.1 `record_conclusion`
 
-**默认新建，按 ID 更新：** 用户说“记一下 / 同步到结论卡 / 存一张”但未明确指向已有卡时，不传 `cardId`、直接新建；**禁止先用 keyword 搜索相似卡**。只有用户明确说“更新 / 继续 / 追加刚才那张”或直接给出 `cardId` 时才追加，并**直接按 `cardId` 读取最新版**，禁止用 keyword 搜索定位要更新的卡。keyword 只用于用户明确要求查找/回看且上下文没有 `cardId` 的场景。
+**按会话自动 upsert：** 不传 `cardId` 时，服务端用来源 `conversationId` 在当前会话内查找：
+
+- 找到 → 追加新版（同一会话多版演进）
+- 没找到 → 新建
+
+AI **不需要先调用 `query_conclusions`**，也**禁止用 keyword 搜索**来定位/复用旧卡；写入路径完全不依赖模糊匹配。只有用户明确要求更新另一张指定卡时才传 `cardId`；显式跨对话更新需 `allowCrossConversation=true`。
 
 **描述必须包含的四条约束：**
 
 1. 仅当用户明确要求记录结论时调用；不要主动捕获。
-2. 追加前先用 `query_conclusions({ cardId })` 读取最新版与演进摘要；同一会话已读过并持有 `rev` 可跳过。
+2. 自动续写无需查询；显式 `cardId` 追加前按 `cardId` 读取最新版。
 3. 追加时省略的字段**沿用上一版**，显式传 `""` / `[]` 表示清空；服务端仍存完整快照。
 4. 追加必须提供 `changeNote`，建议同时带 `expectedRev`（读取到的版本号）；不一致时返回 409，需重读后再写。
 

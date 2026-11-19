@@ -50,6 +50,27 @@ describe('conclusion MCP tools', () => {
     expect(detail.content[0].text).toContain('话题A');
   });
 
+  it('should auto-append same conversation without cardId', async () => {
+    const first = await record({
+      scope: 'project', project: 'p', title: 't', decision: 'd1',
+    }, deps);
+    const firstText = first.content[0].text;
+    const id = (firstText.match(/c_[a-z0-9]+/) ?? [])[0];
+    expect(firstText).toContain('已创建结论卡');
+
+    const second = await record({ data: 'd2', changeNote: '同会话补充' }, deps);
+    expect(second.isError).toBeFalsy();
+    expect(second.content[0].text).toContain('已续写同一会话结论卡');
+    expect(second.content[0].text).toContain('rev 2');
+
+    const other = await record({
+      scope: 'project', project: 'p', title: 't', decision: 'd1',
+    }, { ...deps, mcpSource: { ...deps.mcpSource, conversationId: 'sess-2' } });
+    expect(other.isError).toBeFalsy();
+    expect(other.content[0].text).toContain('已创建结论卡');
+    expect(other.content[0].text).not.toContain(id);
+  });
+
   it('should append with inherited fields and reject missing changeNote', async () => {
     const created = await record({
       scope: 'project', project: 'p', title: 't', decision: 'd', data: 'd1',

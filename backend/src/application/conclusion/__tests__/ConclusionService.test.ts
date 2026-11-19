@@ -47,6 +47,36 @@ describe('ConclusionService', () => {
     expect(card.revisions[0].source.conversationId).toBe('sess-1');
   });
 
+  it('should auto-append subsequent records from the same conversation', async () => {
+    const first = await service.record(
+      { scope: 'project', project: 'p', title: 't', decision: 'd1' },
+      source,
+    );
+    expect(first.created).toBe(true);
+
+    const second = await service.record({ data: 'd2', changeNote: '同会话补充' }, source);
+    expect(second.created).toBe(false);
+    expect(second.id).toBe(first.id);
+    expect(second.rev).toBe(2);
+
+    const card = await service.get(first.id);
+    expect(card.revisions).toHaveLength(2);
+    expect(card.revisions[1].decision).toBe('d1'); // 省略字段沿用
+  });
+
+  it('should create a new card for a different conversation', async () => {
+    const first = await service.record(
+      { scope: 'project', project: 'p', title: 't', decision: 'd1' },
+      source,
+    );
+    const second = await service.record(
+      { scope: 'project', project: 'p', title: 't', decision: 'd1' },
+      { ...source, conversationId: 'sess-2' },
+    );
+    expect(second.created).toBe(true);
+    expect(second.id).not.toBe(first.id);
+  });
+
   it('should append with inherited fields and explicit clear', async () => {
     const { id } = await service.create(createInput(), source);
     const appended = await service.append(id, {

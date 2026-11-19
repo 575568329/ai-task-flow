@@ -165,11 +165,15 @@ try {
     'record_conclusion 描述应点名 record_work',
   );
   assert(
-    byName.get('record_conclusion').description.includes('默认新建'),
-    'record_conclusion 描述应默认新建',
+    byName.get('record_conclusion').description.includes('自动 upsert'),
+    'record_conclusion 描述应按会话自动 upsert',
   );
   assert(
-    byName.get('record_conclusion').description.includes('不要先用 keyword'),
+    byName.get('record_conclusion').description.includes('无需先调用 query_conclusions'),
+    'record_conclusion 描述应说明无需先查询',
+  );
+  assert(
+    byName.get('record_conclusion').description.includes('禁止用 keyword 搜索'),
     'record_conclusion 描述应禁止写前 keyword 预搜索',
   );
   assert(
@@ -198,6 +202,20 @@ try {
   assert(idMatch, `创建结果应包含 c_ 开头的 cardId，实际：${createdText}`);
   const cardId = idMatch[1];
   log(`record_conclusion OK: ${cardId}`);
+
+  // 5b. 同会话第二次记录：不传 cardId，应自动续写到同一张卡
+  const appended = await client.request('tools/call', {
+    name: 'record_conclusion',
+    arguments: {
+      data: '同会话第二次记录',
+      changeNote: 'stdio 冒烟自动续写',
+    },
+  });
+  assert(!appended.isError, `同会话自动续写失败：${appended.content?.[0]?.text}`);
+  const appendedText = appended.content?.[0]?.text ?? '';
+  assert(appendedText.includes('已续写同一会话结论卡'), `自动续写提示不符：${appendedText}`);
+  assert(appendedText.includes('rev 2'), `自动续写应到 rev 2：${appendedText}`);
+  log('record_conclusion auto-append OK: rev 2');
 
   // 6. query_conclusions(按 cardId 读回)
   const queried = await client.request('tools/call', {

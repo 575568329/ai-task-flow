@@ -24,10 +24,11 @@ describe('MCP tool catalog cross-references', () => {
     expect(description).toContain('record_work');
   });
 
-  it('should default record_conclusion to create and forbid keyword pre-search', () => {
+  it('should auto-upsert by conversation and forbid keyword pre-search', () => {
     const description = descriptionOf(CONCLUSION_TOOL_CATALOG, 'record_conclusion');
-    expect(description).toContain('默认新建');
-    expect(description).toContain('不要先用 keyword');
+    expect(description).toContain('自动 upsert');
+    expect(description).toContain('无需先调用 query_conclusions');
+    expect(description).toContain('禁止用 keyword 搜索');
   });
 
   it('should tell query_conclusions to use cardId directly when known', () => {

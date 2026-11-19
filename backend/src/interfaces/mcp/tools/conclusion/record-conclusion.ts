@@ -1,9 +1,10 @@
 // backend/src/interfaces/mcp/tools/conclusion/record-conclusion.ts
-// record_conclusion:无 cardId=新建;有 cardId=追加新版(省略字段沿用上一版)。
+// record_conclusion:无 cardId=按当前会话自动 upsert(有则续写/无则新建);
+// 有 cardId=显式追加指定卡(省略字段沿用上一版)。
 import type {
   ConclusionAppendRequest,
   ConclusionCodeRef,
-  ConclusionCreateRequest,
+  ConclusionRecordRequest,
   ConclusionSource,
   ProblemScope,
 } from '@ai-task-flow/shared';
@@ -18,19 +19,19 @@ export const toolDef = {
     properties: {
       cardId: {
         type: 'string' as const,
-        description: '已有结论卡 id（c_xxx）。只有用户明确要求更新某张卡时才传；默认新建不要传，也不要用 keyword 搜索相似旧卡',
+        description: '可选。不传=按当前会话自动续写/新建；传=显式更新指定卡（跨对话需 allowCrossConversation=true）',
       },
-      expectedRev: { type: 'number' as const, description: '追加时建议传：读取到的当前版本号，不一致返回冲突' },
+      expectedRev: { type: 'number' as const, description: '自动续写不需要；显式 cardId 更新时建议传：读取到的当前版本号，不一致返回冲突' },
       allowCrossConversation: {
         type: 'boolean' as const,
-        description: '默认 false（一对话一卡）：来源对话与卡上一版不同则拒绝追加；仅当用户明确要求跨对话续写同一张卡时传 true',
+        description: '仅显式 cardId 跨对话更新时使用；自动续写（不传 cardId）不需要',
       },
       scope: { type: 'string' as const, enum: ['project', 'personal'], description: '项目问题还是个人问题' },
       project: { type: 'string' as const, description: '项目名（scope=project 必填）' },
       version: { type: 'string' as const, description: '版本名（可选，仅项目问题）' },
-      title: { type: 'string' as const, description: '结论卡主题（新建必填；追加时可选更新）' },
+      title: { type: 'string' as const, description: '结论卡主题（新建必填；自动续写时可省略或更新）' },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签，可选' },
-      decision: { type: 'string' as const, description: '结论/决策 + 理由（Markdown）；新建必填，追加省略=沿用' },
+      decision: { type: 'string' as const, description: '结论/决策 + 理由（Markdown）；新建必填，自动续写省略=沿用' },
       data: { type: 'string' as const, description: '关键数据/命令结果；追加省略=沿用，传空串=清空' },
       openItems: { type: 'string' as const, description: '待办/未决问题；追加省略=沿用，传空串=清空' },
       codeRefs: {
@@ -48,7 +49,7 @@ export const toolDef = {
         },
       },
       date: { type: 'string' as const, description: '本版业务日期 YYYY-MM-DD，默认当天' },
-      changeNote: { type: 'string' as const, description: '本版为什么更新（追加必填）' },
+      changeNote: { type: 'string' as const, description: '本版为什么更新（同一会话后续记录必填；新建时可省略）' },
       conversationName: {
         type: 'string' as const,
         description: '对话名称（建议填写本次对话主题，如「worklog 全局搜索方案」；不填则页面只显示对话 ID）',
@@ -101,26 +102,33 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       ].join('\n'));
     }
 
-    // 新建:未显式给 scope 时,有 project 视为项目问题,否则个人问题
-    const inferredScope: ProblemScope = scope ?? (args.project ? 'project' : 'personal');
-    const create: ConclusionCreateRequest = {
-      scope: inferredScope,
+    // 自动 upsert：按当前会话找卡；有则续写，无则新建。
+    const record: ConclusionRecordRequest = {
+      scope,
       project: text(args.project),
       version: text(args.version),
-      title: text(args.title) ?? '',
+      title: text(args.title),
       tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
-      decision: text(args.decision) ?? '',
+      decision: text(args.decision),
       data: text(args.data),
       openItems: text(args.openItems),
       codeRefs: Array.isArray(args.codeRefs) ? args.codeRefs as ConclusionCodeRef[] : undefined,
       date: text(args.date),
       changeNote: text(args.changeNote),
       conversationName: text(args.conversationName),
+      expectedRev: num(args.expectedRev),
+      allowCrossConversation: args.allowCrossConversation === true,
     };
-    const result = await deps.conclusionService.create(create, source);
+    const result = await deps.conclusionService.record(record, source);
+    if (result.created) {
+      return ok([
+        `✅ 已创建结论卡 ${result.id}（${record.project ?? '个人'} · rev ${result.rev}）`,
+        '本会话后续记录会自动续写到这张卡，无需先查询或再传 cardId。',
+      ].join('\n'));
+    }
     return ok([
-      `✅ 已创建结论卡 ${result.id}（${create.project ?? '个人'} · rev ${result.rev}）`,
-      `后续更新请带 cardId=${result.id}`,
+      `✅ 已续写同一会话结论卡 ${result.id} → rev ${result.rev}`,
+      ...(record.changeNote ? [`变更说明：${record.changeNote}`] : []),
     ].join('\n'));
   } catch (err) {
     return fail(err);

@@ -10,17 +10,16 @@ export const CONCLUSION_TOOL_CATALOG: ConclusionToolMeta[] = [
     name: 'record_conclusion',
     description:
       '记录一张结论卡（主题 → 结论/数据/待办/代码位置）。仅在用户明确要求记录结论时调用，禁止主动捕获。' +
-      '默认新建：用户说“记一下/同步到结论卡/存一张”但没有明确指向某张已有卡时，不要传 cardId，' +
-      '也不要先用 keyword 搜索相似卡；直接新建。' +
-      '只有用户明确说“更新/继续/追加刚才那张卡”或直接给出 cardId 时才追加：直接按 cardId 调 ' +
-      'query_conclusions 读取最新版，再带 cardId 追加，禁止用关键字搜索定位要更新的卡。' +
-      '追加时省略的字段沿用上一版，显式传 "" 或 [] 表示清空；必须提供 changeNote，建议带 expectedRev。' +
+      '不传 cardId 时按当前会话自动 upsert：本会话已有卡则续写新版，没有则新建。' +
+      '无需先调用 query_conclusions，也禁止用 keyword 搜索来定位/复用旧卡。' +
+      '同一会话后续记录必须提供 changeNote；新建时可省略。' +
+      '只有用户明确要求更新另一张指定卡时才传 cardId；显式跨对话更新需 allowCrossConversation=true。' +
+      '追加时省略的字段沿用上一版，显式传 "" 或 [] 表示清空。' +
       '建议填写 conversationName（本次对话主题），便于人区分来源；对话 ID 会自动采集。' +
-      '默认一对话一卡：来源对话与卡片归属不同会被拒绝；只有用户明确要求跨对话续写时才传 allowCrossConversation=true。' +
       '禁止记录密钥、令牌、个人敏感信息。' +
       '本工具不记录 diff；代码变更/文件/行号请用 record_work。',
     whenToUse:
-      '用户说“把刚才的结论记一下/同步到结论卡/存一张结论卡”，或明确说“更新/继续刚才那张结论卡”。',
+      '用户说“把刚才的结论记一下/同步到结论卡/存一张结论卡”，或同一会话继续补充结论时。',
     userPromptExample:
       '把刚才的结论记到 ai-task-flow，项目 ai-task-flow：结论、关键数据、待办、涉及文件。',
   },
