@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `a8008e4`(feat(conclusion): 正文格式契约定稿——两套骨架 + data 分条) |
-| 构建时间 | 2026-11-19 16:34 |
+| dist 构建来源 commit | `c4346d8`(feat(stage): 唯一阶段标签——8 阶段/筛选/抽屉全文) |
+| 构建时间 | 2026-11-19 17:37 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
