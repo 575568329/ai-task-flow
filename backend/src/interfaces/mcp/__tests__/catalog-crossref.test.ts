@@ -23,4 +23,16 @@ describe('MCP tool catalog cross-references', () => {
     const description = descriptionOf(CONCLUSION_TOOL_CATALOG, 'record_conclusion');
     expect(description).toContain('record_work');
   });
+
+  it('should default record_conclusion to create and forbid keyword pre-search', () => {
+    const description = descriptionOf(CONCLUSION_TOOL_CATALOG, 'record_conclusion');
+    expect(description).toContain('默认新建');
+    expect(description).toContain('不要先用 keyword');
+  });
+
+  it('should tell query_conclusions to use cardId directly when known', () => {
+    const description = descriptionOf(CONCLUSION_TOOL_CATALOG, 'query_conclusions');
+    expect(description).toContain('已知 cardId');
+    expect(description).toContain('禁止在已知 cardId 时再用 keyword');
+  });
 });

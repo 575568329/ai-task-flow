@@ -16,7 +16,10 @@ export const toolDef = {
   inputSchema: {
     type: 'object' as const,
     properties: {
-      cardId: { type: 'string' as const, description: '已有结论卡 id（c_xxx）；传入=追加新版，不传=新建' },
+      cardId: {
+        type: 'string' as const,
+        description: '已有结论卡 id（c_xxx）。只有用户明确要求更新某张卡时才传；默认新建不要传，也不要用 keyword 搜索相似旧卡',
+      },
       expectedRev: { type: 'number' as const, description: '追加时建议传：读取到的当前版本号，不一致返回冲突' },
       allowCrossConversation: {
         type: 'boolean' as const,

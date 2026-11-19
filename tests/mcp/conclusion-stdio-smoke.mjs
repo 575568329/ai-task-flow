@@ -164,6 +164,22 @@ try {
     byName.get('record_conclusion').description.includes('record_work'),
     'record_conclusion 描述应点名 record_work',
   );
+  assert(
+    byName.get('record_conclusion').description.includes('默认新建'),
+    'record_conclusion 描述应默认新建',
+  );
+  assert(
+    byName.get('record_conclusion').description.includes('不要先用 keyword'),
+    'record_conclusion 描述应禁止写前 keyword 预搜索',
+  );
+  assert(
+    byName.get('query_conclusions').description.includes('已知 cardId'),
+    'query_conclusions 描述应优先使用 cardId',
+  );
+  assert(
+    byName.get('query_conclusions').description.includes('禁止在已知 cardId 时再用 keyword'),
+    'query_conclusions 描述应禁止已知 ID 时 keyword 搜索',
+  );
   log(`tools/list OK: ${tools.length} tools`);
 
   // 5. record_conclusion(新建)

@@ -10,11 +10,17 @@ export const toolDef = {
   inputSchema: {
     type: 'object' as const,
     properties: {
-      cardId: { type: 'string' as const, description: '传 cardId = 读取该卡最新版完整内容与演进摘要' },
+      cardId: {
+        type: 'string' as const,
+        description: '已知 cardId 时直接传，读取该卡最新版完整内容与演进摘要；不要再用 keyword 搜索',
+      },
       scope: { type: 'string' as const, enum: ['project', 'personal'], description: '按问题域过滤' },
       project: { type: 'string' as const, description: '按项目精确过滤' },
       version: { type: 'string' as const, description: '按版本精确过滤' },
-      keyword: { type: 'string' as const, description: '匹配标题 + 全部历史版本的结论/数据/待办/变更说明/文件路径' },
+      keyword: {
+        type: 'string' as const,
+        description: '仅在不知道 cardId 且用户明确要求查找时使用；匹配标题 + 全部历史版本内容。不要用于写前自动定位',
+      },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签任一命中' },
       dateFrom: { type: 'string' as const, description: '起始日期 YYYY-MM-DD（按最新版日期）' },
       dateTo: { type: 'string' as const, description: '结束日期 YYYY-MM-DD' },
