@@ -4,7 +4,7 @@
 // 审阅修复:refresh 竞态序号守卫/selection 随重命名删除跟随/视图激活静默重拉/
 // 挪版本列表按条目所属项目传入/错误提示统一收口(不再双重 toast)。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RefreshCw, BookOpenText, Search, X } from 'lucide-react';
+import { Plus, RefreshCw, BookOpenText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { useUIStore } from '@/stores/uiStore';
@@ -15,6 +15,8 @@ import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
 import { AiGuideView } from './AiGuideView';
 import { WorkStageMultiSelect } from '@/components/common/WorkStageMultiSelect';
+import { SearchInput } from '@/components/common/SearchInput';
+import { WorkspaceLayout, WorkspaceSidebar, WorkspaceToolbar } from '@/components/layout/WorkspaceLayout';
 import type { StageFilter } from '@/lib/workStage';
 import { filterEntries } from './searchFilter';
 
@@ -156,23 +158,25 @@ export function WorklogView() {
       : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
 
   return (
-    <div className="flex h-full">
-      {/* 左栏:树 + 操作 */}
-      <aside className="border-r flex w-60 shrink-0 flex-col @2xl:w-64">
-        <div className="flex items-center gap-1 border-b px-3 py-2">
-          <span className="flex-1 text-sm font-semibold">工作记录</span>
-          <Button variant="ghost" size="sm" className="size-7 p-0" title="刷新(AI 刚记的条目点这里可见;切换视图也会自动刷新)" onClick={() => void refresh()}>
-            <RefreshCw className="size-3.5" />
-          </Button>
-          <Button
-            variant={mode === 'guide' ? 'secondary' : 'ghost'} size="sm" className="size-7 p-0"
-            title="AI 使用指南(什么时候让 AI 调用什么工具)"
-            onClick={() => setMode((m) => (m === 'guide' ? 'entries' : 'guide'))}
-          >
-            <BookOpenText className="size-3.5" />
-          </Button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2">
+    <WorkspaceLayout
+      sidebar={(
+        <WorkspaceSidebar
+          title="工作记录"
+          actions={(
+            <>
+              <Button variant="ghost" size="sm" className="size-7 p-0" title="刷新(AI 刚记的条目点这里可见;切换视图也会自动刷新)" onClick={() => void refresh()}>
+                <RefreshCw className="size-3.5" />
+              </Button>
+              <Button
+                variant={mode === 'guide' ? 'secondary' : 'ghost'} size="sm" className="size-7 p-0"
+                title="AI 使用指南(什么时候让 AI 调用什么工具)"
+                onClick={() => setMode((m) => (m === 'guide' ? 'entries' : 'guide'))}
+              >
+                <BookOpenText className="size-3.5" />
+              </Button>
+            </>
+          )}
+        >
           {data.projects.length === 0 ? (
             <p className="text-muted-foreground p-2 text-xs leading-relaxed">{emptyHint}</p>
           ) : (
@@ -198,104 +202,94 @@ export function WorklogView() {
               )()}
             />
           )}
-        </div>
-        <div className="border-t p-2">
-          <Button variant="outline" size="sm" className="w-full" onClick={() => { setCreating(true); setMode('entries'); }}>
-            <Plus className="size-4" /> 记一条
-          </Button>
-        </div>
-      </aside>
-
-      {/* 右栏:条目流 / AI 指南 */}
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        {mode === 'guide' ? (
-          <AiGuideView />
-        ) : (
-          <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4" />
-                <input
-                  type="text"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setKeyword(''); }}
-                  placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分项目)"
-                  className="border-input bg-background placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border pr-8 pl-8 text-sm outline-none focus-visible:ring-[3px]"
-                  aria-label="搜索工作记录"
-                />
-                {keyword && (
-                  <button
-                    type="button" onClick={() => setKeyword('')} title="清空搜索"
-                    className="text-muted-foreground hover:text-foreground absolute top-2.5 right-2.5"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">
-                {isSearching
-                  ? `搜索「${keyword.trim()}」`
-                  : selection.project
-                    ? selection.version
-                      ? `${selection.project} / ${selection.version}`
-                      : `${selection.project}(全部版本)`
-                    : '工作记录'}
-                {!noSelection && (
-                  <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
-                )}
-              </h2>
-              <div className="flex items-center gap-2">
-                <WorkStageMultiSelect
-                  value={stageFilter}
-                  onChange={setStageFilter}
-                  ariaLabel="按阶段筛选"
-                  className="w-36"
-                />
-                {visibleEntries.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 shrink-0 px-3 text-xs"
-                    onClick={() => setExpandAll((value) => !(value ?? false))}
-                  >
-                    {expandAll ? '全部收起' : '全部展开'}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {creating && (
-              <NewEntryForm
-                projects={projectOptions}
-                defaultProject={selection.project ?? ''}
-                defaultVersion={selection.version ?? ''}
-                onCreate={handleCreate}
-                onCancel={() => setCreating(false)}
+        </WorkspaceSidebar>
+      )}
+      toolbar={mode === 'guide' ? undefined : (
+        <WorkspaceToolbar
+          search={(
+            <SearchInput
+              value={keyword}
+              onChange={setKeyword}
+              placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分项目)"
+              ariaLabel="搜索工作记录"
+            />
+          )}
+          title={(
+            <>
+              {isSearching
+                ? `搜索「${keyword.trim()}」`
+                : selection.project
+                  ? selection.version
+                    ? `${selection.project} / ${selection.version}`
+                    : `${selection.project}(全部版本)`
+                  : '工作记录'}
+              {!noSelection && (
+                <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
+              )}
+            </>
+          )}
+          actions={(
+            <>
+              <WorkStageMultiSelect
+                value={stageFilter}
+                onChange={setStageFilter}
+                ariaLabel="按阶段筛选"
+                className="w-36"
               />
-            )}
+              {visibleEntries.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 px-3 text-xs"
+                  onClick={() => setExpandAll((value) => !(value ?? false))}
+                >
+                  {expandAll ? '全部收起' : '全部展开'}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                className="h-8 shrink-0 px-3 text-xs"
+                onClick={() => { setCreating(true); setMode('entries'); }}
+              >
+                <Plus className="size-3.5" />记一条
+              </Button>
+            </>
+          )}
+        />
+      )}
+    >
+      {mode === 'guide' ? (
+        <AiGuideView />
+      ) : (
+        <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
+          {creating && (
+            <NewEntryForm
+              projects={projectOptions}
+              defaultProject={selection.project ?? ''}
+              defaultVersion={selection.version ?? ''}
+              onCreate={handleCreate}
+              onCancel={() => setCreating(false)}
+            />
+          )}
 
-            {visibleEntries.length === 0 && !creating ? (
-              <p className="text-muted-foreground py-12 text-center text-sm">{emptyHint}</p>
-            ) : (
-              visibleEntries.map(({ entry, project, version }) => (
-                <EntryItem
-                  key={entry.id}
-                  entry={entry}
-                  projectVersions={versionsByProject.get(project) ?? [version]}
-                  currentVersion={version}
-                  contextLabel={isSearching ? `${project} / ${version}` : (!selection.version ? version : undefined)}
-                  expandAll={expandAll}
-                  onSave={handleSave}
-                  onDelete={handleDeleteEntry}
-                />
-              ))
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+          {visibleEntries.length === 0 && !creating ? (
+            <p className="text-muted-foreground py-12 text-center text-sm">{emptyHint}</p>
+          ) : (
+            visibleEntries.map(({ entry, project, version }) => (
+              <EntryItem
+                key={entry.id}
+                entry={entry}
+                projectVersions={versionsByProject.get(project) ?? [version]}
+                currentVersion={version}
+                contextLabel={isSearching ? `${project} / ${version}` : (!selection.version ? version : undefined)}
+                expandAll={expandAll}
+                onSave={handleSave}
+                onDelete={handleDeleteEntry}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </WorkspaceLayout>
   );
 }
