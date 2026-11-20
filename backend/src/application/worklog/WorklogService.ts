@@ -131,28 +131,34 @@ export class WorklogService {
     });
   }
 
-  /** 查询条目:project/version 精确、keyword 大小写不敏感(title/detail/files.path)、
-   *  tags 任一命中、dateFrom/dateTo 闭区间;结果按创建时间新在前 */
+  /** 查询条目:entryId 精确(忽略其他过滤)、project/version 精确、
+   *  keyword 大小写不敏感(title/detail/files.path)、tags 任一命中、
+   *  dateFrom/dateTo 闭区间;结果按创建时间新在前 */
   async query(input: WorklogQueryRequest): Promise<WorklogQueryResultEntry[]> {
     const data = await this.repo.load();
     const limit = input.limit && input.limit > 0 ? input.limit : 20;
+    const entryId = input.entryId?.trim();
     const keyword = input.keyword?.trim().toLowerCase();
     const results: Array<WorklogQueryResultEntry & { __createdAt: number }> = [];
 
     for (const project of data.projects) {
-      if (input.project && project.name !== input.project) continue;
+      if (!entryId && input.project && project.name !== input.project) continue;
       for (const version of project.versions) {
-        if (input.version && version.name !== input.version) continue;
+        if (!entryId && input.version && version.name !== input.version) continue;
         for (const entry of version.entries) {
-          if (input.tags?.length && !entry.tags?.some((t) => input.tags!.includes(t))) continue;
-          if (input.stage && entry.stage !== input.stage) continue;
-          if (input.dateFrom && entry.date < input.dateFrom) continue;
-          if (input.dateTo && entry.date > input.dateTo) continue;
-          if (keyword) {
-            const inTitle = entry.title.toLowerCase().includes(keyword);
-            const inDetail = entry.detail.toLowerCase().includes(keyword);
-            const inFiles = entry.files?.some((f) => f.path.toLowerCase().includes(keyword)) ?? false;
-            if (!inTitle && !inDetail && !inFiles) continue;
+          // 按 id 精确查时忽略其余过滤条件:用户/AI 拿到的是唯一标识,不该再被项目/阶段等挡住
+          if (entryId && entry.id !== entryId) continue;
+          if (!entryId) {
+            if (input.tags?.length && !entry.tags?.some((t) => input.tags!.includes(t))) continue;
+            if (input.stage && entry.stage !== input.stage) continue;
+            if (input.dateFrom && entry.date < input.dateFrom) continue;
+            if (input.dateTo && entry.date > input.dateTo) continue;
+            if (keyword) {
+              const inTitle = entry.title.toLowerCase().includes(keyword);
+              const inDetail = entry.detail.toLowerCase().includes(keyword);
+              const inFiles = entry.files?.some((f) => f.path.toLowerCase().includes(keyword)) ?? false;
+              if (!inTitle && !inDetail && !inFiles) continue;
+            }
           }
           results.push({
             id: entry.id,

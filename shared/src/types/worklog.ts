@@ -82,6 +82,8 @@ export interface WorklogRecordResponse {
 
 /** query_work 入参 */
 export interface WorklogQueryRequest {
+  /** 按条目 id 精确查询(页面上复制的 e_xxx);传入时忽略其他过滤条件 */
+  entryId?: string;
   project?: string;
   version?: string;
   /** 对 title/detail/files.path 不区分大小写模糊匹配 */

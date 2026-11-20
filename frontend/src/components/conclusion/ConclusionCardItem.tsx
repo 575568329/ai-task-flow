@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { MessageContent } from '@/components/common/MessageContent';
 import { WorkStageBadge } from '@/components/common/WorkStageBadge';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
 import { conversationDisplay } from './conversationSource';
 import {
   CONCLUSION_MARKDOWN_CLASS,
@@ -103,6 +104,7 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             <span>{summary.latestDate}</span>
             <WorkStageBadge stage={summary.stage} />
             <span>{summary.source.tool}</span>
+            <CopyIdButton id={summary.id} />
             {summary.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
           </div>
           {!expanded && (

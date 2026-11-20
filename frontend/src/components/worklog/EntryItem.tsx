@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DiffViewer } from '@/components/DiffViewer';
 import { MessageContent } from '@/components/common/MessageContent';
 import { WorkStageBadge } from '@/components/common/WorkStageBadge';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
 import { WorkStageSelect } from '@/components/common/WorkStageSelect';
 import { toast } from '@/components/ui/toaster';
 import { plainTextExcerpt } from '@/lib/markdownText';
@@ -199,6 +200,7 @@ export function EntryItem({
               </div>
               <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
                 <span>{entry.date}</span>
+                <CopyIdButton id={entry.id} />
                 <WorkStageBadge stage={entry.stage} />
                 {contextLabel && (
                   <Badge variant="outline" className="text-xs">{contextLabel}</Badge>

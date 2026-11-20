@@ -76,9 +76,11 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
   {
     name: 'query_work',
     description:
-      '回溯查询工作记录。支持项目/版本精确过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、' +
-      '标签、阶段(stage)、日期范围(dateFrom/dateTo);diff 默认不返回,includeDiff:true 时携带。',
-    whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的"时,先查记录再回答。',
+      '回溯查询工作记录。entryId 按条目 id 精确查询(页面上复制的 e_xxx),传入时忽略其他过滤条件;' +
+      '其余支持项目/版本精确过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、' +
+      '日期范围(dateFrom/dateTo)。结果每条都带 ID:xxx,可用于后续 update_work/delete_work。' +
+      'diff 默认不返回,includeDiff:true 时携带。',
+    whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的",或直接给出记录 id 时,先查记录再回答。',
     userPromptExample: '「查一下 ai-task-flow 上周关于登录页的改动记录」',
   },
   {

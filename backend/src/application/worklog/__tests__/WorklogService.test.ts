@@ -158,6 +158,23 @@ describe('WorklogService', () => {
       const results = await service.query({ keyword: '记住密码' });
       expect(results[0].files).toEqual(['frontend/src/LoginForm.tsx']);
     });
+
+    it('should query exactly by entryId and ignore other filters', async () => {
+      const all = await service.query({});
+      const target = all.find((e) => e.title === '修复白屏 bug');
+      expect(target).toBeDefined();
+
+      const hit = await service.query({ entryId: target!.id });
+      expect(hit).toHaveLength(1);
+      expect(hit[0].id).toBe(target!.id);
+
+      // 与 target 不匹配的项目/标签也不该挡住精确查询
+      const ignored = await service.query({ entryId: target!.id, project: 'other-proj', tags: ['feat'] });
+      expect(ignored).toHaveLength(1);
+      expect(ignored[0].id).toBe(target!.id);
+
+      expect(await service.query({ entryId: 'e_not_exist' })).toHaveLength(0);
+    });
   });
 
   // ---------------------------------------------------------------
