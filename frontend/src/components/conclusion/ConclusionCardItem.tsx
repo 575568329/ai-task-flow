@@ -87,7 +87,7 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
   };
 
   return (
-    <article className="bg-card rounded-lg border p-4">
+    <article className="bg-card overflow-hidden rounded-lg border p-4">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -263,11 +263,10 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
         </div>
       )}
 
-      <div className="mt-4 border-t pt-2">
+      <div className="-mx-4 -mb-4 mt-3 border-t">
         <Button
           variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-foreground h-7 w-full text-xs"
+          className="text-muted-foreground hover:text-foreground h-10 w-full rounded-none text-xs"
           onClick={onToggle}
         >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}

@@ -102,7 +102,7 @@ export function EntryItem({
   const uniqueTags = useMemo(() => [...new Set(entry.tags ?? [])], [entry.tags]);
 
   return (
-    <article className="group bg-card border rounded-lg p-4 space-y-3">
+    <article className="group bg-card border overflow-hidden rounded-lg p-4 space-y-3">
       {editing ? (
         <div className="space-y-3" onKeyDown={onKeyDown}>
           <div className="space-y-1.5">
@@ -296,11 +296,10 @@ export function EntryItem({
             </div>
           ) : null}
 
-          <div className="border-t pt-2">
+          <div className="-mx-4 -mb-4 mt-3 border-t">
             <Button
               variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground h-7 w-full text-xs"
+              className="text-muted-foreground hover:text-foreground h-10 w-full rounded-none text-xs"
               onClick={() => setExpanded((value) => !value)}
             >
               {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
