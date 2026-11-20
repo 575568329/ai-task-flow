@@ -6,7 +6,7 @@
  * 子类(各 context 的 NotFound/Validation/Conflict 等)继承并设 httpStatus。
  * 路由层可继续 instanceof 精细处理;漏处理(未 catch)的进 setErrorHandler 按 httpStatus 兜底。
  *
- * 迁移进度:mindmap(4 类)已迁移为示范。ClaudeProfile/Vocab/Maimemo 等其余 Error +
+ * 迁移进度:mindmap(4 类)已迁移为示范。ClaudeProfile 等其余 Error +
  * 36 处裸 `throw new Error` 逐步迁移(每次改动就近替换)。
  */
 export abstract class DomainError extends Error {

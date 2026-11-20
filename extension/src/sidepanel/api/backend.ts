@@ -4,12 +4,6 @@ import type {
   ClipResponse,
   ClipDraft,
   CreateTaskRequest,
-  TranslateResponse,
-  VocabDTO,
-  VocabCreateDTO,
-  VocabUpdateDTO,
-  VocabListQuery,
-  VocabListResponse,
 } from '@ai-task-flow/shared';
 import type { PageContext } from '../../types/pageContext.js';
 
@@ -95,37 +89,3 @@ export async function createTaskFromDraft(
   await backendRequest('POST', '/api/tasks', body);
 }
 
-// ============ 翻译生词本 ============
-
-/** 划词翻译（POST /api/vocab/translate） */
-export async function translateText(text: string, targetLang?: string): Promise<TranslateResponse> {
-  return (await backendRequest('POST', '/api/vocab/translate', { text, targetLang })) as TranslateResponse;
-}
-
-/** 存生词（POST /api/vocab，重复返回 409 抛错） */
-export async function saveVocab(dto: VocabCreateDTO): Promise<VocabDTO> {
-  return (await backendRequest('POST', '/api/vocab', dto)) as VocabDTO;
-}
-
-/** 更新收藏/掌握（PATCH /api/vocab/:id） */
-export async function updateVocab(id: string, dto: VocabUpdateDTO): Promise<VocabDTO> {
-  return (await backendRequest('PATCH', `/api/vocab/${id}`, dto)) as VocabDTO;
-}
-
-/** 删除生词（DELETE /api/vocab/:id） */
-export async function deleteVocab(id: string): Promise<void> {
-  await backendRequest('DELETE', `/api/vocab/${id}`);
-}
-
-/** 列表（GET /api/vocab?kw&sourceLang&mastered&starred&page&pageSize） */
-export async function listVocab(query: Partial<VocabListQuery> = {}): Promise<VocabListResponse> {
-  const params = new URLSearchParams();
-  if (query.kw) params.set('kw', query.kw);
-  if (query.sourceLang) params.set('sourceLang', query.sourceLang);
-  if (typeof query.mastered === 'boolean') params.set('mastered', String(query.mastered));
-  if (typeof query.starred === 'boolean') params.set('starred', String(query.starred));
-  if (query.page) params.set('page', String(query.page));
-  if (query.pageSize) params.set('pageSize', String(query.pageSize));
-  const qs = params.toString();
-  return (await backendRequest('GET', `/api/vocab${qs ? `?${qs}` : ''}`)) as VocabListResponse;
-}

@@ -8,7 +8,6 @@ import { SidebarNav, type ViewKey } from '@/components/SidebarNav';
 import { WorklogView } from '@/components/views/WorklogView';
 import { ConclusionView } from '@/components/views/ConclusionView';
 import { KnowledgeView } from '@/components/views/KnowledgeView';
-import { VocabView } from '@/components/views/VocabView';
 import { MindmapView } from '@/components/views/MindmapView';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Toaster } from '@/components/ui/toaster';
@@ -20,7 +19,6 @@ const VIEWS: Record<ViewKey, ComponentType> = {
   worklog: WorklogView,
   conclusion: ConclusionView,
   knowledge: KnowledgeView,
-  vocab: VocabView,
   mindmap: MindmapView,
 };
 

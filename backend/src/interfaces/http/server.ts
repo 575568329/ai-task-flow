@@ -16,16 +16,12 @@ import { DomainError } from '../../domain/_shared/DomainError.js';
 import type { LlmConfigService } from '../../application/llm-config/LlmConfigService.js';
 import type { WebClipService } from '../../application/webclip/WebClipService.js';
 import type { KnowledgeService } from '../../application/knowledge/KnowledgeService.js';
-import type { VocabService } from '../../application/vocab/VocabService.js';
-import type { MaimemoService } from '../../application/maimemo/MaimemoService.js';
 import type { MindmapService } from '../../application/mindmap/MindmapService.js';
 import type { WorklogService } from '../../application/worklog/WorklogService.js';
 import type { ConclusionService } from '../../application/conclusion/ConclusionService.js';
 import { registerLlmConfigRoutes } from './routes/llmConfigRoutes.js';
 import { registerWebClipRoutes } from './routes/webClipRoutes.js';
-import { registerVocabRoutes } from './routes/vocabRoutes.js';
 import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
-import { registerMaimemoRoutes } from './routes/maimemoRoutes.js';
 import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
 import { registerWorklogRoutes } from './routes/worklogRoutes.js';
 import { registerConclusionRoutes } from './routes/conclusionRoutes.js';
@@ -60,8 +56,6 @@ export async function createHttpServer(
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
-  vocabService: VocabService,
-  maimemoService: MaimemoService,
   mindmapService: MindmapService,
   worklogService: WorklogService,
   conclusionService: ConclusionService,
@@ -150,8 +144,6 @@ export async function createHttpServer(
   await registerWebClipRoutes(fastify, webClipService);
   await registerFileRoutes(fastify);
   await registerKnowledgeRoutes(fastify, knowledgeService);
-  await registerVocabRoutes(fastify, vocabService);
-  await registerMaimemoRoutes(fastify, maimemoService);
   await registerMindmapRoutes(fastify, mindmapService);
   await registerWorklogRoutes(fastify, worklogService);
   await registerConclusionRoutes(fastify, conclusionService);
@@ -235,8 +227,6 @@ export async function startHttpServer(
   llmConfigService: LlmConfigService,
   webClipService: WebClipService,
   knowledgeService: KnowledgeService,
-  vocabService: VocabService,
-  maimemoService: MaimemoService,
   mindmapService: MindmapService,
   worklogService: WorklogService,
   conclusionService: ConclusionService,
@@ -245,7 +235,7 @@ export async function startHttpServer(
   let currentConfig = config;
 
   for (let attempt = 0; attempt < LISTEN_RETRY_ATTEMPTS; attempt++) {
-    const server = await createHttpServer(currentConfig, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService, conclusionService);
+    const server = await createHttpServer(currentConfig, llmConfigService, webClipService, knowledgeService, mindmapService, worklogService, conclusionService);
     try {
       await server.listen({ port: currentConfig.port, host: currentConfig.host });
       printReady(currentConfig);

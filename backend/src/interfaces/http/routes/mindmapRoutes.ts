@@ -13,7 +13,7 @@ import { FileLogger } from '../../../infrastructure/logging/FileLogger.js';
 const logger = new FileLogger('mindmap-route');
 
 /**
- * 统一把领域错误映射到 HTTP 状态码（仿 maimemoRoutes 的 mapMaimemoError 模式）。
+ * 统一把领域错误映射到 HTTP 状态码（统一错误映射）。
  * 错误体统一为 { error: string }，前端 http.ts 据此 toast。
  */
 function mapMindmapError(reply: FastifyReply, error: unknown): FastifyReply {

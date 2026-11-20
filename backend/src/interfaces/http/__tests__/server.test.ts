@@ -5,11 +5,6 @@ import { createHttpServer } from '../server.js';
 import { JsonLlmConfigRepository } from '../../../infrastructure/persistence/JsonLlmConfigRepository.js';
 import { LlmConfigService } from '../../../application/llm-config/LlmConfigService.js';
 import { WebClipService } from '../../../application/webclip/WebClipService.js';
-import { JsonVocabRepository } from '../../../infrastructure/persistence/JsonVocabRepository.js';
-import { VocabService } from '../../../application/vocab/VocabService.js';
-import { JsonMaimemoConfigRepository } from '../../../infrastructure/persistence/JsonMaimemoConfigRepository.js';
-import { MaimemoClient } from '../../../infrastructure/maimemo/MaimemoClient.js';
-import { MaimemoService } from '../../../application/maimemo/MaimemoService.js';
 import { JsonMindmapRepository } from '../../../infrastructure/persistence/JsonMindmapRepository.js';
 import { MindmapService } from '../../../application/mindmap/MindmapService.js';
 import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
@@ -18,37 +13,23 @@ import { JsonConclusionRepository } from '../../../infrastructure/persistence/Js
 import { ConclusionService } from '../../../application/conclusion/ConclusionService.js';
 import path from 'path';
 import os from 'os';
-import fs from 'fs/promises';
 import { FastifyInstance } from 'fastify';
 
 // worklog 转型 Step1:Task CRUD 集成测试已随 taskRoutes 砍除;
 // 保留 Health / Web Clip / Mindmap 聚合回归。
 describe('HTTP Server', () => {
   let server: FastifyInstance;
-  let testVocabPath: string;
 
   beforeEach(async () => {
     // 使用 nanoid 确保测试隔离
     const { nanoid } = await import('nanoid');
     const id = nanoid();
-    testVocabPath = path.join(os.tmpdir(), `test-vocab-${id}.json`);
 
     const llmConfigRepository = new JsonLlmConfigRepository();
     const llmConfigService = new LlmConfigService(llmConfigRepository);
     const webClipService = new WebClipService(llmConfigService);
     const { KnowledgeService } = await import('../../../application/knowledge/KnowledgeService.js');
     const knowledgeService = new KnowledgeService(path.join(process.cwd(), 'knowledge-base'));
-
-    // 翻译生词本测试依赖（用临时文件隔离）
-    const vocabRepository = new JsonVocabRepository(testVocabPath);
-    const vocabService = new VocabService(vocabRepository, llmConfigService);
-
-    // 墨墨同步测试依赖（临时 config 文件隔离；不连真实墨墨 API）
-    const testMaimemoConfigPath = path.join(os.tmpdir(), `test-maimemo-${id}.json`);
-    const maimemoConfigRepo = new JsonMaimemoConfigRepository(testMaimemoConfigPath);
-    const maimemoService = new MaimemoService(maimemoConfigRepo, vocabRepository);
-    await maimemoService.init();
-    maimemoService.useClient(new MaimemoClient(() => maimemoService.getActiveToken()));
 
     // 思维导图测试依赖（临时文件隔离）
     const testMindmapPath = path.join(os.tmpdir(), `test-mindmaps-${id}.json`);
@@ -76,8 +57,6 @@ describe('HTTP Server', () => {
       llmConfigService,
       webClipService,
       knowledgeService,
-      vocabService,
-      maimemoService,
       mindmapService,
       worklogService,
       conclusionService,
@@ -86,9 +65,6 @@ describe('HTTP Server', () => {
 
   afterEach(async () => {
     await server.close();
-    try {
-      await fs.unlink(testVocabPath);
-    } catch {}
   });
 
   describe('Health Check', () => {

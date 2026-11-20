@@ -5,9 +5,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   captureToDrafts,
   createTaskFromDraft,
-  translateText,
-  saveVocab,
-  listVocab,
 } from '../backend.js';
 
 /** ProxyResult 形状（与 backend.ts 一致） */
@@ -104,63 +101,5 @@ describe('backend api', () => {
     await expect(
       createTaskFromDraft({ title: 'T', description: 'D', steps: [] }, 'u', 'WEB'),
     ).rejects.toThrow(/未响应/);
-  });
-});
-
-describe('vocab api', () => {
-  it('translateText posts text and returns TranslateResponse', async () => {
-    mockProxy({
-      ok: true,
-      status: 200,
-      statusText: '',
-      json: { translation: '你好', sourceLang: 'en', targetLang: 'zh' },
-      text: '',
-    });
-    const resp = await translateText('hello');
-    expect(resp.translation).toBe('你好');
-    const call = lastCall();
-    expect(call.request.url).toBe('http://localhost:47821/api/vocab/translate');
-    expect(call.request.method).toBe('POST');
-    expect(JSON.parse(call.request.body as string).text).toBe('hello');
-  });
-
-  it('saveVocab posts VocabCreateDTO and returns VocabDTO', async () => {
-    mockProxy({
-      ok: true,
-      status: 200,
-      statusText: '',
-      json: {
-        id: 'v1', word: 'hi', translation: '你好', targetLang: 'zh',
-        starred: false, mastered: false, reviewCount: 0, createdAt: 't', updatedAt: 't',
-      },
-      text: '',
-    });
-    const v = await saveVocab({ word: 'hi', translation: '你好' });
-    expect(v.id).toBe('v1');
-    expect(lastCall().request.url).toBe('http://localhost:47821/api/vocab');
-  });
-
-  it('saveVocab duplicate returns 409 error', async () => {
-    mockProxy({ ok: false, status: 409, statusText: '', json: { error: '该词已在生词本' }, text: '' });
-    await expect(saveVocab({ word: 'hi', translation: '你好' })).rejects.toThrow(/已在生词本/);
-  });
-
-  it('listVocab GETs with query params, no body/headers', async () => {
-    mockProxy({ ok: true, status: 200, statusText: '', json: { items: [], total: 0 }, text: '' });
-    await listVocab({ kw: 'hi', page: 1, pageSize: 20 });
-    const call = lastCall();
-    expect(call.request.method).toBe('GET');
-    expect(call.request.url).toContain('/api/vocab?');
-    expect(call.request.url).toContain('kw=hi');
-    expect(call.request.url).toContain('page=1');
-    expect(call.request.url).toContain('pageSize=20');
-    expect(call.request.body).toBeUndefined();
-    expect(call.request.headers).toBeUndefined();
-  });
-
-  it('listVocab without query GETs bare path', async () => {
-    mockProxy({ ok: true, status: 200, statusText: '', json: { items: [], total: 0 }, text: '' });
-    await listVocab();
-    expect(lastCall().request.url).toBe('http://localhost:47821/api/vocab');
   });
 });

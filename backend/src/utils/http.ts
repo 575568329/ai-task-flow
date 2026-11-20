@@ -1,6 +1,6 @@
 // backend/src/utils/http.ts
 // 外部 HTTP 调用的超时 + 重试工具。防 LLM/搜索/同步等上游服务挂起拖垮本服务(P1-11)。
-// 原 8 处裸 fetch(OpenAiCompatible/Anthropic/Glm/Arxiv/Maimemo)无超时,上游卡住 → 本请求
+// 原 8 处裸 fetch(OpenAiCompatible/Anthropic/Glm/Arxiv)无超时,上游卡住 → 本请求
 // 无限挂起 → Fastify 连接耗尽。统一加 AbortSignal.timeout;幂等 GET 加重试。
 
 /** 默认请求超时(ms)。LLM 非流式/搜索 30s 够;流式调用方自行传 signal 控制。 */

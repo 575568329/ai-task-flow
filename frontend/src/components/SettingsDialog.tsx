@@ -3,7 +3,7 @@
 // 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState, useEffect } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Layers, BookOpen } from 'lucide-react';
+import { Database, SlidersHorizontal, Layers } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -18,14 +18,13 @@ import { cn } from '@/lib/utils';
 import { LlmConfigPanel } from './LlmConfigPanel';
 import { StoragePanel } from './StoragePanel';
 import { ClaudeProfilePanel } from './ClaudeProfilePanel';
-import { MaimemoConfigPanel } from './MaimemoConfigPanel';
 
-type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'maimemo';
+type SettingsTab = 'llm' | 'claude-profile' | 'storage';
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 初始打开的 tab(可选,如生词本页「连接墨墨」按钮跳转到 maimemo)。string 以便 uiStore 传递。 */
+  /** 初始打开的 tab(可选)。string 以便 uiStore 传递。 */
   initialTab?: string;
 }
 
@@ -39,13 +38,12 @@ const TABS: TabDef[] = [
   { key: 'llm', label: '模型配置', icon: SlidersHorizontal },
   { key: 'claude-profile', label: 'Claude 配置', icon: Layers },
   { key: 'storage', label: '存储管理', icon: Database },
-  { key: 'maimemo', label: '墨墨同步', icon: BookOpen },
 ];
 
 export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
   const [tab, setTab] = useState<SettingsTab>((initialTab as SettingsTab) ?? 'llm');
 
-  // 每次打开时按 initialTab 重置(支持外部指定跳转 tab,如「连接墨墨」)
+  // 每次打开时按 initialTab 重置(支持外部指定跳转 tab)
   useEffect(() => {
     if (open) setTab((initialTab as SettingsTab) ?? 'llm');
   }, [open, initialTab]);
@@ -56,7 +54,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
           <DialogDescription>
-            配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储、墨墨同步。MCP 工具说明见工作记录页「AI 使用指南」。
+            配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储。MCP 工具说明见工作记录页「AI 使用指南」。
           </DialogDescription>
         </DialogHeader>
 
@@ -94,10 +92,8 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
                 <LlmConfigPanel />
               ) : tab === 'claude-profile' ? (
                 <ClaudeProfilePanel />
-              ) : tab === 'storage' ? (
-                <StoragePanel />
               ) : (
-                <MaimemoConfigPanel />
+                <StoragePanel />
               )}
             </motion.div>
           </AnimatePresence>

@@ -61,11 +61,10 @@ interface UIState {
   bumpViewEnter: (view: string) => void;
   /** 设置夜间开发模式(同时持久化到 localStorage)。 */
   setNightMode: (v: boolean) => void;
-  /** 设置弹窗开关 + 初始 tab(供任意组件打开,如生词本页「连接墨墨」跳 maimemo tab) */
+  /** 设置弹窗开关 + 初始 tab */
   settingsOpen: boolean;
   settingsTab: string | null;
   setSettingsOpen: (open: boolean) => void;
-  openSettings: (tab?: string) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -104,7 +103,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsOpen: false,
   settingsTab: null,
   setSettingsOpen: (open) => set({ settingsOpen: open }),
-  openSettings: (tab) => set({ settingsOpen: true, settingsTab: tab ?? null }),
 }));
 
 /** 应用启动时调用一次,把初始主题挂到 <html> */

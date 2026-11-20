@@ -4,7 +4,7 @@
 //   2) writeFile 写一半进程崩溃损坏全量数据(整个 tasks.json/chats.json 报废)
 //
 // 设计参考 JsonMindmapRepository 既有正确实现(withWriteLock + tmp+rename),将其上提为
-// 公共基类,供原本裸 writeFile 的 Task/Chat/ClaudeProfile 仓储复用。Vocab/Mindmap 可后续
+// 公共基类,供原本裸 writeFile 的 Task/Chat/ClaudeProfile 仓储复用。Mindmap 可后续
 // 平迁继承本基类(行为不变),本次仅补缺失保护的三者。
 import fs from 'node:fs/promises';
 import path from 'node:path';

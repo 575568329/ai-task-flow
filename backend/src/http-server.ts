@@ -9,11 +9,6 @@ import { JsonLlmConfigRepository } from './infrastructure/persistence/JsonLlmCon
 import { LlmConfigService } from './application/llm-config/LlmConfigService.js';
 import { WebClipService } from './application/webclip/WebClipService.js';
 import { KnowledgeService } from './application/knowledge/KnowledgeService.js';
-import { JsonVocabRepository } from './infrastructure/persistence/JsonVocabRepository.js';
-import { VocabService } from './application/vocab/VocabService.js';
-import { JsonMaimemoConfigRepository } from './infrastructure/persistence/JsonMaimemoConfigRepository.js';
-import { MaimemoClient } from './infrastructure/maimemo/MaimemoClient.js';
-import { MaimemoService } from './application/maimemo/MaimemoService.js';
 import { JsonMindmapRepository } from './infrastructure/persistence/JsonMindmapRepository.js';
 import { MindmapService } from './application/mindmap/MindmapService.js';
 import { JsonWorklogRepository } from './infrastructure/persistence/JsonWorklogRepository.js';
@@ -69,16 +64,6 @@ export async function startApp(options: StartAppOptions = {}) {
   const webClipService = new WebClipService(llmConfigService);
   // 知识库服务
   const knowledgeService = new KnowledgeService(knowledgeDirPath());
-  // 翻译生词本服务（复用 LLM 配置）
-  const vocabRepository = new JsonVocabRepository();
-  const vocabService = new VocabService(vocabRepository, llmConfigService);
-
-  // 墨墨同步：configRepo + service 先建（client 的 getToken 闭包引用 service），init 后再注入 client
-  const maimemoConfigRepo = new JsonMaimemoConfigRepository();
-  const maimemoService = new MaimemoService(maimemoConfigRepo, vocabRepository);
-  await maimemoService.init();
-  const maimemoClient = new MaimemoClient(() => maimemoService.getActiveToken());
-  maimemoService.useClient(maimemoClient);
 
   // 思维导图服务（无外部依赖，repo + service 直接装配）
   const mindmapRepository = new JsonMindmapRepository();
@@ -122,7 +107,7 @@ export async function startApp(options: StartAppOptions = {}) {
     uploadsDir: options.uploadsDir,
   };
 
-  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, vocabService, maimemoService, mindmapService, worklogService, conclusionService);
+  const server = await startHttpServer(config, llmConfigService, webClipService, knowledgeService, mindmapService, worklogService, conclusionService);
 
   // 仅 dev 模式(前后端分离, 无 frontendDist)需要把实际端口写给 vite 读。
   // 必须在 startHttpServer 返回后写:startHttpServer 可能因启动竞态(TOCTUU)进一步顺延端口,

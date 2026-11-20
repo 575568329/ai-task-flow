@@ -111,12 +111,7 @@ export function chatFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'chats.json');
 }
 
-/** vocab.json 路径(翻译生词本数据),与 chats.json 同级 */
-export function vocabFilePath(dataDir?: string): string {
-  return path.join(resolveDataDir(dataDir), 'vocab.json');
-}
-
-/** mindmaps.json 路径(思维导图文档集合,单文件多文档),与 vocab.json 同级 */
+/** mindmaps.json 路径(思维导图文档集合,单文件多文档),与 worklog.json 同级 */
 export function mindmapsFilePath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'mindmaps.json');
 }
@@ -144,11 +139,6 @@ export function taskDocsDirPath(dataDir?: string): string {
 /** 日志目录(后端运行日志,如聊天链路全量日志) */
 export function logsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'logs');
-}
-
-/** 墨墨背单词配置(含 token 明文),与 llm-config.json / claude-profiles.json 同级敏感 */
-export function maimemoConfigFilePath(dataDir?: string): string {
-  return path.join(resolveDataDir(dataDir), 'maimemo-config.json');
 }
 
 /** 知识库目录(用户数据,随数据根 ~/.ai-task-flow 走,与其他持久化同层)。

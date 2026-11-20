@@ -62,7 +62,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - 入口 `backend/src/http-server.ts` 的 `startApp()`：手工 `new` 仓储/服务并注入（**无 DI 容器**），随后启动 HTTP。新增模块的装配点就在这里。
 - 四层：`domain/`（实体、值对象、仓储接口）→ `application/`（用例服务）→ `infrastructure/`（JSON 持久化、LLM、外部客户端）→ `interfaces/`（http routes + mcp tools）。
-- 业务模块：worklog（核心）、conclusion、knowledge、vocab、maimemo、mindmap、webclip、claude-profile、llm-config、system。
+- 业务模块：worklog（核心）、conclusion、knowledge、mindmap、webclip、claude-profile、llm-config、system。
 - ESM + Node16 解析：TS 源码里的相对 import **必须带 `.js` 后缀**。
 - HTTP 路由注册集中在 `interfaces/http/server.ts`；新增模块顺序：repository → service → routes → `startApp` 装配 → 可选 MCP 工具。
 - 前后端日志落 `.logs/`；跨上下文链路必须保证日志能在后端可查。
@@ -70,7 +70,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## 持久化与数据目录
 
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
-- 主要数据文件：`worklog.json`、`conclusions.json`、`vocab.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
+- 主要数据文件：`worklog.json`、`conclusions.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
 
@@ -92,7 +92,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## 前端
 
 - React 19 + Vite + TypeScript + Zustand + shadcn/ui（Radix）+ Tailwind v4；路径别名 `@/` → `frontend/src/`。
-- **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、conclusion、knowledge、vocab、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
+- **无 router**：`App.tsx` 用 `hidden` 做 keep-alive 视图切换（worklog 默认、conclusion、knowledge、mindmap），视图不卸载以保留分栏等状态。不要引入路由或改成条件卸载。
 - 全局状态按领域拆 store（`stores/*Store.ts`）；只服务于单个视图的状态用局部 `useState`（如 conclusion 的详情/展开态，没有 conclusionStore）。HTTP 统一走 `api/http.ts` 封装。
 - 组件按领域放在 `components/views`、`components/worklog|conclusion|knowledge|mindmap|ui`。
 - 已知坑：图片预览用 YARL（不要手写蒙版）；TTS 统一用 `lib/speech.ts` 封装。

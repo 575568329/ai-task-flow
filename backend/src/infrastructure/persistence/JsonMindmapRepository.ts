@@ -25,7 +25,7 @@ interface MindmapStorageData {
  * rename 是 POSIX 原子操作，写崩只会留下孤儿 .tmp 文件，主文件不受影响。
  *
  * 演进路径：文档数/体积增长后可拆为 mindmaps/<id>.json + mindmaps/index.json（仅 meta），
- * PUT 只读写单文件，消除读写放大。当前 MVP 单文件够用，与 vocab/tasks 同模式。
+ * PUT 只读写单文件，消除读写放大。当前 MVP 单文件够用，与 worklog 同模式。
  */
 export class JsonMindmapRepository implements MindmapRepository {
   private readonly filePath: string;

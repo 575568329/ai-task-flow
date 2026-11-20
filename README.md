@@ -54,7 +54,6 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 | **阶段标签** | `record_work` / `record_conclusion` 唯一单值 stage:获取需求/设计/开发/自测/评审/覆盖度/上线/复盘;缺陷修改用 `fix` tag |
 | 知识库 | markdown/文档库,目录树 + wiki 链接;MCP `save_to_knowledge` 可写 |
 | 网页剪藏 | 浏览器扩展剪藏 → LLM 拆解为任务草稿 → 入库 |
-| 生词本 / 墨墨同步 | 划词翻译生词,token 统计,墨墨背单词同步 |
 | 思维导图 | 画布编辑,Mermaid 导入 |
 | Claude 配置切换 | settings.json 多套快照一键切换(单面板,自动备份) |
 

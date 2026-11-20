@@ -6,7 +6,6 @@ import { useState } from 'react';
 import {
   BookOpen,
   ClipboardList,
-  Languages,
   Lightbulb,
   Network,
   Sun,
@@ -22,7 +21,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { cn } from '@/lib/utils';
 
 // worklog 转型 Step6:'worklog'(工作记录)为默认落地视图
-export type ViewKey = 'worklog' | 'conclusion' | 'knowledge' | 'vocab' | 'mindmap';
+export type ViewKey = 'worklog' | 'conclusion' | 'knowledge' | 'mindmap';
 
 interface NavItem {
   key: ViewKey;
@@ -34,7 +33,6 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'worklog', label: '工作记录', icon: ClipboardList },
   { key: 'conclusion', label: '结论', icon: Lightbulb },
   { key: 'knowledge', label: '知识库', icon: BookOpen },
-  { key: 'vocab', label: '生词本', icon: Languages },
   { key: 'mindmap', label: '思维导图', icon: Network },
 ];
 
