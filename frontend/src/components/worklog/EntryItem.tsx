@@ -194,9 +194,6 @@ export function EntryItem({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h3 className="truncate text-sm font-semibold" title={entry.title}>{entry.title}</h3>
-                {entry.updatedAt > entry.createdAt && (
-                  <span className="text-muted-foreground shrink-0 text-xs">(已编辑)</span>
-                )}
               </div>
               <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
                 <span>{entry.date}</span>
