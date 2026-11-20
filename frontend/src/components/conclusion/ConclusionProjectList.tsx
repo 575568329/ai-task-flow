@@ -6,13 +6,15 @@ import { groupConclusions, type ConclusionSelection } from './searchFilter';
 
 interface Props {
   cards: ConclusionSummary[];
-  selection: ConclusionSelection;
+  /** null = 尚未选择(默认不加载全部) */
+  selection: ConclusionSelection | null;
   onSelect: (selection: ConclusionSelection) => void;
 }
 
 export function ConclusionProjectList({ cards, selection, onSelect }: Props) {
   const grouped = groupConclusions(cards);
   const isActive = (target: ConclusionSelection) => {
+    if (!selection) return false;
     if (target.type !== selection.type) return false;
     if (target.type === 'project' && selection.type === 'project') {
       return target.project === selection.project;

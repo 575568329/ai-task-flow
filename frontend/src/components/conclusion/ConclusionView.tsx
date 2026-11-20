@@ -24,7 +24,8 @@ const errMessage = (err: unknown) => (err instanceof Error ? err.message : Strin
 export function ConclusionView() {
   const [cards, setCards] = useState<ConclusionSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selection, setSelection] = useState<ConclusionSelection>({ type: 'all' });
+  // 默认不加载全部:数据量大时一次性渲染所有卡片会卡,先让用户选项目或搜索
+  const [selection, setSelection] = useState<ConclusionSelection | null>(null);
   const [keyword, setKeyword] = useState('');
   const [stageFilter, setStageFilter] = useState<StageFilter>([]);
   const [searchResults, setSearchResults] = useState<ConclusionSummary[] | null>(null);
@@ -83,10 +84,11 @@ export function ConclusionView() {
     return () => window.clearTimeout(timer);
   }, [keyword, searchTick]);
 
-  const visible = useMemo(
-    () => filterConclusionsByStage(searchResults ?? filterConclusions(cards, selection), stageFilter),
-    [searchResults, cards, selection, stageFilter],
-  );
+  const visible = useMemo(() => {
+    if (searchResults) return filterConclusionsByStage(searchResults, stageFilter);
+    if (!selection) return [];
+    return filterConclusionsByStage(filterConclusions(cards, selection), stageFilter);
+  }, [searchResults, cards, selection, stageFilter]);
   const projects = useMemo(
     () => [...new Set(cards.filter((c) => c.scope === 'project').map((c) => c.project ?? '未归类'))],
     [cards],
@@ -142,6 +144,12 @@ export function ConclusionView() {
           stage: value.stage,
         });
         toast.success('已创建结论卡');
+      }
+      // 新建后切到该卡所在分组:默认空态下不切过去就看不到刚建的卡
+      if (form?.mode !== 'append') {
+        if (value.scope === 'personal') setSelection({ type: 'personal' });
+        else if (value.project) setSelection({ type: 'project', project: value.project });
+        else setSelection({ type: 'all' });
       }
       setForm(null);
       setExpandedId(null);
@@ -215,7 +223,13 @@ export function ConclusionView() {
               ariaLabel="搜索结论卡"
             />
           )}
-          title={searchResults ? `搜索结果 · ${searchResults.length}` : `${visible.length} 张结论卡`}
+          title={
+            searchResults
+              ? `搜索结果 · ${searchResults.length}`
+              : selection
+                ? `${visible.length} 张结论卡`
+                : '结论'
+          }
           actions={(
             <>
               <WorkStageMultiSelect
@@ -257,14 +271,20 @@ export function ConclusionView() {
         )}
 
         {visible.length === 0 && !form && (
-          <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm leading-relaxed">
-            <p className="font-medium">还没有结论卡。</p>
-            <p className="mt-2">让 AI 记录时，可以直接说：</p>
-            <pre className="bg-muted mt-2 rounded p-2 text-xs whitespace-pre-wrap">
-              {`把刚才的结论记到 ai-task-flow，项目 ${projects[0] ?? '<项目名>'}：
+          !selection && !searchResults ? (
+            <p className="text-muted-foreground py-12 text-center text-sm">
+              数据量较大，默认不加载全部。请在左侧选择项目，或搜索标题/结论。
+            </p>
+          ) : (
+            <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm leading-relaxed">
+              <p className="font-medium">还没有结论卡。</p>
+              <p className="mt-2">让 AI 记录时，可以直接说：</p>
+              <pre className="bg-muted mt-2 rounded p-2 text-xs whitespace-pre-wrap">
+                {`把刚才的结论记到 ai-task-flow，项目 ${projects[0] ?? '<项目名>'}：
 结论、关键数据、待办、涉及文件`}
-            </pre>
-          </div>
+              </pre>
+            </div>
+          )
         )}
 
         {visible.map((summary) => {

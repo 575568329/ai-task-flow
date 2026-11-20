@@ -98,6 +98,8 @@ describe('ConclusionView detail ownership', () => {
     );
 
     render(<ConclusionView />);
+    // 默认不加载全部:先显式选择「全部」才会渲染卡片列表
+    fireEvent.click(await screen.findByText('全部'));
     await screen.findByText('卡片A');
 
     // 先展开 A(响应挂起),随即展开 B

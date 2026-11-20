@@ -98,6 +98,8 @@ describe('ConclusionView search freshness', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(<ConclusionView />);
+    // 默认不加载全部:先显式选择「全部」才会渲染卡片列表
+    fireEvent.click(await screen.findByText('全部'));
     await screen.findByText('卡片A');
 
     const input = screen.getByPlaceholderText('搜索标题/历史结论…');
