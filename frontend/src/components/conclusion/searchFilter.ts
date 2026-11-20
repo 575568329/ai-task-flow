@@ -1,20 +1,17 @@
-import type { ConclusionSummary, WorkStage } from '@ai-task-flow/shared';
+import type { ConclusionSummary } from '@ai-task-flow/shared';
+import { matchStageFilter, type StageFilter } from '@/lib/workStage';
 
 export type ConclusionSelection =
   | { type: 'all' }
   | { type: 'project'; project: string }
   | { type: 'personal' };
 
-export type ConclusionStageFilter = WorkStage | 'all' | 'unset';
-
 export function filterConclusionsByStage(
   cards: ConclusionSummary[],
-  stage: ConclusionStageFilter,
+  stage: StageFilter = [],
 ): ConclusionSummary[] {
-  if (stage === 'all') return cards;
-  return cards.filter((card) =>
-    stage === 'unset' ? card.stage === undefined : card.stage === stage,
-  );
+  if (stage.length === 0) return cards;
+  return cards.filter((card) => matchStageFilter(card.stage, stage));
 }
 
 function newestFirst(a: ConclusionSummary, b: ConclusionSummary): number {

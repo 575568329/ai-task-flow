@@ -81,13 +81,18 @@ describe('filterEntries', () => {
     expect(entries.map((e) => e.entry.id)).toEqual(['e_c', 'e_a', 'e_b']);
   });
 
-  it('should filter by stage and unset stage', () => {
-    expect(filterEntries(data, { project: '搜题平台' }, '', 'dev').entries.map((e) => e.entry.id))
+  it('should filter by multiple stages and unset stage', () => {
+    expect(filterEntries(data, { project: '搜题平台' }, '', ['dev']).entries.map((e) => e.entry.id))
       .toEqual(['e_a']);
-    expect(filterEntries(data, { project: '搜题平台' }, '', 'review').entries.map((e) => e.entry.id))
+    expect(filterEntries(data, { project: '搜题平台' }, '', ['review']).entries.map((e) => e.entry.id))
       .toEqual(['e_c']);
-    expect(filterEntries(data, { project: '搜题平台' }, '', 'unset').entries.map((e) => e.entry.id))
+    expect(filterEntries(data, { project: '搜题平台' }, '', ['unset']).entries.map((e) => e.entry.id))
       .toEqual(['e_b']);
+    // 多选:dev + review 一起命中,顺序仍按新在前
+    expect(filterEntries(data, { project: '搜题平台' }, '', ['dev', 'review']).entries.map((e) => e.entry.id))
+      .toEqual(['e_c', 'e_a']);
+    // 空数组 = 不过滤
+    expect(filterEntries(data, { project: '搜题平台' }, '', []).entries).toHaveLength(3);
   });
 
   it('should return empty with friendly flag when nothing matches', () => {

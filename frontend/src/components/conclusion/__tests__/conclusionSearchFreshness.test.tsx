@@ -22,6 +22,13 @@ vi.mock('@/components/ui/sheet', () => ({
   SheetDescription: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 
+// 阶段多选走 framer-motion,同样会解析到根 react@18;测试不关心下拉交互,给纯展示替身。
+vi.mock('@/components/ui/multi-select', () => ({
+  MultiSelect: ({ placeholder }: { placeholder?: string }) => (
+    <div data-testid="stage-multi-select">{placeholder}</div>
+  ),
+}));
+
 vi.mock('@/api/conclusion', () => ({
   conclusionApi: {
     list: vi.fn(),

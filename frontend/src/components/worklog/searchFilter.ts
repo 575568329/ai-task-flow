@@ -1,10 +1,9 @@
 // frontend/src/components/worklog/searchFilter.ts
 // 工作记录条目过滤纯函数:树选择 + 关键字模糊匹配(与后端 query_work 语义一致——
 // title/detail/files.path 不区分大小写;keyword 非空时忽略树选择做全局搜索)。
-import type { WorklogData, WorklogEntry, WorkStage } from '@ai-task-flow/shared';
+import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
+import { matchStageFilter, type StageFilter } from '@/lib/workStage';
 import type { TreeSelection } from './ProjectVersionTree';
-
-export type WorkStageFilter = WorkStage | 'all' | 'unset';
 
 export interface VisibleEntry {
   entry: WorklogEntry;
@@ -31,7 +30,7 @@ export function filterEntries(
   data: WorklogData,
   selection: TreeSelection,
   keyword: string,
-  stage: WorkStageFilter = 'all',
+  stage: StageFilter = [],
 ): { entries: VisibleEntry[]; isSearching: boolean } {
   const isSearching = keyword.trim().length > 0;
   if (!isSearching && !selection.project) return { entries: [], isSearching };
@@ -42,9 +41,7 @@ export function filterEntries(
     for (const version of project.versions) {
       if (!isSearching && selection.version && version.name !== selection.version) continue;
       for (const entry of version.entries) {
-        if (stage !== 'all') {
-          if (stage === 'unset' ? entry.stage !== undefined : entry.stage !== stage) continue;
-        }
+        if (!matchStageFilter(entry.stage, stage)) continue;
         if (isSearching && !matchesKeyword(entry, keyword)) continue;
         result.push({ entry, project: project.name, version: version.name });
       }

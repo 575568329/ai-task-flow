@@ -35,9 +35,13 @@ describe('filterConclusions', () => {
     expect(filterConclusions(cards, { type: 'all' })).toHaveLength(4);
   });
 
-  it('should filter by stage and unset', () => {
-    expect(filterConclusionsByStage(cards, 'dev').map((c) => c.id)).toEqual(['c_a']);
-    expect(filterConclusionsByStage(cards, 'review').map((c) => c.id)).toEqual(['c_c']);
-    expect(filterConclusionsByStage(cards, 'unset').map((c) => c.id)).toEqual(['c_b', 'c_d']);
+  it('should filter by multiple stages and unset', () => {
+    expect(filterConclusionsByStage(cards, ['dev']).map((c) => c.id)).toEqual(['c_a']);
+    expect(filterConclusionsByStage(cards, ['review']).map((c) => c.id)).toEqual(['c_c']);
+    expect(filterConclusionsByStage(cards, ['unset']).map((c) => c.id)).toEqual(['c_b', 'c_d']);
+    // 多选:dev + review 一起命中
+    expect(filterConclusionsByStage(cards, ['dev', 'review']).map((c) => c.id)).toEqual(['c_a', 'c_c']);
+    // 空数组 = 全部
+    expect(filterConclusionsByStage(cards, [])).toHaveLength(cards.length);
   });
 });

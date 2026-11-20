@@ -14,6 +14,11 @@ interface MultiSelectProps {
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  /** 选项展示文案(默认原值),搜索也按展示文案匹配 */
+  formatOption?: (option: string) => string;
+  /** 「已选 N 个 X」里的单位名词,默认「标签」 */
+  noun?: string;
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -22,6 +27,9 @@ export function MultiSelect({
   value,
   onChange,
   placeholder = '选择…',
+  formatOption = (option) => option,
+  noun = '标签',
+  ariaLabel,
   className,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
@@ -38,7 +46,8 @@ export function MultiSelect({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [open]);
 
-  const filtered = options.filter((o) => o.toLowerCase().includes(query.trim().toLowerCase()));
+  const needle = query.trim().toLowerCase();
+  const filtered = options.filter((o) => formatOption(o).toLowerCase().includes(needle));
   const toggle = (opt: string) => {
     onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
   };
@@ -49,10 +58,11 @@ export function MultiSelect({
         type="button"
         variant="outline"
         className="h-8 w-full justify-between font-normal"
+        aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
       >
         <span className={cn('truncate', value.length === 0 && 'text-muted-foreground')}>
-          {value.length === 0 ? placeholder : `已选 ${value.length} 个标签`}
+          {value.length === 0 ? placeholder : `已选 ${value.length} 个${noun}`}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {value.length > 0 && (
@@ -81,13 +91,13 @@ export function MultiSelect({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索标签…"
+              placeholder={`搜索${noun}…`}
               className="h-7"
               autoFocus
             />
             <ScrollArea className="max-h-48">
               {filtered.length === 0 ? (
-                <div className="text-muted-foreground p-2 text-xs">无匹配标签</div>
+                <div className="text-muted-foreground p-2 text-xs">无匹配项</div>
               ) : (
                 <div className="flex flex-col">
                   {filtered.map((opt) => {
@@ -109,7 +119,7 @@ export function MultiSelect({
                         >
                           {checked && <Check className="size-3" />}
                         </span>
-                        <span className="truncate">{opt}</span>
+                        <span className="truncate">{formatOption(opt)}</span>
                       </button>
                     );
                   })}

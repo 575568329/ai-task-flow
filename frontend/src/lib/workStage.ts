@@ -1,4 +1,24 @@
-import type { WorkStage } from '@ai-task-flow/shared';
+import { WORK_STAGE_LABELS, type WorkStage } from '@ai-task-flow/shared';
+
+/** 筛选维度里的「未标注」伪值:旧记录没有 stage */
+export const UNSET_STAGE = 'unset' as const;
+
+export type StageFilterItem = WorkStage | typeof UNSET_STAGE;
+
+/** 多选阶段筛选:空数组 = 全部(不做阶段过滤) */
+export type StageFilter = StageFilterItem[];
+
+/** 阶段筛选项的展示文案 */
+export function stageFilterLabel(value: string): string {
+  if (value === UNSET_STAGE) return '未标注';
+  return WORK_STAGE_LABELS[value as WorkStage] ?? value;
+}
+
+/** 单条记录是否命中多选筛选 */
+export function matchStageFilter(stage: WorkStage | undefined, filter: StageFilter): boolean {
+  if (filter.length === 0) return true;
+  return filter.includes(stage ?? UNSET_STAGE);
+}
 
 export const STAGE_BADGE_CLASS: Record<WorkStage, string> = {
   req: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',

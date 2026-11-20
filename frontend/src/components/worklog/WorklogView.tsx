@@ -14,8 +14,9 @@ import { ProjectVersionTree, type TreeSelection } from './ProjectVersionTree';
 import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
 import { AiGuideView } from './AiGuideView';
-import { WorkStageSelect } from '@/components/common/WorkStageSelect';
-import { filterEntries, type WorkStageFilter } from './searchFilter';
+import { WorkStageMultiSelect } from '@/components/common/WorkStageMultiSelect';
+import type { StageFilter } from '@/lib/workStage';
+import { filterEntries } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -27,7 +28,7 @@ export function WorklogView() {
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
-  const [stageFilter, setStageFilter] = useState<WorkStageFilter>('all');
+  const [stageFilter, setStageFilter] = useState<StageFilter>([]);
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
@@ -247,11 +248,11 @@ export function WorklogView() {
                 )}
               </h2>
               <div className="flex items-center gap-2">
-                <WorkStageSelect
-                  mode="filter"
+                <WorkStageMultiSelect
                   value={stageFilter}
-                  onChange={(value) => setStageFilter(value as WorkStageFilter)}
+                  onChange={setStageFilter}
                   ariaLabel="按阶段筛选"
+                  className="w-36"
                 />
                 {visibleEntries.length > 0 && (
                   <Button

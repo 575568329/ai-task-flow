@@ -10,12 +10,12 @@ import { ConclusionProjectList } from './ConclusionProjectList';
 import { ConclusionCardItem } from './ConclusionCardItem';
 import { ConclusionForm, type ConclusionFormValue } from './ConclusionForm';
 import { ConclusionMetaForm, type ConclusionMetaValue } from './ConclusionMetaForm';
-import { WorkStageSelect } from '@/components/common/WorkStageSelect';
+import { WorkStageMultiSelect } from '@/components/common/WorkStageMultiSelect';
+import type { StageFilter } from '@/lib/workStage';
 import {
   filterConclusions,
   filterConclusionsByStage,
   type ConclusionSelection,
-  type ConclusionStageFilter,
 } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -25,7 +25,7 @@ export function ConclusionView() {
   const [loading, setLoading] = useState(true);
   const [selection, setSelection] = useState<ConclusionSelection>({ type: 'all' });
   const [keyword, setKeyword] = useState('');
-  const [stageFilter, setStageFilter] = useState<ConclusionStageFilter>('all');
+  const [stageFilter, setStageFilter] = useState<StageFilter>([]);
   const [searchResults, setSearchResults] = useState<ConclusionSummary[] | null>(null);
   /** 写操作/刷新后自增:让带关键词的搜索结果重新拉取,避免列表已更新、搜索仍是旧快照 */
   const [searchTick, setSearchTick] = useState(0);
@@ -204,11 +204,10 @@ export function ConclusionView() {
               onChange={(e) => setKeyword(e.target.value)}
             />
           </div>
-          <WorkStageSelect
-            mode="filter"
+          <WorkStageMultiSelect
             value={stageFilter}
-            onChange={(value) => setStageFilter(value as ConclusionStageFilter)}
-            className="mt-2 h-8 w-full text-xs"
+            onChange={setStageFilter}
+            className="mt-2"
             ariaLabel="按阶段筛选结论卡"
           />
         </div>
