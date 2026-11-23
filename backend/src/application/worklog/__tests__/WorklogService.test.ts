@@ -411,6 +411,90 @@ describe('WorklogService', () => {
   });
 
   // ---------------------------------------------------------------
+  // 关联项目(名称解析 → id + 名称快照;改名同步)
+  // ---------------------------------------------------------------
+  describe('related projects', () => {
+    it('should resolve related projects and ignore unknown names with warning', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+
+      const r = await service.record({
+        project: 'A', version: 'V1', title: '跨项目', detail: 'd',
+        relatedProjects: ['B', '拼错的'],
+      });
+      expect(r.warnings?.some((w) => w.includes('拼错的'))).toBe(true);
+
+      const tree = await service.getTree();
+      const entry = tree.projects.find((p) => p.name === 'A')!
+        .versions[0].entries.find((e) => e.title === '跨项目')!;
+      expect(entry.relatedProjects).toEqual(['B']);
+      expect(entry.relatedProjectIds).toEqual([
+        tree.projects.find((p) => p.name === 'B')!.id,
+      ]);
+    });
+
+    it('should not write related fields when no name resolves', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      const r = await service.record({
+        project: 'A', version: 'V1', title: 'x', detail: 'd',
+        relatedProjects: ['  ', '不存在'],
+      });
+      expect(r.warnings?.some((w) => w.includes('不存在'))).toBe(true);
+      const tree = await service.getTree();
+      const entry = tree.projects.find((p) => p.name === 'A')!
+        .versions[0].entries.find((e) => e.title === 'x')!;
+      expect(entry.relatedProjects).toBeUndefined();
+      expect(entry.relatedProjectIds).toBeUndefined();
+    });
+
+    it('should sync related project name snapshot on rename', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+      await service.record({
+        project: 'A', version: 'V1', title: 'x', detail: 'd', relatedProjects: ['B'],
+      });
+
+      await service.renameProject('B', 'B2');
+      const tree = await service.getTree();
+      const entry = tree.projects.find((p) => p.name === 'A')!
+        .versions[0].entries.find((e) => e.title === 'x')!;
+      expect(entry.relatedProjects).toEqual(['B2']);
+      // id 引用不随改名变化
+      expect(entry.relatedProjectIds).toEqual([
+        tree.projects.find((p) => p.name === 'B2')!.id,
+      ]);
+    });
+
+    it('should set/keep/clear related projects via update', async () => {
+      await service.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+      await service.record({ project: 'C', version: 'V1', title: 'c', detail: 'd' });
+      const r = await service.record({ project: 'A', version: 'V1', title: 't', detail: 'd' });
+
+      // 设置:未知名称忽略并告警
+      const u1 = await service.update(r.entryId, { relatedProjects: ['B', '不存在'] });
+      expect(u1.warnings?.some((w) => w.includes('不存在'))).toBe(true);
+      expect((await service.query({ entryId: r.entryId }))[0].relatedProjects).toEqual(['B']);
+
+      // 改传新值 = 整体替换
+      await service.update(r.entryId, { relatedProjects: ['C'] });
+      expect((await service.query({ entryId: r.entryId }))[0].relatedProjects).toEqual(['C']);
+
+      // undefined = 不改,其他字段更新不影响关联
+      await service.update(r.entryId, { title: '改名' });
+      expect((await service.query({ entryId: r.entryId }))[0].relatedProjects).toEqual(['C']);
+
+      // 空数组 = 清空关联
+      await service.update(r.entryId, { relatedProjects: [] });
+      const cleared = (await service.query({ entryId: r.entryId }))[0];
+      expect(cleared.relatedProjects).toBeUndefined();
+      const tree = await service.getTree();
+      const entry = tree.projects.find((p) => p.name === 'A')!
+        .versions[0].entries.find((e) => e.id === r.entryId)!;
+      expect(entry.relatedProjectIds).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------
   // 双实例(模拟 HTTP 进程与 MCP 进程)并发
   // ---------------------------------------------------------------
   it('should persist and filter by stage', async () => {

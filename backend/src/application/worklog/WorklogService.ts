@@ -74,6 +74,30 @@ function findProject(data: WorklogData, name: string): WorklogProject {
   return project;
 }
 
+/** 把关联项目名称解析为「稳定 id + 名称快照」;不存在的名称丢弃并收集,供 warnings 提示 */
+function resolveRelated(
+  data: WorklogData,
+  names: string[] | undefined,
+): { ids: string[]; labels: string[]; ignored: string[] } {
+  const ids: string[] = [];
+  const labels: string[] = [];
+  const ignored: string[] = [];
+  for (const name of names ?? []) {
+    const trimmed = name?.trim() ?? '';
+    if (!trimmed) continue;
+    const project = data.projects.find((p) => p.name === trimmed);
+    if (!project) {
+      ignored.push(trimmed);
+      continue;
+    }
+    if (!ids.includes(project.id)) {
+      ids.push(project.id);
+      labels.push(project.name);
+    }
+  }
+  return { ids, labels, ignored };
+}
+
 export class WorklogService {
   constructor(private readonly repo: WorklogRepository) {}
 
@@ -184,6 +208,15 @@ export class WorklogService {
       if (input.diff) entry.diff = input.diff;
       if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
       if (input.stage !== undefined) entry.stage = validateStage(input.stage);
+      // 关联项目:名称 → 稳定 id + 名称快照;拼错的名字不阻断记录,只告警
+      const related = resolveRelated(data, input.relatedProjects);
+      if (related.ids.length) {
+        entry.relatedProjectIds = related.ids;
+        entry.relatedProjects = related.labels;
+      }
+      if (related.ignored.length) {
+        warnings.push(`以下关联项目不存在，已忽略：${related.ignored.join(', ')}`);
+      }
       // 留痕用户原始写法(不写归一化值),便于展示与后续重新归属
       if (normalizedSource) entry.sourcePath = input.sourcePath!.trim();
       if (normalizedSource && !ownerProject) entry.pathUnmatched = true;
@@ -242,6 +275,7 @@ export class WorklogService {
             tags: entry.tags,
             stage: entry.stage,
             files: entry.files?.map((f: WorklogEntryFile) => f.path),
+            relatedProjects: entry.relatedProjects,
             ...(input.includeDiff && entry.diff ? { diff: entry.diff } : {}),
             __createdAt: entry.createdAt,
           });
@@ -273,8 +307,12 @@ export class WorklogService {
   }
 
   /** partial 更新:只改传入字段;version 传新值 = 挪到该版本(不存在自动建,与 record 一致) */
-  async update(entryId: string, patch: WorklogUpdateRequest): Promise<{ id: string; path: string }> {
+  async update(
+    entryId: string,
+    patch: WorklogUpdateRequest,
+  ): Promise<{ id: string; path: string; warnings?: string[] }> {
     return this.repo.mutate((data) => {
+      const warnings: string[] = [];
       const { project, version, entry } = locateEntry(data, entryId);
       if (patch.title !== undefined) {
         if (!patch.title.trim()) throw new WorklogValidationError('标题不能为空');
@@ -296,7 +334,22 @@ export class WorklogService {
         }
         entry.date = patch.date;
       }
+      // 关联项目:undefined = 不改;空数组 = 清空关联;其余按名称重新解析
+      if (patch.relatedProjects !== undefined) {
+        const related = resolveRelated(data, patch.relatedProjects);
+        if (related.ids.length) {
+          entry.relatedProjectIds = related.ids;
+          entry.relatedProjects = related.labels;
+        } else {
+          delete entry.relatedProjectIds;
+          delete entry.relatedProjects;
+        }
+        if (related.ignored.length) {
+          warnings.push(`以下关联项目不存在，已忽略：${related.ignored.join(', ')}`);
+        }
+      }
       entry.updatedAt = Date.now();
+      const extra = warnings.length ? { warnings } : {};
 
       // 挪版本
       if (patch.version !== undefined && patch.version !== version.name) {
@@ -312,9 +365,9 @@ export class WorklogService {
         if (version.entries.length === 0) {
           project.versions = project.versions.filter((v) => v !== version);
         }
-        return { id: entryId, path: `${project.name}/${newVersionName}/${entryId}` };
+        return { id: entryId, path: `${project.name}/${newVersionName}/${entryId}`, ...extra };
       }
-      return { id: entryId, path: `${project.name}/${version.name}/${entryId}` };
+      return { id: entryId, path: `${project.name}/${version.name}/${entryId}`, ...extra };
     });
   }
 
@@ -388,6 +441,15 @@ export class WorklogService {
         }
         const proj = data.projects.find((p) => p.name === project)!;
         proj.name = target;
+        // 名称快照同步:所有项目条目里指向旧名的 relatedProjects 改为新名(id 引用不变)
+        for (const owner of data.projects) {
+          for (const version of owner.versions) {
+            for (const entry of version.entries) {
+              if (!entry.relatedProjects?.includes(project)) continue;
+              entry.relatedProjects = entry.relatedProjects.map((n) => (n === project ? target : n));
+            }
+          }
+        }
       },
       { backup: true },
     );
