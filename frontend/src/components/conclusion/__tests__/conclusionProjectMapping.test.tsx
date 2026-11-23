@@ -172,6 +172,43 @@ describe('ConclusionView project mapping', () => {
     expect(screen.getByDisplayValue('题库')).toBeTruthy();
   });
 
+  it('should prefill mapped main project name when appending', async () => {
+    // 项目已改名:卡片快照仍是旧名,但表单必须预填映射后的新名,否则提交会按旧名解析不到 id
+    vi.mocked(conclusionApi.list).mockResolvedValue({
+      conclusions: [summary({ project: '旧项目名', projectId: 'p_1' })],
+    });
+    vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith({ id: 'p_1', name: '新项目名' }));
+    vi.mocked(conclusionApi.get).mockResolvedValue(detail({ project: '旧项目名', projectId: 'p_1' }));
+
+    render(<ConclusionView />);
+    fireEvent.click(await screen.findByText('全部'));
+    await screen.findByText('卡片标题');
+    fireEvent.click(within(cardOf('卡片标题')).getByTitle('展开/收起'));
+    await waitFor(() => expect(screen.getByText('编辑（追加新版）')).toBeTruthy());
+    fireEvent.click(screen.getByText('编辑（追加新版）'));
+
+    expect(screen.getByDisplayValue('新项目名')).toBeTruthy();
+    expect(screen.queryByDisplayValue('旧项目名')).toBeNull();
+  });
+
+  it('should prefill mapped main project name when editing meta', async () => {
+    vi.mocked(conclusionApi.list).mockResolvedValue({
+      conclusions: [summary({ project: '旧项目名', projectId: 'p_1' })],
+    });
+    vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith({ id: 'p_1', name: '新项目名' }));
+    vi.mocked(conclusionApi.get).mockResolvedValue(detail({ project: '旧项目名', projectId: 'p_1' }));
+
+    render(<ConclusionView />);
+    fireEvent.click(await screen.findByText('全部'));
+    await screen.findByText('卡片标题');
+    fireEvent.click(within(cardOf('卡片标题')).getByTitle('展开/收起'));
+    await waitFor(() => expect(screen.getByText('改信息')).toBeTruthy());
+    fireEvent.click(screen.getByText('改信息'));
+
+    expect(screen.getByDisplayValue('新项目名')).toBeTruthy();
+    expect(screen.queryByDisplayValue('旧项目名')).toBeNull();
+  });
+
   it('should submit related projects parsed from the form', async () => {
     vi.mocked(conclusionApi.list).mockResolvedValue({ conclusions: [] });
     vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith());

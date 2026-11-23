@@ -358,15 +358,25 @@ export function ConclusionView() {
               onToggle={() => void toggle(summary)}
               onEdit={() => {
                 if (activeDetail) {
-                  // 预填映射后的最新关联项目名,避免项目重命名后按旧快照名提交被后端丢弃
+                  // 主项目/关联项目都预填映射后的最新名:项目改名后按旧快照提交会解析不到 id,
+                  // 后端回退 projectId:'' 把引用清空且 warnings 前端不展示,用户无感知。
                   setForm({
                     mode: 'append',
-                    initial: { ...activeDetail, relatedProjects: resolveRelatedProjects(activeDetail) },
+                    initial: {
+                      ...activeDetail,
+                      project: mainProject.label ?? activeDetail.project,
+                      relatedProjects: resolveRelatedProjects(activeDetail),
+                    },
                   });
                 }
               }}
               onPatch={() => {
-                if (activeDetail) setMetaForm(activeDetail);
+                if (activeDetail) {
+                  setMetaForm({
+                    ...activeDetail,
+                    project: mainProject.label ?? activeDetail.project,
+                  });
+                }
               }}
               onDelete={() => void remove(summary)}
             />
