@@ -40,10 +40,11 @@ export class JsonWorklogRepository extends JsonRepository implements WorklogRepo
   /** 读最新数据(不缓存)。文件不存在/空 → 空结构。 */
   async load(): Promise<WorklogData> {
     const raw = await this.read();
-    if (!raw || !raw.trim()) return { projects: [] };
+    if (!raw || !raw.trim()) return { projects: [], versions: [] };
     const parsed = JSON.parse(raw) as WorklogData;
-    if (!parsed.projects) return { projects: [] };
-    return parsed;
+    // versions 缺省容错:迁移前的旧文件没有顶层 versions,由迁移服务补齐;
+    // 此处归一为空数组,避免服务层读旧文件时 data.versions.find 崩溃。
+    return { projects: parsed.projects ?? [], versions: parsed.versions ?? [] };
   }
 
   async mutate<T>(
@@ -55,6 +56,14 @@ export class JsonWorklogRepository extends JsonRepository implements WorklogRepo
       // 目录先行(proper-lockfile 计算 lockpath 时 lstat 父目录,首次写入前目录可能不存在);
       // realpath:false——worklog.json 本身允许尚不存在(默认 realpath 对不存在的文件 ENOENT)
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+      // 首次写入前先落空文件:unlock 需要 lstat 目标文件,若事务 fn 在首次写盘前抛错
+      // (如 id 不存在的 404),unlock 会因 ENOENT 失败并遗留 .lock,后续事务等锁直到超时。
+      // 空文件由 load 视为空结构,不影响语义。
+      try {
+        await fs.writeFile(this.filePath, '', { flag: 'wx' });
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      }
       await lockfile.lock(this.filePath, {
         realpath: false,
         retries: LOCK_RETRIES, stale: LOCK_STALE_MS,

@@ -1,5 +1,7 @@
 // backend/src/application/worklog/WorklogService.ts
-// 工作记录应用服务:MCP 工具与 HTTP API 的唯一入口(partial/建层/重名规则单点)。
+// 工作记录应用服务:MCP 工具与 HTTP API 的唯一入口(版本/需求/条目规则单点)。
+// 树模型为「版本 → 需求 → 条目」,项目降为条目属性与路径归属字典;
+// 版本/需求只能由用户创建,AI 只传 id 写入(不自动建层)。
 // 写协议(双层锁/备份)由 JsonWorklogRepository 承担,本类只做业务规则与查询过滤。
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -10,7 +12,6 @@ import { isWorkStage } from '@ai-task-flow/shared';
 import type {
   WorklogData,
   WorklogProject,
-  WorklogVersion,
   WorklogEntry,
   WorklogEntryFile,
   WorklogRecordRequest,
@@ -18,6 +19,8 @@ import type {
   WorklogQueryRequest,
   WorklogQueryResultEntry,
   WorklogUpdateRequest,
+  WorklogVersionCreateRequest,
+  WorklogRequirementCreateRequest,
   WorkStage,
 } from '@ai-task-flow/shared';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
@@ -25,8 +28,15 @@ import {
   WorklogNotFoundError, WorklogConflictError, WorklogValidationError,
 } from '../../domain/worklog/errors.js';
 import { findOwningProject, normalizePath, resolveMatchPath } from '../../domain/worklog/pathMatch.js';
+import {
+  assertRequirementTitleFree,
+  assertVersionNameFree,
+  findEntryLocation,
+  findRequirement,
+  findVersion,
+} from '../../domain/worklog/WorklogTree.js';
 
-/** 项目/版本名约束:trim 后非空、不含路径分隔符(防路由参数歧义)、长度上限 */
+/** 项目/版本/需求名约束:trim 后非空、不含路径分隔符(防路由参数歧义)、长度上限 */
 const NAME_MAX_LEN = 60;
 
 function validateName(name: string, label: string): string {
@@ -74,20 +84,6 @@ function forbiddenBindReason(input: string): string | undefined {
   return undefined;
 }
 
-/** 在数据中定位条目与其所属项目/版本(浅拷贝引用,便于原地变更) */
-function locateEntry(
-  data: WorklogData,
-  entryId: string,
-): { project: WorklogProject; version: WorklogVersion; entry: WorklogEntry } {
-  for (const project of data.projects) {
-    for (const version of project.versions) {
-      const entry = version.entries.find((e) => e.id === entryId);
-      if (entry) return { project, version, entry };
-    }
-  }
-  throw new WorklogNotFoundError(`条目 ${entryId} 不存在`);
-}
-
 function findProject(data: WorklogData, name: string): WorklogProject {
   const project = data.projects.find((p) => p.name === name);
   if (!project) throw new Error(`项目 "${name}" 不存在`);
@@ -118,6 +114,14 @@ function resolveRelated(
     }
   }
   return { ids, labels, ignored };
+}
+
+/** files 运行时守卫:非数组(或元素非对象)拒绝,防 AI 客户端传坏结构入库后在查询路径抛 TypeError */
+function validateFiles(files: unknown): WorklogEntryFile[] {
+  if (!Array.isArray(files) || files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
+    throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');
+  }
+  return files as WorklogEntryFile[];
 }
 
 export class WorklogService {
@@ -153,6 +157,122 @@ export class WorklogService {
       paths: project.paths,
     }));
   }
+
+  // ------------------------------------------------------------------
+  // 版本 CRUD(仅页面/HTTP 使用;不提供 MCP 写接口)
+  // ------------------------------------------------------------------
+
+  /** 新建版本;版本名全局唯一(备份) */
+  async createVersion(input: WorklogVersionCreateRequest): Promise<{ id: string }> {
+    const name = validateName(input.name, '版本名');
+    return this.repo.mutate((data) => {
+      assertVersionNameFree(data, name);
+      const id = `v_${nanoid(8)}`;
+      data.versions.push({
+        id,
+        name,
+        ...(input.description ? { description: input.description } : {}),
+        createdAt: Date.now(),
+        requirements: [],
+      });
+      return { id };
+    }, { backup: true });
+  }
+
+  /** 重命名版本;新名与既有版本重名则报错不改(备份) */
+  async renameVersion(id: string, newName: string): Promise<void> {
+    const versionId = id?.trim() ?? '';
+    const target = validateName(newName, '新版本名');
+    await this.repo.mutate((data) => {
+      const version = findVersion(data, versionId);
+      if (!version) throw new WorklogNotFoundError(`版本 ${versionId} 不存在`);
+      assertVersionNameFree(data, target, versionId);
+      version.name = target;
+    }, { backup: true });
+  }
+
+  /** 删整个版本(含其需求与条目,可删非空;备份) */
+  async deleteVersion(id: string): Promise<void> {
+    const versionId = id?.trim() ?? '';
+    await this.repo.mutate((data) => {
+      if (!findVersion(data, versionId)) {
+        throw new WorklogNotFoundError(`版本 ${versionId} 不存在`);
+      }
+      data.versions = data.versions.filter((v) => v.id !== versionId);
+    }, { backup: true });
+  }
+
+  // ------------------------------------------------------------------
+  // 需求 CRUD(仅页面/HTTP 使用;不提供 MCP 写接口)
+  // ------------------------------------------------------------------
+
+  /** 新建需求;标题在版本内唯一,关联项目必须已存在(备份) */
+  async createRequirement(input: WorklogRequirementCreateRequest): Promise<{ id: string }> {
+    const title = validateName(input.title, '需求名');
+    return this.repo.mutate((data) => {
+      const versionId = input.versionId?.trim() ?? '';
+      const version = findVersion(data, versionId);
+      if (!version) {
+        throw new WorklogNotFoundError(`版本 ${versionId} 不存在，请让用户在页面创建并复制 id`);
+      }
+      assertRequirementTitleFree(version, title);
+      const projects: string[] = [];
+      const projectIds: string[] = [];
+      for (const raw of input.projects ?? []) {
+        const name = raw?.trim() ?? '';
+        if (!name) continue;
+        const project = data.projects.find((p) => p.name === name);
+        if (!project) throw new WorklogValidationError(`项目不存在:${name}`);
+        // 去重:同一项目传两次只记一次(保持 projects/projectIds 平行)
+        if (projects.includes(project.name)) continue;
+        projects.push(project.name);
+        projectIds.push(project.id);
+      }
+      const id = `r_${nanoid(8)}`;
+      version.requirements.push({
+        id,
+        title,
+        ...(input.description ? { description: input.description } : {}),
+        createdAt: Date.now(),
+        entries: [],
+        ...(projects.length ? { projects, projectIds } : {}),
+      });
+      return { id };
+    }, { backup: true });
+  }
+
+  /** 重命名需求;标题在版本内唯一,需求必须属于该版本(备份) */
+  async renameRequirement(versionId: string, requirementId: string, title: string): Promise<void> {
+    const vid = versionId?.trim() ?? '';
+    const rid = requirementId?.trim() ?? '';
+    const newTitle = validateName(title, '需求名');
+    await this.repo.mutate((data) => {
+      const version = findVersion(data, vid);
+      if (!version) throw new WorklogNotFoundError(`版本 ${vid} 不存在`);
+      const requirement = findRequirement(version, rid);
+      if (!requirement) throw new WorklogNotFoundError(`需求 ${rid} 不存在或不属于该版本`);
+      assertRequirementTitleFree(version, newTitle, rid);
+      requirement.title = newTitle;
+    }, { backup: true });
+  }
+
+  /** 删单个需求(含其条目,可删非空;备份) */
+  async deleteRequirement(versionId: string, requirementId: string): Promise<void> {
+    const vid = versionId?.trim() ?? '';
+    const rid = requirementId?.trim() ?? '';
+    await this.repo.mutate((data) => {
+      const version = findVersion(data, vid);
+      if (!version) throw new WorklogNotFoundError(`版本 ${vid} 不存在`);
+      if (!findRequirement(version, rid)) {
+        throw new WorklogNotFoundError(`需求 ${rid} 不存在或不属于该版本`);
+      }
+      version.requirements = version.requirements.filter((r) => r.id !== rid);
+    }, { backup: true });
+  }
+
+  // ------------------------------------------------------------------
+  // 项目路径绑定/解绑(项目字典与路径归属)
+  // ------------------------------------------------------------------
 
   /** 绑定项目路径(整体替换);路径须绝对,同一路径不得被两个项目占用 */
   async bindProjectPaths(projectName: string, paths: string[]): Promise<void> {
@@ -191,78 +311,94 @@ export class WorklogService {
     }, { backup: true });
   }
 
-  /** 记录一条工作内容;项目/版本不存在自动创建(建层) */
+  // ------------------------------------------------------------------
+  // 条目:记录 / 查询 / 更新 / 删除
+  // ------------------------------------------------------------------
+
+  /**
+   * 记录一条工作内容到已存在的「版本 + 需求」。
+   * 版本/需求不存在 → 404,提示用户先在页面创建并复制 id(不自动建层,防拼写裂树)。
+   * project 可选:不传按路径归属;传入时必须已存在(不自动建项目)。
+   */
   async record(input: WorklogRecordRequest): Promise<WorklogRecordResponse> {
-    const project = validateName(input.project, '项目名');
-    const version = validateName(input.version, '版本名');
-    if (!input.title?.trim()) throw new WorklogValidationError('标题不能为空');
-    if (input.detail == null || !String(input.detail).trim()) throw new WorklogValidationError('详细说明不能为空');
+    const title = validateName(input.title, '标题');
+    if (input.detail == null || !String(input.detail).trim()) {
+      throw new WorklogValidationError('详细说明不能为空');
+    }
+    const stage = validateStage(input.stage);
 
     return this.repo.mutate(async (data) => {
-      const warnings: string[] = [];
+      const versionId = input.versionId?.trim() ?? '';
+      const requirementId = input.requirementId?.trim() ?? '';
+      const version = findVersion(data, versionId);
+      if (!version) {
+        throw new WorklogNotFoundError(`版本 ${versionId} 不存在，请让用户在页面创建并复制 id`);
+      }
+      const requirement = findRequirement(version, requirementId);
+      if (!requirement) {
+        throw new WorklogNotFoundError(
+          `需求 ${requirementId} 不存在或不属于该版本，请让用户在页面创建并复制 id`,
+        );
+      }
+
       // 路径归属:realpath 归一化后按「最长前缀」找主项目;realpath 失败降级 path.resolve
+      // 无 id 的旧项目没有稳定身份,不能作为归属目标(否则 undefined 会被当成 projectId)
       const normalizedSource = input.sourcePath?.trim()
         ? await resolveMatchPath(input.sourcePath.trim())
         : undefined;
-      let ownerId: string | undefined;
+      let ownerProject: WorklogProject | undefined;
       if (normalizedSource) {
-        // 无 id 的旧项目没有稳定身份,不能作为归属目标(否则 undefined 会被当成 projectId)
         const refs = data.projects
           .filter((p) => Boolean(p.id))
           .flatMap((p) => (p.paths ?? []).map((pth) => ({ projectId: p.id, path: pth })));
-        ownerId = findOwningProject(refs, normalizedSource);
+        const ownerId = findOwningProject(refs, normalizedSource);
+        ownerProject = ownerId ? data.projects.find((p) => p.id === ownerId) : undefined;
       }
-      const ownerProject = ownerId ? data.projects.find((p) => p.id === ownerId) : undefined;
 
-      // 命中归属项目则以它为准(忽略 AI 传入的名字);未命中沿用传入项目名
-      let proj = ownerProject ?? data.projects.find((p) => p.name === project);
-      let createdProject = false;
-      let createdVersion = false;
-      if (!proj) {
-        proj = { id: `p_${nanoid(8)}`, name: project, createdAt: Date.now(), versions: [] };
-        data.projects.push(proj);
-        createdProject = true;
+      // 显式项目名必须已存在:项目字典不接受 AI 临时命名(防止拼错产生幽灵项目)
+      let explicitProject: WorklogProject | undefined;
+      if (input.project) {
+        const name = input.project.trim();
+        explicitProject = data.projects.find((p) => p.name === name);
+        if (!explicitProject) throw new WorklogValidationError(`项目不存在:${name}`);
       }
-      let ver = proj.versions.find((v) => v.name === version);
-      if (!ver) {
-        ver = { name: version, createdAt: Date.now(), entries: [] };
-        proj.versions.push(ver);
-        createdVersion = true;
-      }
+      // 命中归属项目则以它为准(忽略传入的名字)
+      const effective = ownerProject ?? explicitProject;
 
       const now = Date.now();
       const entry: WorklogEntry = {
         id: newEntryId(),
-        title: input.title.trim(),
+        title,
         detail: String(input.detail),
         date: localDate(),
         createdAt: now,
         updatedAt: now,
       };
-      // files 运行时守卫:非数组(或元素非对象)拒绝,防 AI 客户端传坏结构入库后在查询路径抛 TypeError
-      if (input.files != null) {
-        if (!Array.isArray(input.files) || input.files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
-          throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');
-        }
-        entry.files = input.files;
+      if (stage !== undefined) entry.stage = stage;
+      if (effective) {
+        entry.project = effective.name;
+        entry.projectId = effective.id;
       }
+      if (input.files != null) entry.files = validateFiles(input.files);
       if (input.diff) entry.diff = input.diff;
       if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
-      if (input.stage !== undefined) entry.stage = validateStage(input.stage);
       // 关联项目:名称 → 稳定 id + 名称快照;拼错的名字不阻断记录,只告警
       const related = resolveRelated(data, input.relatedProjects);
       if (related.ids.length) {
         entry.relatedProjectIds = related.ids;
         entry.relatedProjects = related.labels;
       }
+      // 留痕用户原始写法(不写归一化值),便于展示与后续重新归属
+      if (normalizedSource) {
+        entry.sourcePath = input.sourcePath!.trim();
+        if (!ownerProject) entry.pathUnmatched = true;
+      }
+      requirement.entries.push(entry);
+
+      const warnings: string[] = [];
       if (related.ignored.length) {
         warnings.push(`以下关联项目不存在，已忽略：${related.ignored.join(', ')}`);
       }
-      // 留痕用户原始写法(不写归一化值),便于展示与后续重新归属
-      if (normalizedSource) entry.sourcePath = input.sourcePath!.trim();
-      if (normalizedSource && !ownerProject) entry.pathUnmatched = true;
-      ver.entries.push(entry);
-
       // 只有「存在已绑定路径的项目」时未命中才算配置异常;全部项目都没绑定时不告警,避免每条记录都刷屏
       const hasBoundPaths = data.projects.some((p) => (p.paths ?? []).length > 0);
       if (normalizedSource && !ownerProject && hasBoundPaths) {
@@ -270,18 +406,21 @@ export class WorklogService {
       }
       return {
         entryId: entry.id,
-        path: `${proj.name}/${version}/${entry.id}`,
-        projectId: proj.id,
-        createdProject,
-        createdVersion,
+        path: `${version.name}/${requirement.title}/${entry.id}`,
+        // 版本/需求不再自动创建,保留字段为兼容旧客户端(恒 false)
+        createdProject: false,
+        createdVersion: false,
+        ...(effective ? { projectId: effective.id } : {}),
         ...(warnings.length ? { warnings } : {}),
       };
     });
   }
 
-  /** 查询条目:entryId 精确(忽略其他过滤)、project/version 精确、
+  /**
+   * 查询条目:entryId 精确(忽略其他过滤)、versionId/requirementId/version(名称)/project 精确、
    *  keyword 大小写不敏感(title/detail/files.path)、tags 任一命中、
-   *  dateFrom/dateTo 闭区间;结果按创建时间新在前 */
+   *  dateFrom/dateTo 闭区间;结果按创建时间新在前,附带 versionName / requirementTitle。
+   */
   async query(input: WorklogQueryRequest): Promise<WorklogQueryResultEntry[]> {
     const data = await this.repo.load();
     const limit = input.limit && input.limit > 0 ? input.limit : 20;
@@ -289,14 +428,16 @@ export class WorklogService {
     const keyword = input.keyword?.trim().toLowerCase();
     const results: Array<WorklogQueryResultEntry & { __createdAt: number }> = [];
 
-    for (const project of data.projects) {
-      if (!entryId && input.project && project.name !== input.project) continue;
-      for (const version of project.versions) {
-        if (!entryId && input.version && version.name !== input.version) continue;
-        for (const entry of version.entries) {
+    for (const version of data.versions) {
+      if (!entryId && input.versionId && version.id !== input.versionId) continue;
+      if (!entryId && input.version && version.name !== input.version) continue;
+      for (const requirement of version.requirements) {
+        if (!entryId && input.requirementId && requirement.id !== input.requirementId) continue;
+        for (const entry of requirement.entries) {
           // 按 id 精确查时忽略其余过滤条件:用户/AI 拿到的是唯一标识,不该再被项目/阶段等挡住
           if (entryId && entry.id !== entryId) continue;
           if (!entryId) {
+            if (input.project && entry.project !== input.project) continue;
             if (input.tags?.length && !entry.tags?.some((t) => input.tags!.includes(t))) continue;
             if (input.stage && entry.stage !== input.stage) continue;
             // 按关联项目名称过滤(名称快照与请求方口径一致)
@@ -315,8 +456,9 @@ export class WorklogService {
             title: entry.title,
             detail: entry.detail,
             date: entry.date,
-            project: project.name,
-            version: version.name,
+            versionName: version.name,
+            requirementTitle: requirement.title,
+            ...(entry.project ? { project: entry.project } : {}),
             tags: entry.tags,
             stage: entry.stage,
             files: entry.files?.map((f: WorklogEntryFile) => f.path),
@@ -337,27 +479,22 @@ export class WorklogService {
       .map(({ __createdAt, ...rest }) => rest);
   }
 
-  /** partial 更新:只改传入字段;version 传新值 = 挪到该版本(不存在自动建,与 record 一致) */
+  /** partial 更新:只改传入字段;按 entryId 跨整棵树定位 */
   async update(
     entryId: string,
     patch: WorklogUpdateRequest,
   ): Promise<{ id: string; path: string; warnings?: string[] }> {
     return this.repo.mutate((data) => {
       const warnings: string[] = [];
-      const { project, version, entry } = locateEntry(data, entryId);
-      if (patch.title !== undefined) {
-        if (!patch.title.trim()) throw new WorklogValidationError('标题不能为空');
-        entry.title = patch.title.trim();
-      }
+      const located = findEntryLocation(data, entryId);
+      if (!located) throw new WorklogNotFoundError(`条目 ${entryId} 不存在`);
+      const { version, requirement, entry } = located;
+
+      if (patch.title !== undefined) entry.title = validateName(patch.title, '标题');
       if (patch.detail !== undefined) entry.detail = String(patch.detail);
       if (patch.tags !== undefined) entry.tags = patch.tags.map((t) => t.trim()).filter(Boolean);
       if (patch.stage !== undefined) entry.stage = validateStage(patch.stage);
-      if (patch.files !== undefined) {
-        if (!Array.isArray(patch.files) || patch.files.some((f) => typeof f !== 'object' || f === null || typeof (f as WorklogEntryFile).path !== 'string')) {
-          throw new WorklogValidationError('files 必须为 [{path, startLine?, endLine?}] 数组');
-        }
-        entry.files = patch.files;
-      }
+      if (patch.files !== undefined) entry.files = validateFiles(patch.files);
       if (patch.diff !== undefined) entry.diff = patch.diff;
       if (patch.date !== undefined) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
@@ -380,25 +517,12 @@ export class WorklogService {
         }
       }
       entry.updatedAt = Date.now();
-      const extra = warnings.length ? { warnings } : {};
 
-      // 挪版本
-      if (patch.version !== undefined && patch.version !== version.name) {
-        const newVersionName = validateName(patch.version, '版本名');
-        let target = project.versions.find((v) => v.name === newVersionName);
-        if (!target) {
-          target = { name: newVersionName, createdAt: Date.now(), entries: [] };
-          project.versions.push(target);
-        }
-        version.entries = version.entries.filter((e) => e.id !== entryId);
-        target.entries.push(entry);
-        // 空版本清理:原版本被搬空且非目标,删除以免留壳
-        if (version.entries.length === 0) {
-          project.versions = project.versions.filter((v) => v !== version);
-        }
-        return { id: entryId, path: `${project.name}/${newVersionName}/${entryId}`, ...extra };
-      }
-      return { id: entryId, path: `${project.name}/${version.name}/${entryId}`, ...extra };
+      return {
+        id: entryId,
+        path: `${version.name}/${requirement.title}/${entryId}`,
+        ...(warnings.length ? { warnings } : {}),
+      };
     });
   }
 
@@ -406,55 +530,25 @@ export class WorklogService {
   async deleteEntry(entryId: string): Promise<void> {
     await this.repo.mutate(
       (data) => {
-        const { version } = locateEntry(data, entryId);
-        version.entries = version.entries.filter((e) => e.id !== entryId);
+        const located = findEntryLocation(data, entryId);
+        if (!located) throw new WorklogNotFoundError(`条目 ${entryId} 不存在`);
+        located.requirement.entries = located.requirement.entries.filter((e) => e.id !== entryId);
       },
       { backup: true },
     );
   }
 
-  /** 删整个版本,可删非空(备份) */
-  async deleteVersion(projectName: string, versionName: string): Promise<void> {
-    const project = validateName(projectName, '项目名');
-    const version = validateName(versionName, '版本名');
-    await this.repo.mutate(
-      (data) => {
-        const proj = findProject(data, project);
-        if (!proj.versions.some((v) => v.name === version)) {
-          throw new WorklogNotFoundError(`版本 "${version}" 不存在`);
-        }
-        proj.versions = proj.versions.filter((v) => v.name !== version);
-      },
-      { backup: true },
-    );
-  }
+  // ------------------------------------------------------------------
+  // 项目字典(删除只移除字典项,历史条目保留项目名称快照)
+  // ------------------------------------------------------------------
 
-  /** 删整个项目(备份) */
+  /** 删整个项目(只从字典移除,不删历史条目;备份) */
   async deleteProject(projectName: string): Promise<void> {
     const project = validateName(projectName, '项目名');
     await this.repo.mutate(
       (data) => {
         findProject(data, project); // 不存在即抛
         data.projects = data.projects.filter((p) => p.name !== project);
-      },
-      { backup: true },
-    );
-  }
-
-  /** 重命名版本;新名与项目内既有版本重名则报错不改(备份) */
-  async renameVersion(projectName: string, versionName: string, newName: string): Promise<void> {
-    const project = validateName(projectName, '项目名');
-    const version = validateName(versionName, '版本名');
-    const target = validateName(newName, '新版本名');
-    await this.repo.mutate(
-      (data) => {
-        const proj = findProject(data, project);
-        const ver = proj.versions.find((v) => v.name === version);
-        if (!ver) throw new WorklogNotFoundError(`版本 "${version}" 不存在`);
-        if (proj.versions.some((v) => v.name === target)) {
-          throw new WorklogConflictError(`版本名 "${target}" 已存在`);
-        }
-        ver.name = target;
       },
       { backup: true },
     );
@@ -472,10 +566,10 @@ export class WorklogService {
         }
         const proj = data.projects.find((p) => p.name === project)!;
         proj.name = target;
-        // 名称快照同步:所有项目条目里指向旧名的 relatedProjects 改为新名(id 引用不变)
-        for (const owner of data.projects) {
-          for (const version of owner.versions) {
-            for (const entry of version.entries) {
+        // 名称快照同步:所有条目里指向旧名的 relatedProjects 改为新名(id 引用不变)
+        for (const version of data.versions) {
+          for (const requirement of version.requirements) {
+            for (const entry of requirement.entries) {
               if (!entry.relatedProjects?.includes(project)) continue;
               entry.relatedProjects = entry.relatedProjects.map((n) => (n === project ? target : n));
             }

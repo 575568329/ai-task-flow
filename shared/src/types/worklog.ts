@@ -1,6 +1,6 @@
 // shared/src/types/worklog.ts
-// 工作记录(worklog)三层模型:项目 → 版本 → 功能点条目。
-// 写入者/查询者主要是 AI(MCP),人类阅读走前端工作记录页渲染。
+// 工作记录(worklog)三层模型:版本 → 需求 → 功能点条目;项目降为条目属性与字典。
+// 版本/需求由用户在页面创建,AI(MCP)只传 id 写入;人类阅读走前端工作记录页渲染。
 // 存储:~/.ai-task-flow/worklog.json(单文件,原子写+跨进程文件锁,见 backend JsonWorklogRepository)。
 import type { WorkStage } from './stage.js';
 
@@ -170,8 +170,12 @@ export interface WorklogQueryResultEntry {
   title: string;
   detail: string;
   date: string;
-  project: string;
-  version: string;
+  /** 条目实际归属项目(路径归属或显式传入);可能为空 */
+  project?: string;
+  /** 所属版本名称 */
+  versionName: string;
+  /** 所属需求标题 */
+  requirementTitle: string;
   tags?: string[];
   stage?: WorkStage;
   files?: string[];
@@ -214,8 +218,6 @@ export interface WorklogUpdateRequest {
   files?: WorklogEntryFile[];
   diff?: string;
   date?: string;
-  /** 传新值 = 把条目挪到该版本(不存在则自动创建,与 record 建层一致) */
-  version?: string;
   relatedProjects?: string[];
 }
 
