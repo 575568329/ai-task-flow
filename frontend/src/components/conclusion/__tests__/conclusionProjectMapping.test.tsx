@@ -117,7 +117,7 @@ describe('ConclusionView project mapping', () => {
 
     const card = cardOf('卡片标题');
     expect(within(card).getByText('新项目名')).toBeTruthy();
-    expect(within(card).getByText(/关联.*题库/)).toBeTruthy();
+    expect(within(card).getByRole('button', { name: '题库' })).toBeTruthy();
     // id 映射命中时不再展示快照名称
     expect(within(card).queryByText('旧项目名')).toBeNull();
     expect(within(card).queryByText('旧关联')).toBeNull();
@@ -140,7 +140,7 @@ describe('ConclusionView project mapping', () => {
     const card = cardOf('卡片标题');
     expect(within(card).getByText('已删项目')).toBeTruthy();
     expect(within(card).getByText(/项目已删除/)).toBeTruthy();
-    expect(within(card).getByText(/关联.*遗留关联/)).toBeTruthy();
+    expect(within(card).getByRole('button', { name: '遗留关联' })).toBeTruthy();
   });
 
   it('should filter cards by related project dropdown', async () => {
@@ -165,6 +165,50 @@ describe('ConclusionView project mapping', () => {
     // 切回「全部关联项目」恢复不过滤
     fireEvent.change(screen.getByLabelText('按关联项目筛选结论卡'), { target: { value: '' } });
     expect(screen.getByText('普通卡')).toBeTruthy();
+  });
+
+  it('should group sidebar and filter by latest mapped project name after rename', async () => {
+    vi.mocked(conclusionApi.list).mockResolvedValue({
+      conclusions: [
+        summary({ id: 'c_1', project: '旧项目名', projectId: 'p_1', title: '改名项目卡' }),
+        summary({ id: 'c_2', project: '其他项目', title: '别的卡' }),
+      ],
+    });
+    vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith({ id: 'p_1', name: '新项目名' }));
+
+    render(<ConclusionView />);
+    fireEvent.click(await screen.findByText('全部'));
+    await screen.findByText('改名项目卡');
+    expect(screen.getByText('别的卡')).toBeTruthy();
+
+    // 侧栏分组标题用映射后的最新名,旧名不再作为分组出现
+    const groupButton = await screen.findByRole('button', { name: /新项目名/ });
+    expect(screen.queryByRole('button', { name: /旧项目名/ })).toBeNull();
+
+    // 选中新名能筛到该卡(卡上快照仍是旧名,筛选口径必须与展示一致)
+    fireEvent.click(groupButton);
+    expect(screen.getByText('改名项目卡')).toBeTruthy();
+    expect(screen.queryByText('别的卡')).toBeNull();
+  });
+
+  it('should filter by related project when clicking the related badge', async () => {
+    vi.mocked(conclusionApi.list).mockResolvedValue({
+      conclusions: [
+        summary({ id: 'c_1', title: '关联卡', relatedProjects: ['题库'], relatedProjectIds: ['p_2'] }),
+        summary({ id: 'c_2', title: '普通卡' }),
+      ],
+    });
+    vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith({ id: 'p_2', name: '题库' }));
+
+    render(<ConclusionView />);
+    fireEvent.click(await screen.findByText('全部'));
+    await screen.findByText('关联卡');
+
+    fireEvent.click(within(cardOf('关联卡')).getByRole('button', { name: '题库' }));
+
+    expect((screen.getByLabelText('按关联项目筛选结论卡') as HTMLSelectElement).value).toBe('题库');
+    expect(screen.getByText('关联卡')).toBeTruthy();
+    expect(screen.queryByText('普通卡')).toBeNull();
   });
 
   it('should explain archive semantics in empty state', async () => {

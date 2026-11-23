@@ -33,10 +33,12 @@ interface EntryItemProps {
   expandAll?: boolean | null;
   onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage; version?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** 点击关联项目徽标(按该项目名筛选);不传则徽标不可交互 */
+  onRelatedClick?: (name: string) => void;
 }
 
 export function EntryItem({
-  entry, projectVersions, currentVersion, contextLabel, expandAll, onSave, onDelete,
+  entry, projectVersions, currentVersion, contextLabel, expandAll, onSave, onDelete, onRelatedClick,
 }: EntryItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -201,7 +203,18 @@ export function EntryItem({
                 <WorkStageBadge stage={entry.stage} />
                 {entry.relatedProjects?.length ? (
                   <Badge variant="outline" className="text-muted-foreground text-xs">
-                    关联: {entry.relatedProjects.join(', ')}
+                    关联:
+                    {entry.relatedProjects.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        title="筛选该关联项目"
+                        className="hover:text-foreground cursor-pointer transition-colors hover:underline"
+                        onClick={() => onRelatedClick?.(name)}
+                      >
+                        {name}
+                      </button>
+                    ))}
                   </Badge>
                 ) : null}
                 {entry.pathUnmatched && (

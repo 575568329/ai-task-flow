@@ -126,6 +126,12 @@ export function WorklogView() {
     setMode('entries');
   };
 
+  /** 点击条目上的关联项目徽标:按该项目名筛选(清空关键词,保留当前树选择) */
+  const handleRelatedBadgeClick = (projectName: string) => {
+    setKeyword('');
+    setRelatedFilter(projectName);
+  };
+
   // 项目名 → 版本列表(挪版本下拉按条目所属项目取,跨项目混看不错配)
   const versionsByProject = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -356,6 +362,7 @@ export function WorklogView() {
                 expandAll={expandAll}
                 onSave={handleSave}
                 onDelete={handleDeleteEntry}
+                onRelatedClick={handleRelatedBadgeClick}
               />
             ))
           )}

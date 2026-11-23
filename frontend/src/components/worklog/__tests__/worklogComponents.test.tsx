@@ -93,7 +93,7 @@ describe('EntryItem', () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith('e_test0001'));
   });
 
-  it('should show related project badge and unmatched path hint', () => {
+  it('should show related project badges and unmatched path hint', () => {
     render(
       <EntryItem
         {...baseProps}
@@ -102,8 +102,25 @@ describe('EntryItem', () => {
         onDelete={vi.fn()}
       />,
     );
-    expect(screen.getByText('关联: 题库, 组卷')).toBeInTheDocument();
+    // 关联项目改为可点击按钮,每个名称一个
+    expect(screen.getByRole('button', { name: '题库' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '组卷' })).toBeInTheDocument();
     expect(screen.getByText('当前路径未归属项目')).toBeInTheDocument();
+  });
+
+  it('should invoke onRelatedClick with the clicked related project name', () => {
+    const onRelatedClick = vi.fn();
+    render(
+      <EntryItem
+        {...baseProps}
+        entry={makeEntry({ relatedProjects: ['题库', '组卷'] })}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+        onRelatedClick={onRelatedClick}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '题库' }));
+    expect(onRelatedClick).toHaveBeenCalledWith('题库');
   });
 
   it('should not show related badge or unmatched hint for plain entry', () => {

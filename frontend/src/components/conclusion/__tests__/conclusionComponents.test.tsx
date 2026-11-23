@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { Conclusion, ConclusionSummary } from '@ai-task-flow/shared';
 import { ConclusionCardItem } from '../ConclusionCardItem';
 
@@ -91,7 +91,28 @@ describe('ConclusionCardItem', () => {
     );
     expect(screen.getByText('映射后的项目名')).toBeTruthy();
     expect(screen.queryByText('旧快照名')).toBeNull();
-    expect(screen.getByText(/关联.*题库.*资源加工/)).toBeTruthy();
+    // 关联项目徽标改为按钮(可点击筛选),每个名称一个按钮
+    expect(screen.getByRole('button', { name: '题库' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '资源加工' })).toBeTruthy();
+  });
+
+  it('should invoke onRelatedClick with the clicked related project name', () => {
+    const onRelatedClick = vi.fn();
+    // 本文件未开全局 cleanup,DOM 会累积;限定本次 render 的容器,避免命中上一个用例的按钮
+    const { container } = render(
+      <ConclusionCardItem
+        summary={summary()}
+        expanded={false}
+        relatedProjectLabels={['题库', '资源加工']}
+        onRelatedClick={onRelatedClick}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onPatch={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(within(container).getByRole('button', { name: '资源加工' }));
+    expect(onRelatedClick).toHaveBeenCalledWith('资源加工');
   });
 
   it('should show deleted hint when project reference is gone', () => {

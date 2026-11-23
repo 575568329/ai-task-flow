@@ -30,6 +30,8 @@ interface Props {
   projectDeleted?: boolean;
   /** 关联项目展示名(已按 id 映射 + 快照兜底解析);缺省用 summary.relatedProjects 快照 */
   relatedProjectLabels?: string[];
+  /** 点击关联项目徽标(按该项目名筛选);不传则徽标不可交互 */
+  onRelatedClick?: (name: string) => void;
   onToggle: () => void;
   onEdit: () => void;
   onPatch: () => void;
@@ -61,7 +63,7 @@ function LongMarkdown({ content }: { content: string }) {
 
 export function ConclusionCardItem({
   summary, expanded, detail,
-  projectLabel, projectDeleted, relatedProjectLabels,
+  projectLabel, projectDeleted, relatedProjectLabels, onRelatedClick,
   onToggle, onEdit, onPatch, onDelete,
 }: Props) {
   const latest = detail?.revisions[detail.revisions.length - 1];
@@ -116,7 +118,20 @@ export function ConclusionCardItem({
             )}
             {summary.version && <span>{summary.version}</span>}
             {relatedLabels.length > 0 && (
-              <Badge variant="outline" className="text-[10px]">关联: {relatedLabels.join('、')}</Badge>
+              <Badge variant="outline" className="text-[10px]">
+                关联:
+                {relatedLabels.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    title="筛选该关联项目"
+                    className="hover:text-foreground cursor-pointer transition-colors hover:underline"
+                    onClick={() => onRelatedClick?.(name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </Badge>
             )}
             <span>{summary.latestDate}</span>
             <WorkStageBadge stage={summary.stage} />

@@ -29,6 +29,41 @@ interface ProjectIndex {
   ready: boolean;
 }
 
+/** 关联项目展示名:id 映射最新名优先,映射不到退回名称快照;两者都无则跳过 */
+function resolveRelatedLabels(
+  card: { relatedProjects?: string[]; relatedProjectIds?: string[] },
+  names: Map<string, string>,
+): string[] {
+  const ids = card.relatedProjectIds ?? [];
+  const snapshots = card.relatedProjects ?? [];
+  const labels: string[] = [];
+  for (let index = 0; index < Math.max(ids.length, snapshots.length); index += 1) {
+    const id = ids[index];
+    const label = (id ? names.get(id) : undefined) ?? snapshots[index];
+    if (label) labels.push(label);
+  }
+  return labels;
+}
+
+/**
+ * 展示口径卡片:主项目名/关联项目名按 id 映射覆盖为最新名(未命中保持快照)。
+ * 侧栏分组、筛选与卡片展示必须共用这一份,否则项目改名后卡片显示新名、侧栏仍挂旧名。
+ */
+function mapCardNames(card: ConclusionSummary, names: Map<string, string>): ConclusionSummary {
+  const project = (card.projectId ? names.get(card.projectId) : undefined) ?? card.project;
+  const projectChanged = project !== card.project;
+  const related = resolveRelatedLabels(card, names);
+  const snapshots = card.relatedProjects ?? [];
+  const relatedChanged = related.length > 0
+    && (related.length !== snapshots.length || related.some((name, index) => name !== snapshots[index]));
+  if (!projectChanged && !relatedChanged) return card;
+  return {
+    ...card,
+    ...(projectChanged ? { project } : {}),
+    ...(relatedChanged ? { relatedProjects: related } : {}),
+  };
+}
+
 export function ConclusionView() {
   const [cards, setCards] = useState<ConclusionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,30 +144,40 @@ export function ConclusionView() {
     return () => window.clearTimeout(timer);
   }, [keyword, searchTick]);
 
+  /** 展示口径:侧栏分组/筛选/卡片渲染统一用映射后的卡片,项目改名后各处同步刷新 */
+  const displayCards = useMemo(
+    () => cards.map((card) => mapCardNames(card, projectIndex.names)),
+    [cards, projectIndex.names],
+  );
+  const displaySearchResults = useMemo(
+    () => (searchResults ? searchResults.map((card) => mapCardNames(card, projectIndex.names)) : null),
+    [searchResults, projectIndex.names],
+  );
+
   const visible = useMemo(() => {
-    if (searchResults) {
+    if (displaySearchResults) {
       return filterConclusionsByRelatedProject(
-        filterConclusionsByStage(searchResults, stageFilter),
+        filterConclusionsByStage(displaySearchResults, stageFilter),
         relatedFilter,
       );
     }
     if (!selection) return [];
     return filterConclusionsByRelatedProject(
-      filterConclusionsByStage(filterConclusions(cards, selection), stageFilter),
+      filterConclusionsByStage(filterConclusions(displayCards, selection), stageFilter),
       relatedFilter,
     );
-  }, [searchResults, cards, selection, stageFilter, relatedFilter]);
+  }, [displaySearchResults, displayCards, selection, stageFilter, relatedFilter]);
 
-  // 「关联项目」下拉选项:已加载卡片的 relatedProjects 去重(名称快照,与筛选口径一致)
+  // 「关联项目」下拉选项:展示口径卡片的 relatedProjects 去重(与筛选口径一致)
   const relatedProjectOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const card of cards) {
+    for (const card of displayCards) {
       for (const name of card.relatedProjects ?? []) {
         if (name) names.add(name);
       }
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [cards]);
+  }, [displayCards]);
 
   // 数据刷新后所选关联项目不存在(如关联被清理)则回退为不过滤
   useEffect(() => {
@@ -154,17 +199,7 @@ export function ConclusionView() {
   /** 关联项目展示名:按 id 映射最新名称,映射不到退回名称快照;两者都无则跳过 */
   const resolveRelatedProjects = (
     card: { relatedProjects?: string[]; relatedProjectIds?: string[] },
-  ): string[] => {
-    const ids = card.relatedProjectIds ?? [];
-    const snapshots = card.relatedProjects ?? [];
-    const labels: string[] = [];
-    for (let index = 0; index < Math.max(ids.length, snapshots.length); index += 1) {
-      const id = ids[index];
-      const label = (id ? projectIndex.names.get(id) : undefined) ?? snapshots[index];
-      if (label) labels.push(label);
-    }
-    return labels;
-  };
+  ): string[] => resolveRelatedLabels(card, projectIndex.names);
 
   const toggle = async (summary: ConclusionSummary) => {
     const current = ++detailSeq.current;
@@ -284,7 +319,7 @@ export function ConclusionView() {
             </p>
           )}
         >
-          <ConclusionProjectList cards={cards} selection={selection} onSelect={setSelection} />
+          <ConclusionProjectList cards={displayCards} selection={selection} onSelect={setSelection} />
         </WorkspaceSidebar>
       )}
       toolbar={(
@@ -395,6 +430,7 @@ export function ConclusionView() {
               projectDeleted={mainProject.deleted}
               relatedProjectLabels={resolveRelatedProjects(summary)}
               detail={activeDetail}
+              onRelatedClick={setRelatedFilter}
               onToggle={() => void toggle(summary)}
               onEdit={() => {
                 if (activeDetail) {
