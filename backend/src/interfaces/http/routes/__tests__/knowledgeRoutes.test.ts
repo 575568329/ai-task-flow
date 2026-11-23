@@ -114,6 +114,40 @@ describe('knowledgeRoutes 元数据', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('should reject non-string path/association values with a clear message', async () => {
+    const { path: relPath } = await service.createDoc({ title: '类型校验', content: '正文' });
+
+    const badPath = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: 123, stage: 'dev' },
+    });
+    expect(badPath.statusCode).toBe(400);
+    expect(badPath.json().error).toContain('path');
+
+    const badValue = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: relPath, versionId: { id: 'v1' } },
+    });
+    expect(badValue.statusCode).toBe(400);
+    expect(badValue.json().error).toContain('versionId 必须是字符串');
+  });
+
+  it('should trim association values', async () => {
+    const { path: relPath } = await service.createDoc({ title: 'trim', content: '正文' });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: relPath, versionId: '  v_1  ', stage: ' dev ' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const doc = await service.getDoc(relPath);
+    expect(doc.frontmatter).toEqual({ versionId: 'v_1', stage: 'dev' });
+  });
+
   it('should 404 when file does not exist', async () => {
     const res = await app.inject({
       method: 'PUT',

@@ -141,6 +141,15 @@ export function KnowledgeViewer() {
         projectId: metaForm.projectId,
         stage: metaForm.stage,
       });
+      // 外部-only frontmatter 文档(块内只有 title/date 等未识别键)在 getDoc 里整块算正文;
+      // 一旦 meta 写入可识别键,正文边界会变。编辑器无未保存改动时按最新文件回填,
+      // 否则后续直接保存会拿旧草稿覆盖、把刚写入的关联丢掉。
+      if (!dirty) {
+        const fresh = await fetchDoc(doc.path);
+        const content = fresh.content ?? '';
+        setDraft(content);
+        setOriginal(content);
+      }
       setManifest(await fetchManifest());
       setMetaOpen(false);
       toast.success('关联已更新');

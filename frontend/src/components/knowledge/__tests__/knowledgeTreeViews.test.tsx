@@ -101,9 +101,9 @@ describe('KnowledgeTree 多视图', () => {
   it('switches to version view, shows counts and groups, and remembers the choice', () => {
     render(<KnowledgeTree />);
 
-    // 默认分类视图:目录树
+    // 默认分类视图:目录树 + 关联统计(分类视图也显示)
     expect(screen.getByText('A 文档')).toBeTruthy();
-    expect(screen.queryByText(/已关联/)).toBeNull();
+    expect(screen.getByText('已关联 1 / 未关联 1')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '版本' }));
 

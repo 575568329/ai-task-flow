@@ -10,7 +10,16 @@ import type {
   KnowledgeCreateRequest,
   KnowledgeSaveRequest,
   KnowledgeDocMetaUpdateRequest,
+  KnowledgeAssociation,
 } from '@ai-task-flow/shared';
+
+/** 把 unknown 异常收窄成可展示文案(不向调用方暴露内部对象) */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** 关联字段白名单:只接受字符串(undefined=不清空/保持缺省),统一 trim */
+const ASSOCIATION_KEYS = ['versionId', 'requirementId', 'projectId', 'stage'] as const;
 
 export async function registerKnowledgeRoutes(
   fastify: FastifyInstance,
@@ -22,8 +31,8 @@ export async function registerKnowledgeRoutes(
       // 强制刷新:每次请求都重新扫描(简单方案,避免缓存过期)
       const manifest = await knowledgeService.refreshManifest();
       return manifest;
-    } catch (err: any) {
-      return reply.status(500).send({ error: `生成 manifest 失败: ${err.message}` });
+    } catch (err) {
+      return reply.status(500).send({ error: `生成 manifest 失败: ${errorText(err)}` });
     }
   });
 
@@ -39,11 +48,11 @@ export async function registerKnowledgeRoutes(
     try {
       const doc = await knowledgeService.getDoc(path);
       return doc;
-    } catch (err: any) {
-      if (err.message.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
-      return reply.status(400).send({ error: `读取文档失败: ${err.message}` });
+      return reply.status(400).send({ error: `读取文档失败: ${errorText(err)}` });
     }
   });
 
@@ -81,9 +90,9 @@ export async function registerKnowledgeRoutes(
       // 读取文件并发送
       const content = await fs.readFile(absPath);
       return reply.type(contentType).send(content);
-    } catch (err: any) {
-      if (err.message?.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
       return reply.status(404).send({ error: '文件不存在' });
     }
@@ -101,11 +110,11 @@ export async function registerKnowledgeRoutes(
     try {
       await knowledgeService.deleteDoc(path);
       return { ok: true };
-    } catch (err: any) {
-      if (err.message.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
-      return reply.status(400).send({ error: `删除失败: ${err.message}` });
+      return reply.status(400).send({ error: `删除失败: ${errorText(err)}` });
     }
   });
 
@@ -124,11 +133,11 @@ export async function registerKnowledgeRoutes(
     try {
       const result = await knowledgeService.createDoc(body);
       return reply.status(201).send(result);
-    } catch (err: any) {
-      if (err.message.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
-      return reply.status(400).send({ error: `创建失败: ${err.message}` });
+      return reply.status(400).send({ error: `创建失败: ${errorText(err)}` });
     }
   });
 
@@ -146,8 +155,8 @@ export async function registerKnowledgeRoutes(
       // 导入后刷新 manifest,前端随后拉取即可看到新文档
       await knowledgeService.refreshManifest();
       return report;
-    } catch (err: any) {
-      return reply.status(400).send({ error: `导入失败: ${err.message}` });
+    } catch (err) {
+      return reply.status(400).send({ error: `导入失败: ${errorText(err)}` });
     }
   });
 
@@ -167,14 +176,14 @@ export async function registerKnowledgeRoutes(
     try {
       const result = await knowledgeService.saveDoc(path, request.body.content);
       return { ok: true, path: result.path };
-    } catch (err: any) {
-      if (err.message.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
-      if (err.message === '文件不存在') {
-        return reply.status(404).send({ error: err.message });
+      if (errorText(err) === '文件不存在') {
+        return reply.status(404).send({ error: errorText(err) });
       }
-      return reply.status(400).send({ error: `保存失败: ${err.message}` });
+      return reply.status(400).send({ error: `保存失败: ${errorText(err)}` });
     }
   });
 
@@ -183,27 +192,34 @@ export async function registerKnowledgeRoutes(
   fastify.put<{
     Body: KnowledgeDocMetaUpdateRequest;
   }>('/api/knowledge/doc/meta', async (request, reply) => {
-    const body = request.body;
-    if (!body?.path) {
-      return reply.status(400).send({ error: '缺少 path 参数' });
+    // 运行时校验:类型错误直接 400,避免把内部 TypeError 文案透给前端
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const relPath = body.path;
+    if (typeof relPath !== 'string' || relPath.trim() === '') {
+      return reply.status(400).send({ error: '缺少 path 参数或 path 不是字符串' });
+    }
+
+    const association: KnowledgeAssociation = {};
+    for (const key of ASSOCIATION_KEYS) {
+      const value = body[key];
+      if (value === undefined) continue;
+      if (typeof value !== 'string') {
+        return reply.status(400).send({ error: `${key} 必须是字符串` });
+      }
+      association[key] = value.trim();
     }
 
     try {
-      const result = await knowledgeService.updateDocMeta(body.path, {
-        versionId: body.versionId,
-        requirementId: body.requirementId,
-        projectId: body.projectId,
-        stage: body.stage,
-      });
+      const result = await knowledgeService.updateDocMeta(relPath, association);
       return { ok: true, path: result.path };
-    } catch (err: any) {
-      if (err.message.includes('路径越界')) {
-        return reply.status(403).send({ error: err.message });
+    } catch (err) {
+      if (errorText(err).includes('路径越界')) {
+        return reply.status(403).send({ error: errorText(err) });
       }
-      if (err.message === '文件不存在') {
-        return reply.status(404).send({ error: err.message });
+      if (errorText(err) === '文件不存在') {
+        return reply.status(404).send({ error: errorText(err) });
       }
-      return reply.status(400).send({ error: `更新关联失败: ${err.message}` });
+      return reply.status(400).send({ error: `更新关联失败: ${errorText(err)}` });
     }
   });
 }

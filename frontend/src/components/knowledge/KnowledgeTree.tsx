@@ -206,10 +206,10 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     filterFavorites ||
     filterRecent;
 
-  // 搜索/标签/收藏/近 3 天筛选在所有视图下共用
+  // 搜索/标签/收藏/近 3 天筛选在所有视图下共用;计数也基于当前筛选结果,与列表一致
   const displayDocs = getFilteredDocs();
   const groups = viewMode === 'category' ? [] : groupDocsByView(displayDocs, viewMode, worklogIndex);
-  const linkStats = viewMode === 'category' ? null : countDocsByLinkState(manifest.flatDocs, viewMode);
+  const linkStats = countDocsByLinkState(displayDocs, viewMode);
 
   const toggleDir = (key: string) => {
     setCollapsed((prev) => {
@@ -493,20 +493,17 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-1">
+          {/* 关联统计:所有视图共用,口径=当前筛选结果 */}
+          <div className="text-muted-foreground px-1 pb-1 text-xs">
+            已关联 {linkStats.linked} / 未关联 {linkStats.unlinked}
+          </div>
           {viewMode !== 'category' ? (
             displayDocs.length === 0 ? (
               <div className="text-muted-foreground p-2 text-xs">
                 {hasFilter ? '无匹配文档' : '暂无关联文档'}
               </div>
             ) : (
-              <>
-                {linkStats && (
-                  <div className="text-muted-foreground px-1 pb-1 text-xs">
-                    已关联 {linkStats.linked} / 未关联 {linkStats.unlinked}
-                  </div>
-                )}
-                {groups.map((group) => renderGroup(group, 0))}
-              </>
+              groups.map((group) => renderGroup(group, 0))
             )
           ) : hasFilter ? (
             displayDocs.length === 0 ? (
