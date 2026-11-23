@@ -72,10 +72,13 @@ function entriesSortNewestFirst(entries: VisibleEntry[]): void {
 /**
  * 需求范围外改动:该需求下条目实际归属的项目(entry.project)中,不在需求计划项目
  * (requirement.projects)里的部分。去重 + 稳定排序,供右栏弱提示展示。
+ * 需求未声明计划项目时无可比对的基准,返回空(不把全部实际项目都标成范围外,避免告警噪音)。
  * 只做提示,不回写需求范围(实际跨项目改动是事实,不自动扩大计划范围)。
  */
 export function getOutsideProjects(requirement: WorklogRequirement): string[] {
-  const planned = new Set(requirement.projects ?? []);
+  const plannedProjects = requirement.projects ?? [];
+  if (plannedProjects.length === 0) return [];
+  const planned = new Set(plannedProjects);
   const outside = new Set<string>();
   for (const entry of requirement.entries) {
     const project = entry.project?.trim();

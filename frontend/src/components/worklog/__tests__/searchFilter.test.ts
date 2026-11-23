@@ -184,6 +184,8 @@ describe('filterEntries', () => {
     // 任一条件不匹配即空
     expect(filterEntries(combo, { versionId: 'v_1' }, '', ['dev'], '不存在的关联', 'P1').entries)
       .toHaveLength(0);
+    // 仅项目筛选(无树选择/无关键字/无关联)不加载全部,返回空(产品取舍)
+    expect(filterEntries(combo, {}, '', [], undefined, 'P1').entries).toHaveLength(0);
   });
 });
 
@@ -209,13 +211,13 @@ describe('getOutsideProjects', () => {
         entry({ id: 'e4', project: 'C' }),
       ],
     })).toEqual(['B', 'C']);
-    // 需求未声明计划项目时,所有条目项目都算范围外
+    // 需求未声明计划项目时无基准可比,返回空(不把全部实际项目误报为范围外)
     expect(getOutsideProjects({
       id: 'r_2', title: 'R2', createdAt: 1,
       entries: [
         entry({ id: 'e1', project: 'B' }),
         entry({ id: 'e2', project: 'A' }),
       ],
-    })).toEqual(['A', 'B']);
+    })).toEqual([]);
   });
 });

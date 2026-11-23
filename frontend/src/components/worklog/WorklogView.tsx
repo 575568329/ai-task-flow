@@ -267,7 +267,9 @@ export function WorklogView() {
       ? '数据量较大,默认不加载全部。请在左侧选择版本或需求查看记录。'
       : relatedFilter
         ? `没有关联「${relatedFilter}」的记录。`
-        : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
+        : isSearching || stageFilter.length > 0 || projectFilter
+          ? '当前筛选条件下没有匹配的记录。'
+          : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
 
   const titleText = isSearching
     ? `搜索「${keyword.trim()}」`

@@ -83,6 +83,7 @@ const tree: WorklogData = {
   projects: [
     { id: 'p_1', name: '项目A', createdAt: 1 },
     { id: 'p_2', name: '项目B', createdAt: 2 },
+    { id: 'p_3', name: '项目C', createdAt: 3 },
   ],
   versions: [{
     id: 'v_1', name: 'V1', createdAt: 1,
@@ -133,6 +134,18 @@ describe('WorklogView 筛选与提示', () => {
     const items = screen.getAllByTestId('entry-item');
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent('条目B');
+  });
+
+  it('shows filter-empty hint instead of the "no records" hint when filters yield nothing', async () => {
+    render(<WorklogView />);
+    await screen.findByTestId('tree');
+    fireEvent.click(screen.getByText('stub-select-requirement'));
+    await waitFor(() => expect(screen.getAllByTestId('entry-item')).toHaveLength(2));
+
+    fireEvent.change(screen.getByLabelText('按项目筛选'), { target: { value: '项目C' } });
+
+    expect(await screen.findByText('当前筛选条件下没有匹配的记录。')).toBeInTheDocument();
+    expect(screen.queryByText(/还没有记录/)).toBeNull();
   });
 
   it('surfaces record warnings via info toast', async () => {
