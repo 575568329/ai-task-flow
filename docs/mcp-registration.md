@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `244cc7a`(fix(ui): 追加/改信息预填映射后的主项目名，避免改名后清空 projectId) |
-| 构建时间 | 2026-11-23 12:14 |
+| dist 构建来源 commit | `d012297`(fix(migration): 项目补 id 每次启动自愈 + 标记原子写) |
+| 构建时间 | 2026-11-23 12:44 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
