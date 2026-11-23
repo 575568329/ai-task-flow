@@ -5,16 +5,10 @@ import type {
   KnowledgeDocResponse,
   KnowledgeCreateRequest,
   KnowledgeDocMetaUpdateRequest,
+  KnowledgeImportReport,
 } from '@ai-task-flow/shared';
 
 const BASE = '/api';
-
-/** 导入报告(与后端 ImportReport 对齐) */
-export interface KnowledgeImportReport {
-  copied: number;
-  conflicts: Array<{ from: string; to: string }>;
-  errors: Array<{ path: string; message: string }>;
-}
 
 /** 一次性导入旧知识库(源目录固定由服务端解析仓库内 knowledge-base,前端不可指定路径) */
 export async function importKnowledge(): Promise<KnowledgeImportReport> {

@@ -106,3 +106,22 @@ export interface KnowledgeDocWriteResponse {
   /** 相对 knowledge-base/ 的 posix 路径 */
   path: string;
 }
+
+/** 一次性导入单条冲突:源相对路径 → 目标落盘相对路径(均为 posix 风格) */
+export interface KnowledgeImportConflict {
+  from: string;
+  to: string;
+}
+
+/** 一次性导入单条失败:出错文件相对路径 + 错误信息(不中断整体导入) */
+export interface KnowledgeImportError {
+  path: string;
+  message: string;
+}
+
+/** POST /api/knowledge/import 响应(前后端共用单一来源) */
+export interface KnowledgeImportReport {
+  copied: number;
+  conflicts: KnowledgeImportConflict[];
+  errors: KnowledgeImportError[];
+}

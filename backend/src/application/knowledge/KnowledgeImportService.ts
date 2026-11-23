@@ -6,29 +6,17 @@ import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { KnowledgeImportReport } from '@ai-task-flow/shared';
 
 /** 冲突文件改名后缀 */
 const IMPORTED_SUFFIX = '-imported';
 /** 无关目录名黑名单(隐藏目录已由 '.' 前缀统一跳过) */
 const SKIP_DIR_NAMES = new Set(['node_modules']);
 
-/** 单条冲突:源相对路径 → 目标落盘相对路径(均为 posix 风格) */
-export interface ImportConflict {
-  from: string;
-  to: string;
-}
-
-/** 单条失败:出错文件相对路径 + 错误信息(不中断整体导入) */
-export interface ImportError {
-  path: string;
-  message: string;
-}
-
-export interface ImportReport {
-  copied: number;
-  conflicts: ImportConflict[];
-  errors: ImportError[];
-}
+/** 导入报告类型统一由 shared 定义(前端直接复用,避免两处漂移) */
+export type ImportReport = KnowledgeImportReport;
+export type ImportConflict = KnowledgeImportReport['conflicts'][number];
+export type ImportError = KnowledgeImportReport['errors'][number];
 
 export interface ImportOptions {
   /** 源目录;缺省为仓库内 knowledge-base */

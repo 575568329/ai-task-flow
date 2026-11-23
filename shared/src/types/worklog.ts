@@ -187,16 +187,6 @@ export interface WorklogQueryResultEntry {
   pathUnmatched?: boolean;
 }
 
-/** list_projects 结果:项目/版本树 + 每版本条目数与首末日期 */
-export interface WorklogVersionSummary {
-  id: string;
-  name: string;
-  requirementCount: number;
-  entryCount: number;
-  firstDate?: string;
-  lastDate?: string;
-}
-
 /** 需求摘要(列表视图用,不含条目全文) */
 export interface WorklogRequirementSummary {
   id: string;
@@ -204,11 +194,6 @@ export interface WorklogRequirementSummary {
   title: string;
   projects?: string[];
   entryCount: number;
-}
-
-export interface WorklogProjectSummary {
-  name: string;
-  versions: WorklogVersionSummary[];
 }
 
 /** update_work / PUT /api/worklog/entries/:id 入参(partial:只改传入字段) */
@@ -221,12 +206,4 @@ export interface WorklogUpdateRequest {
   diff?: string;
   date?: string;
   relatedProjects?: string[];
-}
-
-/** rename 入参(版本/项目通用) */
-export interface WorklogRenameRequest {
-  project: string;
-  /** 重命名版本时必填 */
-  version?: string;
-  newName: string;
 }
