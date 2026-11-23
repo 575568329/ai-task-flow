@@ -3,7 +3,7 @@
 import { isWorkStage, type WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { STAGE_SCHEMA } from '../stageSchema.js';
-import { CATALOG, ok, fail } from './_shared.js';
+import { CATALOG, ok, fail, normalizeFiles, normalizeOptionalString, normalizeStringArray } from './_shared.js';
 
 export const toolDef = {
   name: CATALOG.record_work.name,
@@ -61,23 +61,33 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       ));
     }
 
+    // 类型不对的可选字段(字符串/数组)降级为忽略 + 提示,不让坏结构进服务层抛 500
+    const notices: string[] = [];
+    const project = normalizeOptionalString(args.project, 'project', notices);
+    const tags = normalizeStringArray(args.tags, 'tags', notices);
+    const relatedProjects = normalizeStringArray(args.relatedProjects, 'relatedProjects', notices);
+    const files = normalizeFiles(args.files, notices);
+
     const result = await deps.worklogService.record({
       versionId,
       requirementId,
       title: String(args.title ?? ''),
       detail: String(args.detail ?? ''),
-      project: args.project !== undefined && args.project !== null ? String(args.project) : undefined,
-      files: args.files as never,
+      project,
+      files: files as never,
       diff: args.diff ? String(args.diff) : undefined,
-      tags: args.tags as string[] | undefined,
-      relatedProjects: Array.isArray(args.relatedProjects) ? (args.relatedProjects as string[]) : undefined,
+      tags,
+      relatedProjects,
       // cwd 不暴露给 AI:记录端进程所在目录,用于服务端按项目路径归属记录
       sourcePath: process.cwd(),
       stage: args.stage as WorkStage,
     });
 
     // warnings:关联项目拼错被忽略、路径未归属等,必须回传给 AI 让它可纠正
-    const warnings = (result.warnings ?? []).map((w) => `⚠ ${w}`);
+    const warnings = [
+      ...notices.map((n) => `⚠ ${n}`),
+      ...(result.warnings ?? []).map((w) => `⚠ ${w}`),
+    ];
     return ok([
       '✅ 已记录',
       '',

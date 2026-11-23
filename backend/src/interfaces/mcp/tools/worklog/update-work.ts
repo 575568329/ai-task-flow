@@ -2,7 +2,7 @@
 import type { WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { STAGE_SCHEMA } from '../stageSchema.js';
-import { CATALOG, ok, fail } from './_shared.js';
+import { CATALOG, ok, fail, normalizeFiles, normalizeStringArray } from './_shared.js';
 
 export const toolDef = {
   name: CATALOG.update_work.name,
@@ -31,18 +31,27 @@ export const toolDef = {
 export async function handle(args: Record<string, unknown> | undefined, deps: ToolDeps) {
   args ??= {};
   try {
+    // 类型不对的可选字段(字符串/数组)降级为忽略 + 提示,不让坏结构进服务层抛 500
+    const notices: string[] = [];
+    const tags = normalizeStringArray(args.tags, 'tags', notices);
+    const relatedProjects = normalizeStringArray(args.relatedProjects, 'relatedProjects', notices);
+    const files = normalizeFiles(args.files, notices);
+
     const result = await deps.worklogService.update(String(args.entryId ?? ''), {
       title: args.title !== undefined ? String(args.title) : undefined,
       detail: args.detail !== undefined ? String(args.detail) : undefined,
-      tags: args.tags as string[] | undefined,
+      tags,
       stage: args.stage as WorkStage | undefined,
-      files: args.files as never,
+      files: files as never,
       diff: args.diff !== undefined ? String(args.diff) : undefined,
       date: args.date !== undefined ? String(args.date) : undefined,
-      relatedProjects: Array.isArray(args.relatedProjects) ? (args.relatedProjects as string[]) : undefined,
+      relatedProjects,
     });
-    // 关联项目拼错被忽略时回传警告,让 AI 可纠正
-    const warnings = (result.warnings ?? []).map((w) => `⚠ ${w}`);
+    // 类型纠正提示 + 关联项目拼错被忽略等警告,回传让 AI 可纠正
+    const warnings = [
+      ...notices.map((n) => `⚠ ${n}`),
+      ...(result.warnings ?? []).map((w) => `⚠ ${w}`),
+    ];
     return ok([
       '✅ 已更新(仅改动传入字段)',
       '',

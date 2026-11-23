@@ -416,6 +416,76 @@ describe('worklogRoutes', () => {
     expect(unbind.statusCode).toBe(404);
   });
 
+  it('entry record/update should reject wrong field types with 400 (not 500)', async () => {
+    const versionId = await createVersion('v1');
+    const requirementId = await createRequirement(versionId, 'R');
+
+    // POST:project/sourcePath 非字符串、tags/relatedProjects 非字符串数组
+    expect((await recordEntry(versionId, requirementId, { project: 123 })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, requirementId, { sourcePath: 123 })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, requirementId, { tags: 'feat' })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, requirementId, { tags: ['feat', 1] })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, requirementId, { relatedProjects: 'x' })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, requirementId, { diff: 123 })).statusCode).toBe(400);
+
+    // 以上 400 均不得落库
+    const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
+    expect(tree.json().versions[0].requirements[0].entries).toHaveLength(0);
+
+    const created = await recordEntry(versionId, requirementId, { title: 'ok', detail: 'd' });
+    const { entryId } = JSON.parse(created.body);
+
+    // PUT:title/tags/relatedProjects/diff 类型不对同样 400
+    const putCases: Array<Record<string, unknown>> = [
+      { title: 123 },
+      { tags: 'feat' },
+      { tags: ['feat', 1] },
+      { relatedProjects: 'x' },
+      { diff: 123 },
+    ];
+    for (const payload of putCases) {
+      const res = await app.inject({ method: 'PUT', url: `/api/worklog/entries/${entryId}`, payload });
+      expect(res.statusCode, JSON.stringify(payload)).toBe(400);
+    }
+
+    // 数组 body 不再静默无操作
+    const arrayBody = await app.inject({
+      method: 'PUT', url: `/api/worklog/entries/${entryId}`, payload: [1, 2],
+    });
+    expect(arrayBody.statusCode).toBe(400);
+
+    const after = await app.inject({ method: 'GET', url: '/api/worklog' });
+    const entry = after.json().versions[0].requirements[0].entries[0];
+    expect(entry.title).toBe('ok'); // 400 均未改动条目
+    expect(entry.tags).toBeUndefined();
+  });
+
+  it('unknown project errors should list existing projects as candidates', async () => {
+    await createProject('甲项目');
+    await createProject('乙项目');
+    const versionId = await createVersion('v1');
+    const requirementId = await createRequirement(versionId, 'R');
+
+    // record 显式项目不存在 → 400 并列出候选(与版本/需求候选风格一致)
+    const rec = await recordEntry(versionId, requirementId, { project: '拼错的' });
+    expect(rec.statusCode).toBe(400);
+    const recError = JSON.parse(rec.body).error as string;
+    expect(recError).toContain('项目不存在:拼错的');
+    expect(recError).toContain('现有项目');
+    expect(recError).toContain('甲项目(');
+    expect(recError).toContain('乙项目(');
+
+    // createRequirement 关联项目不存在 → 同样列出候选
+    const req = await app.inject({
+      method: 'POST', url: '/api/worklog/requirements',
+      payload: { versionId, title: 'R2', projects: ['拼错的'] },
+    });
+    expect(req.statusCode).toBe(400);
+    const reqError = JSON.parse(req.body).error as string;
+    expect(reqError).toContain('现有项目');
+    expect(reqError).toContain('甲项目(');
+  });
+
   it('project rename/delete endpoints should keep working', async () => {
     await createProject('p');
 

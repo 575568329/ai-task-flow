@@ -36,3 +36,47 @@ export function fail(err: unknown): McpTextResult {
   const message = err instanceof Error ? err.message : String(err);
   return { content: [{ type: 'text', text: `❌ ${message}` }], isError: true };
 }
+
+/** MCP 入参归一:字符串数组。非数组整项忽略、元素类型不对丢弃,并写一条提示。
+ *  AI 客户端可能传 ["a", 1] 或 "a":直接透传会让服务层 .map / for-of 出错(500),
+ *  这里降级为「忽略 + 提示」而不是让整次记录失败。 */
+export function normalizeStringArray(
+  value: unknown,
+  field: string,
+  notices: string[],
+): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    notices.push(`${field} 不是字符串数组,已忽略`);
+    return undefined;
+  }
+  const strings = value.filter((item): item is string => typeof item === 'string');
+  if (strings.length !== value.length) {
+    notices.push(`${field} 中有 ${value.length - strings.length} 个非字符串项,已忽略`);
+  }
+  return strings;
+}
+
+/** MCP 入参归一:可选字符串。非字符串忽略并提示 */
+export function normalizeOptionalString(
+  value: unknown,
+  field: string,
+  notices: string[],
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') {
+    notices.push(`${field} 不是字符串,已忽略`);
+    return undefined;
+  }
+  return value;
+}
+
+/** MCP 入参归一:files 只校验外层是数组(元素结构由服务层 validateFiles 校验并报 400) */
+export function normalizeFiles(value: unknown, notices: string[]): unknown[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    notices.push('files 不是数组,已忽略');
+    return undefined;
+  }
+  return value;
+}

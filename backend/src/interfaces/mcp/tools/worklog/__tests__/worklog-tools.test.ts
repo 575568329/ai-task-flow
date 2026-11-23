@@ -289,4 +289,64 @@ describe('worklog MCP tools', () => {
     expect(result.content[0].text).toContain('V8.0.8');
     expect(result.content[0].text).toContain('请让用户在页面创建并复制 id');
   });
+
+  it('record_work should ignore non-array tags/relatedProjects/files with a notice', async () => {
+    const { versionId, requirementId } = await seedVersionRequirement();
+    const result = await HANDLERS.record_work({
+      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+      tags: 'feat', relatedProjects: 'A', files: 'x',
+    }, deps);
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain('tags 不是字符串数组,已忽略');
+    expect(text).toContain('relatedProjects 不是字符串数组,已忽略');
+    expect(text).toContain('files 不是数组,已忽略');
+
+    const entry = (await deps.worklogService.getTree()).versions[0].requirements[0].entries[0];
+    expect(entry.tags).toBeUndefined();
+    expect(entry.relatedProjects).toBeUndefined();
+    expect(entry.files).toBeUndefined();
+  });
+
+  it('record_work should drop non-string array items but keep valid ones', async () => {
+    await deps.worklogService.createProject({ name: 'A' });
+    const { versionId, requirementId } = await seedVersionRequirement();
+    const result = await HANDLERS.record_work({
+      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+      tags: ['feat', 1], relatedProjects: ['A', 2],
+    }, deps);
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('tags 中有 1 个非字符串项,已忽略');
+    expect(result.content[0].text).toContain('relatedProjects 中有 1 个非字符串项,已忽略');
+
+    const entry = (await deps.worklogService.getTree()).versions[0].requirements[0].entries[0];
+    expect(entry.tags).toEqual(['feat']);
+    expect(entry.relatedProjects).toEqual(['A']);
+  });
+
+  it('update_work should ignore non-array tags/relatedProjects/files with a notice', async () => {
+    const { versionId, requirementId } = await seedVersionRequirement();
+    const rec = await deps.worklogService.record({
+      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+    });
+    const result = await HANDLERS.update_work({
+      entryId: rec.entryId, tags: 'fix', relatedProjects: 'A', files: 'x',
+    }, deps);
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain('tags 不是字符串数组,已忽略');
+    expect(text).toContain('relatedProjects 不是字符串数组,已忽略');
+    expect(text).toContain('files 不是数组,已忽略');
+  });
+
+  it('record_work should list existing projects when explicit project is unknown', async () => {
+    await deps.worklogService.createProject({ name: '资源加工平台' });
+    const { versionId, requirementId } = await seedVersionRequirement();
+    const result = await HANDLERS.record_work({
+      versionId, requirementId, project: '拼错的', title: 't', detail: 'd', stage: 'dev',
+    }, deps);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('现有项目');
+    expect(result.content[0].text).toContain('资源加工平台(');
+  });
 });

@@ -40,6 +40,35 @@ function readOptionalString(body: unknown, field: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** 可选字符串字段(严格):缺省 → undefined;存在但非字符串 → null(调用方统一 400) */
+function readOptionalStringStrict(body: unknown, field: string): string | undefined | null {
+  if (!isPlainObject(body)) return undefined;
+  const value = body[field];
+  if (value === undefined || value === null) return undefined;
+  return typeof value === 'string' ? value : null;
+}
+
+/** 可选字符串数组(严格):缺省 → undefined;存在但非「全字符串数组」→ null */
+function readOptionalStringArrayStrict(body: unknown, field: string): string[] | undefined | null {
+  if (!isPlainObject(body)) return undefined;
+  const value = body[field];
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) return null;
+  return value as string[];
+}
+
+/** 条目 body 的字段类型守卫:返回首个非法字段的提示;全部合法返回 undefined。
+ *  服务层对这些字段直接 .trim()/.map(),类型不对会抛 TypeError → 500,必须在入口挡成 400。 */
+function invalidEntryField(body: unknown): string | undefined {
+  for (const field of ['title', 'detail', 'project', 'sourcePath', 'diff', 'date'] as const) {
+    if (readOptionalStringStrict(body, field) === null) return `${field} 必须为字符串`;
+  }
+  for (const field of ['tags', 'relatedProjects'] as const) {
+    if (readOptionalStringArrayStrict(body, field) === null) return `${field} 必须为字符串数组`;
+  }
+  return undefined;
+}
+
 export async function registerWorklogRoutes(
   fastify: FastifyInstance,
   worklogService: WorklogService,
@@ -203,6 +232,11 @@ export async function registerWorklogRoutes(
       if (rawDetail !== undefined && typeof rawDetail !== 'string') {
         return reply.status(400).send({ error: 'detail 必须为字符串' });
       }
+      // project/sourcePath/diff 非字符串、tags/relatedProjects 非字符串数组 → 400
+      const invalid = invalidEntryField(request.body);
+      if (invalid) {
+        return reply.status(400).send({ error: invalid });
+      }
       try {
         // 无 body 时传空对象,让服务层走必填校验 → 400,而不是读 undefined.title 抛 TypeError → 500
         const result = await worklogService.record(
@@ -221,6 +255,14 @@ export async function registerWorklogRoutes(
   fastify.put<{ Params: { id: string }; Body: WorklogUpdateRequest }>(
     '/api/worklog/entries/:id',
     async (request, reply) => {
+      // 数组/标量 body 会让服务层逐字段读取全部落空(静默无操作),直接 400 更符合预期
+      if (request.body != null && !isPlainObject(request.body)) {
+        return reply.status(400).send({ error: '请求体必须为 JSON 对象' });
+      }
+      const invalid = invalidEntryField(request.body);
+      if (invalid) {
+        return reply.status(400).send({ error: invalid });
+      }
       try {
         const result = await worklogService.update(request.params.id, request.body ?? {});
         return result;

@@ -43,16 +43,18 @@ const NAME_MAX_LEN = 60;
 /** 标题约束(条目标题/需求标题):允许 "/" 等业务字符,只限非空与长度 */
 const TITLE_MAX_LEN = 200;
 
-function validateName(name: string, label: string): string {
-  const trimmed = name?.trim() ?? '';
+// 入参可能来自未做类型校验的调用方(MCP/脚本直接调 Service):非字符串一律按「空」处理,
+// 由校验抛出 400 业务错,而不是在 .trim() 上抛 TypeError → 500。
+function validateName(value: unknown, label: string): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
   if (!trimmed) throw new WorklogValidationError(`${label}不能为空`);
   if (trimmed.includes('/')) throw new WorklogValidationError(`${label}不能包含 "/"`);
   if (trimmed.length > NAME_MAX_LEN) throw new WorklogValidationError(`${label}长度不能超过 ${NAME_MAX_LEN}`);
   return trimmed;
 }
 
-function validateTitle(title: string, label: string): string {
-  const trimmed = title?.trim() ?? '';
+function validateTitle(value: unknown, label: string): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
   if (!trimmed) throw new WorklogValidationError(`${label}不能为空`);
   if (trimmed.length > TITLE_MAX_LEN) throw new WorklogValidationError(`${label}长度不能超过 ${TITLE_MAX_LEN}`);
   return trimmed;
@@ -70,6 +72,10 @@ function versionCandidates(data: WorklogData): Array<{ id: string; label: string
 
 function requirementCandidates(version: WorklogVersion): Array<{ id: string; label: string }> {
   return version.requirements.map((r) => ({ id: r.id, label: r.title }));
+}
+
+function projectCandidates(data: WorklogData): Array<{ id: string; label: string }> {
+  return data.projects.map((p) => ({ id: p.id, label: p.name }));
 }
 
 function validateStage(value: unknown): WorkStage | undefined {
@@ -121,11 +127,15 @@ function resolveRelated(
   data: WorklogData,
   names: string[] | undefined,
 ): { ids: string[]; labels: string[]; ignored: string[] } {
+  // 运行时守卫:字符串会被 for-of 逐字符迭代,污染关联数据;非数组直接拒绝
+  if (names !== undefined && !Array.isArray(names)) {
+    throw new WorklogValidationError('relatedProjects 必须为字符串数组');
+  }
   const ids: string[] = [];
   const labels: string[] = [];
   const ignored: string[] = [];
   for (const name of names ?? []) {
-    const trimmed = name?.trim() ?? '';
+    const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed) continue;
     const project = data.projects.find((p) => p.name === trimmed);
     if (!project) {
@@ -268,7 +278,7 @@ export class WorklogService {
   async createRequirement(input: WorklogRequirementCreateRequest): Promise<{ id: string }> {
     const title = validateTitle(input.title, '需求名');
     return this.repo.mutate((data) => {
-      const versionId = input.versionId?.trim() ?? '';
+      const versionId = typeof input.versionId === 'string' ? input.versionId.trim() : '';
       const version = findVersion(data, versionId);
       if (!version) {
         throw new WorklogNotFoundError(
@@ -276,13 +286,21 @@ export class WorklogService {
         );
       }
       assertRequirementTitleFree(version, title);
+      // 运行时守卫:字符串会被逐字符迭代成项目名(路由已挡,服务层再兜底)
+      if (input.projects !== undefined && !Array.isArray(input.projects)) {
+        throw new WorklogValidationError('projects 必须为字符串数组');
+      }
       const projects: string[] = [];
       const projectIds: string[] = [];
       for (const raw of input.projects ?? []) {
-        const name = raw?.trim() ?? '';
+        const name = typeof raw === 'string' ? raw.trim() : '';
         if (!name) continue;
         const project = data.projects.find((p) => p.name === name);
-        if (!project) throw new WorklogValidationError(`项目不存在:${name}`);
+        if (!project) {
+          throw new WorklogValidationError(
+            `项目不存在:${name}；现有项目：${candidateText(projectCandidates(data))}`,
+          );
+        }
         // 迁移前旧项目可能缺 id:没有稳定身份就不写入引用(避免 projectIds 出现 undefined)
         if (!project.id) continue;
         // 去重:同一项目传两次只记一次(保持 projects/projectIds 平行)
@@ -411,8 +429,8 @@ export class WorklogService {
     const stage = validateStage(input.stage);
 
     return this.repo.mutate(async (data) => {
-      const versionId = input.versionId?.trim() ?? '';
-      const requirementId = input.requirementId?.trim() ?? '';
+      const versionId = typeof input.versionId === 'string' ? input.versionId.trim() : '';
+      const requirementId = typeof input.requirementId === 'string' ? input.requirementId.trim() : '';
       const version = findVersion(data, versionId);
       if (!version) {
         throw new WorklogNotFoundError(
@@ -428,9 +446,8 @@ export class WorklogService {
 
       // 路径归属:realpath 归一化后按「最长前缀」找主项目;realpath 失败降级 path.resolve
       // 无 id 的旧项目没有稳定身份,不能作为归属目标(否则 undefined 会被当成 projectId)
-      const normalizedSource = input.sourcePath?.trim()
-        ? await resolveMatchPath(input.sourcePath.trim())
-        : undefined;
+      const sourcePath = typeof input.sourcePath === 'string' ? input.sourcePath.trim() : '';
+      const normalizedSource = sourcePath ? await resolveMatchPath(sourcePath) : undefined;
       let ownerProject: WorklogProject | undefined;
       if (normalizedSource) {
         const refs = data.projects
@@ -443,10 +460,14 @@ export class WorklogService {
       // 显式项目名必须已存在:项目字典不接受 AI 临时命名(防止拼错产生幽灵项目)
       let explicitProject: WorklogProject | undefined;
       if (input.project != null) {
-        const name = input.project.trim();
+        const name = typeof input.project === 'string' ? input.project.trim() : '';
         if (!name) throw new WorklogValidationError('项目名不能为空');
         explicitProject = data.projects.find((p) => p.name === name);
-        if (!explicitProject) throw new WorklogValidationError(`项目不存在:${name}`);
+        if (!explicitProject) {
+          throw new WorklogValidationError(
+            `项目不存在:${name}；现有项目：${candidateText(projectCandidates(data))}`,
+          );
+        }
       }
       // 命中归属项目则以它为准(忽略传入的名字)
       const effective = ownerProject ?? explicitProject;
@@ -466,8 +487,15 @@ export class WorklogService {
         entry.projectId = effective.id;
       }
       if (input.files != null) entry.files = validateFiles(input.files);
-      if (input.diff) entry.diff = input.diff;
-      if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
+      if (typeof input.diff === 'string' && input.diff) entry.diff = input.diff;
+      // tags 运行时守卫:字符串也有 length,但 .map 不存在(会 TypeError → 500)
+      if (input.tags !== undefined) {
+        if (!Array.isArray(input.tags) || input.tags.some((t) => typeof t !== 'string')) {
+          throw new WorklogValidationError('tags 必须为字符串数组');
+        }
+        const tags = input.tags.map((t) => t.trim()).filter(Boolean);
+        if (tags.length) entry.tags = tags;
+      }
       // 关联项目:名称 → 稳定 id + 名称快照;拼错的名字不阻断记录,只告警
       const related = resolveRelated(data, input.relatedProjects);
       if (related.ids.length) {
@@ -476,7 +504,7 @@ export class WorklogService {
       }
       // 留痕用户原始写法(不写归一化值),便于展示与后续重新归属
       if (normalizedSource) {
-        entry.sourcePath = input.sourcePath!.trim();
+        entry.sourcePath = sourcePath;
         if (!ownerProject) entry.pathUnmatched = true;
       }
       requirement.entries.push(entry);
@@ -578,10 +606,19 @@ export class WorklogService {
 
       if (patch.title !== undefined) entry.title = validateTitle(patch.title, '标题');
       if (patch.detail !== undefined) entry.detail = String(patch.detail);
-      if (patch.tags !== undefined) entry.tags = patch.tags.map((t) => t.trim()).filter(Boolean);
+      // tags 运行时守卫:非数组会在 .map 上抛 TypeError → 500
+      if (patch.tags !== undefined) {
+        if (!Array.isArray(patch.tags) || patch.tags.some((t) => typeof t !== 'string')) {
+          throw new WorklogValidationError('tags 必须为字符串数组');
+        }
+        entry.tags = patch.tags.map((t) => t.trim()).filter(Boolean);
+      }
       if (patch.stage !== undefined) entry.stage = validateStage(patch.stage);
       if (patch.files !== undefined) entry.files = validateFiles(patch.files);
-      if (patch.diff !== undefined) entry.diff = patch.diff;
+      if (patch.diff !== undefined) {
+        if (typeof patch.diff !== 'string') throw new WorklogValidationError('diff 必须为字符串');
+        entry.diff = patch.diff;
+      }
       if (patch.date !== undefined) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
           throw new WorklogValidationError('date 必须为 YYYY-MM-DD 格式');
