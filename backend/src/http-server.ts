@@ -15,6 +15,7 @@ import { JsonWorklogRepository } from './infrastructure/persistence/JsonWorklogR
 import { WorklogService } from './application/worklog/WorklogService.js';
 import { JsonConclusionRepository } from './infrastructure/persistence/JsonConclusionRepository.js';
 import { ConclusionService } from './application/conclusion/ConclusionService.js';
+import { runProjectIdMigration } from './application/migration/ProjectIdMigration.js';
 import {
   knowledgeDirPath,
   worklogFilePath,
@@ -53,9 +54,8 @@ export interface StartAppOptions {
  */
 export async function startApp(options: StartAppOptions = {}) {
   // 先锁定数据根目录(优先级:显式参数 > 环境变量 > 默认 ~/.ai-task-flow),
-  // 后续所有持久化模块都从 config/dataDir 读取同一份路径。
+  // 后续所有持久化模块都从 config/dataDir 读取同一份路径;迁移直接用此变量。
   const dataDir = resolveDataDir(options.dataDir);
-  void dataDir; // dataDir 已被 resolveDataDir 模块级缓存,后续各仓储自行读取
 
   const llmConfigRepository = new JsonLlmConfigRepository();
   const llmConfigService = new LlmConfigService(llmConfigRepository);
@@ -70,17 +70,39 @@ export async function startApp(options: StartAppOptions = {}) {
   const mindmapService = new MindmapService(mindmapRepository);
 
   // 工作记录服务(项目→版本→功能点;写协议=进程内 mutex + 跨进程文件锁,见 JsonWorklogRepository)
-  const worklogService = new WorklogService(
-    new JsonWorklogRepository(worklogFilePath(options.dataDir), worklogBackupsDirPath(options.dataDir)),
+  // 仓储提为局部变量:迁移要直接复用同一实例,避免访问 Service 私有字段
+  const worklogRepository = new JsonWorklogRepository(
+    worklogFilePath(options.dataDir),
+    worklogBackupsDirPath(options.dataDir),
   );
+  const worklogService = new WorklogService(worklogRepository);
 
   // 结论卡服务(项目/版本/个人 + 逐版完整快照;HTTP 与 MCP 共享同一存储协议)
-  const conclusionService = new ConclusionService(
-    new JsonConclusionRepository(
-      conclusionFilePath(options.dataDir),
-      conclusionBackupsDirPath(options.dataDir),
-    ),
+  const conclusionRepository = new JsonConclusionRepository(
+    conclusionFilePath(options.dataDir),
+    conclusionBackupsDirPath(options.dataDir),
   );
+  const conclusionService = new ConclusionService(conclusionRepository);
+
+  // 一次性数据迁移:给缺 id 的旧项目补稳定身份,并把结论卡按项目名绑定到项目 id。
+  // 只有 HTTP 进程执行(MCP 进程不接入);迁移自身幂等 + 跨进程锁。
+  // 启动路径上失败一律降级跳过:迁移失败不应阻止后端启动,下次启动会重跑。
+  try {
+    const migration = await runProjectIdMigration({
+      dataDir,
+      worklogRepo: worklogRepository,
+      conclusionRepo: conclusionRepository,
+    });
+    if (!migration.skipped) {
+      console.log(
+        `[migration] 补项目 id ${migration.assignedIds} 个；绑定结论卡 ${migration.boundConclusions} 张；` +
+          `重名项目: ${migration.duplicateNames.join(', ') || '无'}；歧义跳过 ${migration.skippedAmbiguous} 张`,
+      );
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`[migration] 项目 id 迁移失败,已跳过(不影响启动): ${detail}`);
+  }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);
   // 默认仅监听本机回环:服务无鉴权,0.0.0.0 会让同网段任意主机可调全部接口。
