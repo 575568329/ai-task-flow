@@ -256,6 +256,8 @@ export class WorklogService {
           if (!entryId) {
             if (input.tags?.length && !entry.tags?.some((t) => input.tags!.includes(t))) continue;
             if (input.stage && entry.stage !== input.stage) continue;
+            // 按关联项目名称过滤(名称快照与请求方口径一致)
+            if (input.relatedProject && !entry.relatedProjects?.includes(input.relatedProject)) continue;
             if (input.dateFrom && entry.date < input.dateFrom) continue;
             if (input.dateTo && entry.date > input.dateTo) continue;
             if (keyword) {

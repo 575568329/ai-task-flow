@@ -492,6 +492,19 @@ describe('WorklogService', () => {
         .versions[0].entries.find((e) => e.id === r.entryId)!;
       expect(entry.relatedProjectIds).toBeUndefined();
     });
+    it('should filter by related project name, entryId still ignores filters', async () => {
+      await service.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+      await service.record({ project: 'C', version: 'V1', title: 'c', detail: 'd' });
+      const r = await service.record({
+        project: 'A', version: 'V1', title: 't', detail: 'd', relatedProjects: ['B'],
+      });
+
+      const hit = await service.query({ relatedProject: 'B' });
+      expect(hit.map((e) => e.id)).toEqual([r.entryId]);
+      expect(await service.query({ relatedProject: 'C' })).toHaveLength(0);
+      // entryId 精确查询保持「忽略其他过滤」语义
+      expect(await service.query({ entryId: r.entryId, relatedProject: 'C' })).toHaveLength(1);
+    });
   });
 
   // ---------------------------------------------------------------
