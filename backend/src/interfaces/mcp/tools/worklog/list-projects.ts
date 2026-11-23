@@ -13,7 +13,13 @@ export const toolDef = {
 
 /** 路径尾段(隐私红线:不得输出完整绝对路径),如 D:\xunfei\资源加工平台 → …xunfei\资源加工平台 */
 function pathTail(p?: string): string {
-  return p ? `…${p.split(/[\\/]/).slice(-2).join('\\')}` : '未绑定路径';
+  if (!p) return '未绑定路径';
+  const segments = p.split(/[\\/]+/).filter(Boolean);
+  // ≤2 段(如 D:\Study、/home/x)取末两段仍是完整绝对路径,必须进一步掩到只剩最后一段
+  if (segments.length <= 2) {
+    return `…${p.includes('\\') ? '\\' : '/'}${segments[segments.length - 1] ?? ''}`;
+  }
+  return `…${segments.slice(-2).join('\\')}`;
 }
 
 export async function handle(_args: Record<string, unknown> | undefined, deps: ToolDeps) {

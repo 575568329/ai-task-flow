@@ -148,6 +148,23 @@ describe('worklog MCP tools', () => {
     expect(text).toContain(idA);
     expect(text).toContain('…deep\\repo'); // 尾段(两级,反斜杠分隔)
     expect(text).not.toContain(deepPath);  // 隐私红线:不出完整绝对路径
+    expect(text).not.toContain(tmpDir);    // 防部分泄漏:连临时目录前缀也不得出现
     expect(text).toContain('未绑定路径');   // B 未绑定
+  });
+
+  it('list_projects should mask two-segment bindings down to the last segment', async () => {
+    await deps.worklogService.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+    const root = path.parse(process.cwd()).root; // Windows "D:\",POSIX "/"
+    const twoSegment = path.join(root, 'Study'); // Windows "D:\Study",POSIX "/Study"
+    await deps.worklogService.bindProjectPaths('A', [twoSegment]);
+
+    const text = (await HANDLERS.list_projects({}, deps)).content[0].text;
+    if (path.sep === '\\') {
+      expect(text).toContain('…\\Study');
+      expect(text).not.toContain(twoSegment); // 两段也不得原样输出完整绝对路径
+    } else {
+      // POSIX 下 /Study 本身就是完整路径,只能掩到 …/Study
+      expect(text).toContain('…/Study');
+    }
   });
 });
