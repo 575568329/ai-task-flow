@@ -15,6 +15,8 @@ export interface KnowledgeFileNode {
   tags?: string[];        // frontmatter 提取的 tags
   contentPreview?: string;// md 正文前 2000 字纯文本(供全文搜索)
   links?: string[];       // 出链:该文档引用的其他文档路径列表
+  /** md 的 frontmatter 元数据(含关联字段);无 frontmatter 时缺省 */
+  frontmatter?: KnowledgeFrontmatter;
 }
 
 /** 目录节点 */
@@ -83,6 +85,20 @@ export interface KnowledgeCreateRequest {
 /** PUT /api/knowledge/doc 请求体:覆盖更新已有文档 */
 export interface KnowledgeSaveRequest {
   content: string;
+}
+
+/** 文档的四项软关联(版本/需求/项目/阶段);空串或 undefined 表示清除 */
+export interface KnowledgeAssociation {
+  versionId?: string;
+  requirementId?: string;
+  projectId?: string;
+  stage?: string;
+}
+
+/** PUT /api/knowledge/doc/meta 请求体:替换关联字段(保留其他 frontmatter 键) */
+export interface KnowledgeDocMetaUpdateRequest extends KnowledgeAssociation {
+  /** 相对 knowledge-base/ 的 posix 路径 */
+  path: string;
 }
 
 /** POST/PUT /api/knowledge/doc 成功响应 */

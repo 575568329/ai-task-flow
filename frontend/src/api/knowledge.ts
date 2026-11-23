@@ -1,6 +1,11 @@
 // frontend/src/api/knowledge.ts
 // 知识库 API 封装
-import type { KnowledgeManifest, KnowledgeDocResponse, KnowledgeCreateRequest } from '@ai-task-flow/shared';
+import type {
+  KnowledgeManifest,
+  KnowledgeDocResponse,
+  KnowledgeCreateRequest,
+  KnowledgeDocMetaUpdateRequest,
+} from '@ai-task-flow/shared';
 
 const BASE = '/api';
 
@@ -73,6 +78,23 @@ export async function createDoc(input: KnowledgeCreateRequest): Promise<{ path: 
     throw new Error(data?.error || `创建失败 (${res.status})`);
   }
   return res.json();
+}
+
+/** 编辑文档四项关联(版本/需求/项目/阶段);空串=清除,其他 frontmatter 键保留 */
+export async function updateDocMeta(
+  input: KnowledgeDocMetaUpdateRequest,
+): Promise<{ path: string }> {
+  const res = await fetch(`${BASE}/knowledge/doc/meta`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `更新关联失败 (${res.status})`);
+  }
+  const data = await res.json();
+  return { path: data.path };
 }
 
 /** 覆盖更新已有文档(content 即完整 md 正文) */

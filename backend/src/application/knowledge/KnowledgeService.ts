@@ -9,6 +9,7 @@ import type {
   KnowledgeCreateRequest,
   KnowledgeDocWriteResponse,
   KnowledgeFrontmatter,
+  KnowledgeAssociation,
 } from '@ai-task-flow/shared';
 import { scanKnowledge } from '../../infrastructure/knowledge/KnowledgeScanner.js';
 import { safeResolve, toRelativePosix } from '../../infrastructure/utils/safePath.js';
@@ -25,6 +26,10 @@ const ILLEGAL_FILENAME_CHARS = /[\/\\:\*\?"<>\|]/g;
 const MAX_TITLE_LEN = 60;
 /** 标题清洗后为空时的兜底名 */
 const FALLBACK_TITLE = 'untitled';
+/** UTF-8 BOM(外部工具可能写入;解析前剥离,写回时不再保留) */
+const UTF8_BOM = '\uFEFF';
+/** 元数据编辑只替换这四项,其余 frontmatter 行原样保留 */
+const ASSOCIATION_LINE = /^(versionId|requirementId|projectId|stage)\s*:/;
 
 /** 生成 YYYYMMDDHHMMSS 本地时区时间戳(与 Scanner 展示一致) */
 function formatTimestamp(date: Date): string {
@@ -56,8 +61,32 @@ export class KnowledgeService {
       return this.manifestCache;
     }
 
-    this.manifestCache = await scanKnowledge(this.root);
-    return this.manifestCache;
+    const manifest = await scanKnowledge(this.root);
+    await this.fillFrontmatter(manifest);
+    this.manifestCache = manifest;
+    return manifest;
+  }
+
+  /**
+   * 给 flatDocs 补 frontmatter(版本/需求/项目/阶段/tags)。
+   * Scanner 已遍历过文件,这里再读一次 md 原文做纯字符串解析:
+   * 个人知识库量级(百篇内)可接受,换取 manifest 自带关联字段供前端多视图直接分组。
+   */
+  private async fillFrontmatter(manifest: KnowledgeManifest): Promise<void> {
+    await Promise.all(
+      manifest.flatDocs.map(async (doc) => {
+        if (doc.kind !== 'md') return;
+        try {
+          const raw = await fs.readFile(this.getRawPath(doc.path), 'utf-8');
+          const parsed = parseFrontmatter(raw);
+          if (parsed.hasFrontmatter) {
+            doc.frontmatter = parsed.data;
+          }
+        } catch {
+          // 单个文件读取失败不影响整份 manifest
+        }
+      }),
+    );
   }
 
   /**
@@ -205,6 +234,75 @@ export class KnowledgeService {
     await this.refreshManifest();
 
     return { path: toRelativePosix(this.root, abs) };
+  }
+
+  /**
+   * 编辑文档的四项关联(版本/需求/项目/阶段)。
+   * - 传入非空值 → 写入/覆盖;
+   * - 传入空串或 undefined → 清除;
+   * - 其余 frontmatter 键(title/date/tags 及任何外部键)原样保留。
+   * 只支持 md 文档。
+   */
+  async updateDocMeta(
+    relPath: string,
+    association: KnowledgeAssociation,
+  ): Promise<KnowledgeDocWriteResponse> {
+    const abs = safeResolve(this.root, relPath);
+
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(abs);
+    } catch {
+      throw new Error('文件不存在');
+    }
+    if (!stat.isFile()) {
+      throw new Error('目标不是文件');
+    }
+    if (this.getDocKind(path.basename(abs)) !== 'md') {
+      throw new Error('仅支持编辑 Markdown 文档的关联');
+    }
+
+    const raw = await fs.readFile(abs, 'utf-8');
+    const body = this.rewriteAssociation(raw, association);
+    await this.atomicWrite(abs, body);
+    await this.refreshManifest();
+
+    return { path: toRelativePosix(this.root, abs) };
+  }
+
+  /**
+   * 重写 frontmatter 中的四项关联,保留其他键与正文。
+   * 无前导块时按需新建;四项清空且无其他键时整块移除。
+   */
+  private rewriteAssociation(raw: string, association: KnowledgeAssociation): string {
+    // extractFrontmatterBlock 内部会剥离 BOM 再匹配,返回的 raw 偏移基于剥离后的串,
+    // 这里先自行剥离,保证 slice 对齐(写回不保留 BOM)
+    const normalized = raw.startsWith(UTF8_BOM) ? raw.slice(UTF8_BOM.length) : raw;
+    const block = extractFrontmatterBlock(normalized);
+    const body = block.hasBlock ? normalized.slice(block.raw.length) : normalized;
+
+    // 拆出块内行(去掉首行 --- 与结尾 ---),其余行原样保留
+    const keptLines = block.hasBlock
+      ? block.raw
+          .replace(/^---[ \t]*\r?\n?/, '')
+          .replace(/\r?\n?---[ \t]*\r?\n?$/, '')
+          .split(/\r?\n/)
+          .filter((line) => line.trim() !== '' && !ASSOCIATION_LINE.test(line))
+      : [];
+
+    // 复用 frontmatter.ts 的序列化(含换行清洗/空值跳过),只取块内行
+    const newLines = serializeFrontmatter({
+      versionId: association.versionId,
+      requirementId: association.requirementId,
+      projectId: association.projectId,
+      stage: association.stage,
+    })
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== '' && line.trim() !== '---');
+
+    const lines = [...keptLines, ...newLines];
+    const header = lines.length > 0 ? `---\n${lines.join('\n')}\n---\n` : '';
+    return `${header}${body}`;
   }
 
   /** 生成文件名:<14位时间戳>_<sanitizedTitle>.md */

@@ -6,7 +6,11 @@ import path from 'node:path';
 import { KnowledgeService } from '../../../application/knowledge/KnowledgeService.js';
 import { importKnowledge } from '../../../application/knowledge/KnowledgeImportService.js';
 import { isLocalAccess } from '../../../utils/localAccess.js';
-import type { KnowledgeCreateRequest, KnowledgeSaveRequest } from '@ai-task-flow/shared';
+import type {
+  KnowledgeCreateRequest,
+  KnowledgeSaveRequest,
+  KnowledgeDocMetaUpdateRequest,
+} from '@ai-task-flow/shared';
 
 export async function registerKnowledgeRoutes(
   fastify: FastifyInstance,
@@ -171,6 +175,35 @@ export async function registerKnowledgeRoutes(
         return reply.status(404).send({ error: err.message });
       }
       return reply.status(400).send({ error: `保存失败: ${err.message}` });
+    }
+  });
+
+  // PUT /api/knowledge/doc/meta - 编辑四项关联(版本/需求/项目/阶段)
+  // body: { path, versionId?, requirementId?, projectId?, stage? };空串/缺省=清除,其他 frontmatter 键保留
+  fastify.put<{
+    Body: KnowledgeDocMetaUpdateRequest;
+  }>('/api/knowledge/doc/meta', async (request, reply) => {
+    const body = request.body;
+    if (!body?.path) {
+      return reply.status(400).send({ error: '缺少 path 参数' });
+    }
+
+    try {
+      const result = await knowledgeService.updateDocMeta(body.path, {
+        versionId: body.versionId,
+        requirementId: body.requirementId,
+        projectId: body.projectId,
+        stage: body.stage,
+      });
+      return { ok: true, path: result.path };
+    } catch (err: any) {
+      if (err.message.includes('路径越界')) {
+        return reply.status(403).send({ error: err.message });
+      }
+      if (err.message === '文件不存在') {
+        return reply.status(404).send({ error: err.message });
+      }
+      return reply.status(400).send({ error: `更新关联失败: ${err.message}` });
     }
   });
 }

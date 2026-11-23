@@ -39,7 +39,9 @@ export default defineConfig({
     // 创建,与 19 混渲染报 "older version of React"。inline 后走 vite transform,alias 生效。
     server: {
       deps: {
-        inline: ['lucide-react'],
+        // zustand 被 hoist 到根 node_modules,其内部 import react 会拿到根 react@18,
+        // 与 frontend react@19 混用报 invalid hook call;inline 后走 vite transform,alias 生效。
+        inline: ['lucide-react', 'zustand'],
       },
     },
   },

@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
 import { useUIStore } from '@/stores/uiStore';
 import { fetchManifest, importKnowledge } from '@/api/knowledge';
+import { worklogApi } from '@/api/worklog';
+import { buildWorklogIndex } from '@/lib/knowledgeViews';
 import { toast } from '@/components/ui/toaster';
 import { useConfirm } from '@/components/ui/confirm';
 import { useNarrowViewport } from '@/hooks/useNarrowViewport';
@@ -22,6 +24,7 @@ export function KnowledgeView() {
   const manifest = useKnowledgeStore((s) => s.manifest);
   const setManifest = useKnowledgeStore((s) => s.setManifest);
   const setError = useKnowledgeStore((s) => s.setError);
+  const setWorklogIndex = useKnowledgeStore((s) => s.setWorklogIndex);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   /** 本次会话是否已导入过(再次导入会产生 -imported 副本,需二次确认) */
@@ -48,6 +51,16 @@ export function KnowledgeView() {
   useEffect(() => {
     void load();
   }, []);
+
+  // worklog 索引仅用于把版本/需求/项目 id 映射成名称;失败静默,退回展示 id
+  useEffect(() => {
+    worklogApi
+      .getTree()
+      .then((tree) => setWorklogIndex(buildWorklogIndex(tree)))
+      .catch(() => {
+        /* 索引是展示增强,失败不影响知识库主流程 */
+      });
+  }, [setWorklogIndex]);
 
   /** 导入旧知识库(源目录固定由后端解析仓库内 knowledge-base),成功后刷新 */
   const onImport = async () => {

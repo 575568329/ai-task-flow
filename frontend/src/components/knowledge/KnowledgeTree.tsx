@@ -1,5 +1,6 @@
 // frontend/src/components/knowledge/KnowledgeTree.tsx
-// 知识库左侧:新建笔记 + 搜索 + 标签筛选 + 目录树(无筛选时)/ 扁平结果(有筛选时)。
+// 知识库左侧:新建笔记 + 搜索 + 标签筛选 + 视图切换(分类/版本/项目/阶段)。
+// 分类视图=目录树(无筛选时)/扁平结果(有筛选时);其余视图按关联字段分组,未关联归「未关联」。
 // 树默认全收起(根节点「知识库」明显加粗),顶部提供全部展开/全部收起 + 刷新。
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -11,11 +12,20 @@ import {
   RefreshCw,
   ChevronsDownUp,
   ChevronsUpDown,
+  ChevronDown,
+  ChevronRight,
   Database,
   Star,
   Sparkles,
 } from 'lucide-react';
-import type { KnowledgeNode } from '@ai-task-flow/shared';
+import type { KnowledgeNode, KnowledgeFileNode } from '@ai-task-flow/shared';
+import {
+  KNOWLEDGE_VIEWS,
+  countDocsByLinkState,
+  groupDocsByView,
+  type DocGroup,
+  type KnowledgeViewMode,
+} from '@/lib/knowledgeViews';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -39,12 +49,35 @@ import { ContextMenuHost } from '@/components/context-menu/ContextMenuHost';
 import { buildKnowledgeNodeItems, type KnowledgeNodeMenuCtx } from './knowledgeTreeContextMenu';
 import { toast } from '@/components/ui/toaster';
 
+/** 视图模式 localStorage 键(跨会话记忆) */
+const VIEW_STORAGE_KEY = 'ai-task-flow-knowledge-view';
+
+/** 读取上次使用的视图(非法值回退分类视图) */
+function loadViewMode(): KnowledgeViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_STORAGE_KEY);
+    const hit = KNOWLEDGE_VIEWS.find((view) => view.id === raw);
+    if (hit) return hit.id;
+  } catch {
+    // localStorage 不可用时用默认值
+  }
+  return 'category';
+}
+
 /** 递归收集所有目录节点 name(用于默认全收起 / 全部收起) */
 function collectDirNames(node: KnowledgeNode, acc: Set<string>): void {
   if (node.type === 'dir') {
     acc.add(node.name);
     node.children.forEach((c) => collectDirNames(c, acc));
   }
+}
+
+/** 分组内文档数(含子分组) */
+function countGroupDocs(group: DocGroup): number {
+  return (
+    group.docs.length +
+    (group.children?.reduce((sum, child) => sum + countGroupDocs(child), 0) ?? 0)
+  );
 }
 
 interface KnowledgeTreeProps {
@@ -65,8 +98,20 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
   const selectedTags = useKnowledgeStore((s) => s.selectedTags);
   const setSelectedTags = useKnowledgeStore((s) => s.setSelectedTags);
   const getFilteredDocs = useKnowledgeStore((s) => s.getFilteredDocs);
+  const worklogIndex = useKnowledgeStore((s) => s.worklogIndex);
   const favorites = useKnowledgeStore((s) => s.favorites);
   const toggleFavorite = useKnowledgeStore((s) => s.toggleFavorite);
+  const [viewMode, setViewMode] = useState<KnowledgeViewMode>(loadViewMode);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // 视图切换记忆到 localStorage(存储不可用时忽略)
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, viewMode);
+    } catch {
+      // 隐私模式等场景写失败不影响使用
+    }
+  }, [viewMode]);
   const { confirm } = useConfirm();
   const basePath = manifest?.basePath ?? '';
   const menuCtx: KnowledgeNodeMenuCtx = {
@@ -161,6 +206,11 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     filterFavorites ||
     filterRecent;
 
+  // 搜索/标签/收藏/近 3 天筛选在所有视图下共用
+  const displayDocs = getFilteredDocs();
+  const groups = viewMode === 'category' ? [] : groupDocsByView(displayDocs, viewMode, worklogIndex);
+  const linkStats = viewMode === 'category' ? null : countDocsByLinkState(manifest.flatDocs, viewMode);
+
   const toggleDir = (key: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -168,6 +218,88 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
       else next.add(key);
       return next;
     });
+  };
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  /** 扁平/分组视图共用的文档行 */
+  const renderFlatDoc = (doc: KnowledgeFileNode, depth = 0): ReactNode => {
+    const fav = favorites.includes(doc.path);
+    return (
+      <button
+        type="button"
+        key={doc.path}
+        className={cn(
+          'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
+          currentPath === doc.path && 'bg-accent'
+        )}
+        style={{ paddingLeft: depth * 12 + 4 }}
+        onClick={() => setCurrentPath(doc.path)}
+      >
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate">{doc.title}</span>
+        {isRecentMtime(doc.mtime) && (
+          <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
+            新
+          </span>
+        )}
+        <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
+          {formatRelativeTime(doc.mtime)}
+        </span>
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={fav ? '取消收藏' : '收藏'}
+          title={fav ? '取消收藏' : '收藏'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFavorite(doc.path);
+          }}
+          className={cn(
+            'shrink-0 cursor-pointer',
+            fav ? 'opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+          )}
+        >
+          <Star className={cn('size-3', fav && 'fill-amber-400 text-amber-400')} />
+        </span>
+      </button>
+    );
+  };
+
+  /** 关联视图分组(version 视图下含需求子分组) */
+  const renderGroup = (group: DocGroup, depth: number): ReactNode => {
+    const isOpen = !collapsedGroups.has(group.key);
+    return (
+      <div key={group.key}>
+        <button
+          type="button"
+          className="hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-xs font-medium"
+          style={{ paddingLeft: depth * 12 + 4 }}
+          onClick={() => toggleGroup(group.key)}
+        >
+          {isOpen ? (
+            <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+          )}
+          <span className="truncate">{group.name}</span>
+          <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
+            {countGroupDocs(group)}
+          </span>
+        </button>
+        <Collapse open={isOpen}>
+          {group.docs.map((doc) => renderFlatDoc(doc, depth + 1))}
+          {group.children?.map((child) => renderGroup(child, depth + 1))}
+        </Collapse>
+      </div>
+    );
   };
 
   const expandAll = () => setCollapsed(new Set());
@@ -319,6 +451,21 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
             placeholder="按标签筛选"
           />
         )}
+        {/* 视图切换:分类 / 版本 / 项目 / 阶段(active=primary,跨会话记忆) */}
+        <div className="flex items-center gap-1">
+          {KNOWLEDGE_VIEWS.map((view) => (
+            <Button
+              key={view.id}
+              size="sm"
+              variant={viewMode === view.id ? 'default' : 'outline'}
+              className="h-7 flex-1 px-1 text-xs"
+              onClick={() => setViewMode(view.id)}
+              title={`按${view.label}查看`}
+            >
+              {view.label}
+            </Button>
+          ))}
+        </div>
         {/* 快捷过滤:仅收藏 / 近 3 天新内容(toggle,激活=primary) */}
         <div className="flex items-center gap-1">
           <Button
@@ -346,51 +493,26 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-1">
-          {hasFilter ? (
-            getFilteredDocs().length === 0 ? (
+          {viewMode !== 'category' ? (
+            displayDocs.length === 0 ? (
+              <div className="text-muted-foreground p-2 text-xs">
+                {hasFilter ? '无匹配文档' : '暂无关联文档'}
+              </div>
+            ) : (
+              <>
+                {linkStats && (
+                  <div className="text-muted-foreground px-1 pb-1 text-xs">
+                    已关联 {linkStats.linked} / 未关联 {linkStats.unlinked}
+                  </div>
+                )}
+                {groups.map((group) => renderGroup(group, 0))}
+              </>
+            )
+          ) : hasFilter ? (
+            displayDocs.length === 0 ? (
               <div className="text-muted-foreground p-2 text-xs">无匹配文档</div>
             ) : (
-              getFilteredDocs().map((doc) => {
-                const fav = favorites.includes(doc.path);
-                return (
-                  <button
-                    type="button"
-                    key={doc.path}
-                    className={cn(
-                      'group hover:bg-accent flex w-full items-center gap-1 rounded px-1 py-1 text-left text-sm',
-                      currentPath === doc.path && 'bg-accent'
-                    )}
-                    onClick={() => setCurrentPath(doc.path)}
-                  >
-                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 truncate">{doc.title}</span>
-                    {isRecentMtime(doc.mtime) && (
-                      <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-600">
-                        新
-                      </span>
-                    )}
-                    <span className="text-muted-foreground ml-auto shrink-0 text-[10px]">
-                      {formatRelativeTime(doc.mtime)}
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      aria-label={fav ? '取消收藏' : '收藏'}
-                      title={fav ? '取消收藏' : '收藏'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(doc.path);
-                      }}
-                      className={cn(
-                        'shrink-0 cursor-pointer',
-                        fav ? 'opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100',
-                      )}
-                    >
-                      <Star className={cn('size-3', fav && 'fill-amber-400 text-amber-400')} />
-                    </span>
-                  </button>
-                );
-              })
+              displayDocs.map((doc) => renderFlatDoc(doc))
             )
           ) : (
             <>

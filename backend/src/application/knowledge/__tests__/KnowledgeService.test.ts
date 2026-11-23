@@ -163,6 +163,147 @@ describe('KnowledgeService 写入', () => {
     });
   });
 
+  describe('getManifest frontmatter', () => {
+    it('should attach tags + associations to flatDocs', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '关联文档',
+        content: '正文',
+        tags: ['调研'],
+        versionId: 'v_1',
+        requirementId: 'r_1',
+        projectId: 'p_1',
+        stage: 'design',
+      });
+      const manifest = await service.getManifest(true);
+      const doc = manifest.flatDocs.find((d) => d.path === relPath);
+      expect(doc?.frontmatter).toEqual({
+        tags: ['调研'],
+        versionId: 'v_1',
+        requirementId: 'r_1',
+        projectId: 'p_1',
+        stage: 'design',
+      });
+    });
+
+    it('should leave frontmatter undefined when doc has none', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '纯正文',
+        content: '正文',
+      });
+      const manifest = await service.getManifest(true);
+      expect(manifest.flatDocs.find((d) => d.path === relPath)?.frontmatter).toBeUndefined();
+    });
+  });
+
+  describe('updateDocMeta', () => {
+    it('should replace association fields and preserve other frontmatter keys + body', async () => {
+      const abs = path.join(root, 'meta.md');
+      await fs.writeFile(abs, '---\ntitle: 外部标题\ntags: [调研]\nversionId: v_old\n---\n正文', 'utf-8');
+
+      await service.updateDocMeta('meta.md', {
+        versionId: 'v_new',
+        requirementId: 'r_new',
+        projectId: 'p_new',
+        stage: 'dev',
+      });
+
+      const raw = await fs.readFile(abs, 'utf-8');
+      expect(raw).toContain('title: 外部标题');
+      expect(raw).toContain('tags: [调研]');
+      expect(raw).toContain('versionId: v_new');
+      expect(raw).not.toContain('v_old');
+      expect(raw).toMatch(/\n正文$/);
+
+      const doc = await service.getDoc('meta.md');
+      expect(doc.content).toBe('正文');
+      expect(doc.frontmatter).toEqual({
+        tags: ['调研'],
+        versionId: 'v_new',
+        requirementId: 'r_new',
+        projectId: 'p_new',
+        stage: 'dev',
+      });
+    });
+
+    it('should clear association fields with empty strings but keep external keys', async () => {
+      const abs = path.join(root, 'clear.md');
+      await fs.writeFile(abs, '---\ntitle: 保留\nversionId: v_1\nstage: dev\n---\n正文', 'utf-8');
+
+      await service.updateDocMeta('clear.md', {
+        versionId: '',
+        requirementId: '',
+        projectId: '',
+        stage: '',
+      });
+
+      const raw = await fs.readFile(abs, 'utf-8');
+      expect(raw).toContain('title: 保留');
+      expect(raw).not.toContain('versionId');
+      expect(raw).not.toContain('stage');
+      // 只剩外部键:本项目不识别,整块按正文返回(与 getDoc 既有规则一致)
+      const doc = await service.getDoc('clear.md');
+      expect(doc.frontmatter).toBeUndefined();
+      expect(doc.content).toContain('title: 保留');
+    });
+
+    it('should remove the whole block when clearing all fields and no other keys', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '清空',
+        content: '正文',
+        versionId: 'v_1',
+        stage: 'dev',
+      });
+      await service.updateDocMeta(relPath, { versionId: '', stage: '' });
+
+      const raw = await fs.readFile(path.join(root, relPath), 'utf-8');
+      expect(raw).toBe('正文');
+    });
+
+    it('should add a frontmatter block when doc has none', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '无块',
+        content: '正文',
+      });
+      await service.updateDocMeta(relPath, { stage: 'review' });
+
+      const doc = await service.getDoc(relPath);
+      expect(doc.frontmatter).toEqual({ stage: 'review' });
+      expect(doc.content).toBe('正文');
+    });
+
+    it('should refresh manifest after update', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: 'manifest',
+        content: '正文',
+      });
+      await service.updateDocMeta(relPath, { projectId: 'p_1' });
+
+      const manifest = await service.getManifest();
+      expect(manifest.flatDocs.find((d) => d.path === relPath)?.frontmatter).toEqual({
+        projectId: 'p_1',
+      });
+    });
+
+    it('should reject non-markdown docs', async () => {
+      await fs.writeFile(path.join(root, 'note.pdf'), 'x', 'utf-8');
+      await expect(service.updateDocMeta('note.pdf', { stage: 'dev' })).rejects.toThrow(
+        /仅支持编辑 Markdown/,
+      );
+    });
+
+    it('should reject non-existent path', async () => {
+      await expect(service.updateDocMeta('nonexistent.md', { stage: 'dev' })).rejects.toThrow(
+        /文件不存在/,
+      );
+    });
+
+    it('should reject path traversal', async () => {
+      await expect(service.updateDocMeta('../../etc/passwd', { stage: 'dev' })).rejects.toThrow(
+        /路径越界/,
+      );
+    });
+  });
+
   describe('saveDoc', () => {
     it('should overwrite existing file content', async () => {
       const { path: relPath } = await service.createDoc({

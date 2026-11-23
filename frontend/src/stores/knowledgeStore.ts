@@ -2,6 +2,7 @@
 // 知识库状态管理
 import { create } from 'zustand';
 import type { KnowledgeManifest, KnowledgeFileNode } from '@ai-task-flow/shared';
+import { emptyWorklogIndex, type WorklogIndex } from '@/lib/knowledgeViews';
 
 const FAVORITES_KEY = 'ai-task-flow-knowledge-favorites';
 
@@ -39,6 +40,8 @@ interface KnowledgeState {
   filterFavorites: boolean;
   /** 过滤器:仅看最近 3 天新增/更新的文档 */
   filterRecent: boolean;
+  /** worklog 树的 id→名称索引(多视图分组/关联徽标/编辑关联下拉用;失败时为空索引) */
+  worklogIndex: WorklogIndex;
   loading: boolean;
   error: string | null;
 
@@ -53,6 +56,7 @@ interface KnowledgeState {
   toggleFavorite: (path: string) => void;
   setFilterFavorites: (on: boolean) => void;
   setFilterRecent: (on: boolean) => void;
+  setWorklogIndex: (index: WorklogIndex) => void;
 
   // Computed
   getCurrentDoc: () => KnowledgeFileNode | null;
@@ -69,6 +73,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   favorites: loadFavorites(),
   filterFavorites: false,
   filterRecent: false,
+  worklogIndex: emptyWorklogIndex(),
   loading: false,
   error: null,
 
@@ -89,6 +94,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
   setFilterFavorites: (on) => set({ filterFavorites: on }),
   setFilterRecent: (on) => set({ filterRecent: on }),
+  setWorklogIndex: (index) => set({ worklogIndex: index }),
 
   isFavorite: (path) => get().favorites.includes(path),
 

@@ -12,12 +12,14 @@ describe('knowledgeRoutes 导入', () => {
   let app: ReturnType<typeof Fastify>;
   let root: string;
   let targetDir: string;
+  let service: KnowledgeService;
 
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'kimp-routes-'));
     targetDir = path.join(root, 'dst');
+    service = new KnowledgeService(targetDir);
     app = Fastify();
-    await registerKnowledgeRoutes(app, new KnowledgeService(targetDir));
+    await registerKnowledgeRoutes(app, service);
   });
 
   afterEach(async () => {
@@ -59,6 +61,74 @@ describe('knowledgeRoutes 导入', () => {
       method: 'POST',
       url: '/api/knowledge/import',
       remoteAddress: '10.0.0.9',
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('knowledgeRoutes 元数据', () => {
+  let app: ReturnType<typeof Fastify>;
+  let root: string;
+  let service: KnowledgeService;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'kmeta-routes-'));
+    service = new KnowledgeService(path.join(root, 'kb'));
+    app = Fastify();
+    await registerKnowledgeRoutes(app, service);
+  });
+
+  afterEach(async () => {
+    await app.close();
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('should update associations via PUT /api/knowledge/doc/meta', async () => {
+    const { path: relPath } = await service.createDoc({
+      title: '元数据',
+      content: '正文',
+      versionId: 'v_old',
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: relPath, versionId: 'v_new', stage: 'dev' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, path: relPath });
+
+    const doc = await service.getDoc(relPath);
+    expect(doc.frontmatter).toEqual({ versionId: 'v_new', stage: 'dev' });
+  });
+
+  it('should reject missing path', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { stage: 'dev' },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('should 404 when file does not exist', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: 'nonexistent.md', stage: 'dev' },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('should 403 on path traversal', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/knowledge/doc/meta',
+      payload: { path: '../../etc/passwd', stage: 'dev' },
     });
 
     expect(res.statusCode).toBe(403);
