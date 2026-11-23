@@ -3,6 +3,7 @@
 // 关联 id 不存在时降级为不写该字段并提示,不阻断文档保存(设计 §8)。
 import { WORK_STAGE_IDS, isWorkStage } from '@ai-task-flow/shared';
 import type { WorklogData } from '@ai-task-flow/shared';
+import { parseFrontmatter } from '../../../application/knowledge/frontmatter.js';
 import type { ToolDeps } from './types.js';
 import { STAGE_SCHEMA } from './stageSchema.js';
 
@@ -102,8 +103,12 @@ async function resolveRefs(
     return { meta, warnings };
   }
 
+  // 数据损坏(versions/projects/requirements 缺失)时按空数组处理,保持降级而不是抛错
+  const versions = Array.isArray(tree?.versions) ? tree.versions : [];
+  const projects = Array.isArray(tree?.projects) ? tree.projects : [];
+
   if (requested.versionId) {
-    if (tree.versions.some((v) => v.id === requested.versionId)) {
+    if (versions.some((v) => v?.id === requested.versionId)) {
       meta.versionId = requested.versionId;
     } else {
       warnings.push(`版本 id "${requested.versionId}" 不存在,已降级为不关联(可先 list_versions 获取)`);
@@ -111,7 +116,7 @@ async function resolveRefs(
   }
 
   if (requested.projectId) {
-    if (tree.projects.some((p) => p.id === requested.projectId)) {
+    if (projects.some((p) => p?.id === requested.projectId)) {
       meta.projectId = requested.projectId;
     } else {
       warnings.push(`项目 id "${requested.projectId}" 不存在,已降级为不关联(可先 list_projects 获取)`);
@@ -119,8 +124,8 @@ async function resolveRefs(
   }
 
   if (requested.requirementId) {
-    const owner = tree.versions.find((v) =>
-      v.requirements.some((r) => r.id === requested.requirementId),
+    const owner = versions.find((v) =>
+      (v?.requirements ?? []).some((r) => r?.id === requested.requirementId),
     );
     if (!owner) {
       warnings.push(
@@ -159,6 +164,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     stage: optionalString(args.stage),
   };
   const { meta, warnings } = await resolveRefs(deps, requested);
+  // 正文自带 frontmatter 时 createDoc 会原样写入、不覆盖元数据,成功文案不能谎称已关联
+  const contentHasFrontmatter = parseFrontmatter(content).hasFrontmatter;
 
   try {
     const result = await deps.knowledgeService.createDoc({ title, content, tags, dir, ...meta });
@@ -173,7 +180,10 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       meta.projectId ? `项目 \`${meta.projectId}\`` : '',
       meta.stage ? `阶段 \`${meta.stage}\`` : '',
     ].filter(Boolean);
-    if (associations.length > 0) {
+    if (contentHasFrontmatter && (associations.length > 0 || (tags?.length ?? 0) > 0)) {
+      warnings.push('文档自带 frontmatter,服务端未覆盖 frontmatter(传入的 tags/版本/需求/项目/阶段未写入)');
+    }
+    if (associations.length > 0 && !contentHasFrontmatter) {
       lines.push('', `**关联**: ${associations.join(' / ')}`);
     }
     if (warnings.length > 0) {

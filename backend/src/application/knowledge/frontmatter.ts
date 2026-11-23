@@ -8,6 +8,8 @@ import type { KnowledgeFrontmatter } from '@ai-task-flow/shared';
 const FRONTMATTER_BLOCK = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
 /** 单行 key: value(键限定为字母开头的标识符) */
 const KV_LINE = /^([A-Za-z][\w-]*)\s*:\s*(.*)$/;
+/** UTF-8 BOM(Windows 工具可能写入,不剥离会导致块不被识别) */
+const BOM = '\uFEFF';
 
 export interface ParsedKnowledgeFrontmatter {
   /** 解析出的已知元数据(未知键被丢弃) */
@@ -44,9 +46,11 @@ function parseTags(value: string): string[] {
  * 无闭合 `---`、非法行、多行值均按「跳过/无 frontmatter」处理,不抛错。
  */
 export function parseFrontmatter(raw: string): ParsedKnowledgeFrontmatter {
-  const match = FRONTMATTER_BLOCK.exec(raw);
+  // 先剥离 BOM,否则 ^--- 不匹配,块会被当作正文
+  const normalized = raw.startsWith(BOM) ? raw.slice(BOM.length) : raw;
+  const match = FRONTMATTER_BLOCK.exec(normalized);
   if (!match) {
-    return { data: {}, body: raw, hasFrontmatter: false, raw: '' };
+    return { data: {}, body: normalized, hasFrontmatter: false, raw: '' };
   }
 
   const data: KnowledgeFrontmatter = {};
@@ -84,7 +88,12 @@ export function parseFrontmatter(raw: string): ParsedKnowledgeFrontmatter {
     }
   }
 
-  return { data, body: raw.slice(match[0].length), hasFrontmatter: true, raw: match[0] };
+  // 块内没有任何本项目可识别的键:可能是正文里恰好出现的 --- 分隔线,整段按正文保留
+  if (!hasFrontmatterData(data)) {
+    return { data: {}, body: normalized, hasFrontmatter: false, raw: '' };
+  }
+
+  return { data, body: normalized.slice(match[0].length), hasFrontmatter: true, raw: match[0] };
 }
 
 /** 单值清洗:换行折叠为空格,避免破坏 frontmatter 的行结构 */

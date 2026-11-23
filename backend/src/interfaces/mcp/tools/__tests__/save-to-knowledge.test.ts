@@ -92,6 +92,29 @@ describe('save_to_knowledge MCP tool', () => {
     expect(doc.content).toBe('正文');
   });
 
+  it('should warn that associations were not written when content carries its own frontmatter', async () => {
+    const version = await deps.worklogService.createVersion({ name: 'V1' });
+
+    const result = await HANDLERS.save_to_knowledge(
+      {
+        title: '自带块',
+        content: '---\nversionId: v_self\n---\n正文',
+        versionId: version.id,
+        stage: 'dev',
+      },
+      deps,
+    );
+
+    const text = result.content[0].text;
+    expect(text).toContain('已写入知识库');
+    expect(text).toContain('文档自带 frontmatter');
+    expect(text).not.toContain('**关联**');
+
+    const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
+    expect(doc.frontmatter).toEqual({ versionId: 'v_self' });
+    expect(doc.content).toBe('正文');
+  });
+
   it('should degrade invalid stage to unassociated and still save the document', async () => {
     const result = await HANDLERS.save_to_knowledge(
       { title: '非法阶段', content: '正文', stage: 'not-a-stage' },

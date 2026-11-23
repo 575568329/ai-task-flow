@@ -184,6 +184,23 @@ describe('KnowledgeService 写入', () => {
       expect(doc.frontmatter).toEqual({ versionId: 'v_1' });
     });
 
+    it('should keep frontmatter when old file ends with --- without trailing newline', async () => {
+      const abs = path.join(root, 'no-newline.md');
+      await fs.writeFile(abs, '---\ntags: [a]\n---', 'utf-8');
+      await service.saveDoc('no-newline.md', '新正文');
+      const doc = await service.getDoc('no-newline.md');
+      expect(doc.frontmatter).toEqual({ tags: ['a'] });
+      expect(doc.content).toBe('新正文');
+    });
+
+    it('should recognize frontmatter in files prefixed with BOM', async () => {
+      const abs = path.join(root, 'bom.md');
+      await fs.writeFile(abs, '﻿---\ntags: [a]\n---\n正文', 'utf-8');
+      const doc = await service.getDoc('bom.md');
+      expect(doc.frontmatter).toEqual({ tags: ['a'] });
+      expect(doc.content).toBe('正文');
+    });
+
     it('should keep incoming frontmatter as-is when content carries its own', async () => {
       const { path: relPath } = await service.createDoc({
         title: '换元数据',

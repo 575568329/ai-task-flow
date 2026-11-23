@@ -76,12 +76,27 @@ describe('parseFrontmatter', () => {
     expect(parsed.body).toBe('body');
   });
 
-  it('should support empty frontmatter block', () => {
-    const parsed = parseFrontmatter('---\n---\nbody');
+  it('should strip BOM before recognizing frontmatter', () => {
+    const parsed = parseFrontmatter('﻿---\ntags: [a]\n---\n正文');
     expect(parsed.hasFrontmatter).toBe(true);
+    expect(parsed.data.tags).toEqual(['a']);
+    expect(parsed.body).toBe('正文');
+  });
+
+  it('should treat a block without recognized keys as body, keeping it intact', () => {
+    const raw = '---\n\n正文\n\n---\n后记';
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.hasFrontmatter).toBe(false);
     expect(parsed.data).toEqual({});
-    expect(parsed.body).toBe('body');
-    expect(parsed.raw).toBe('---\n---\n');
+    expect(parsed.body).toBe(raw);
+    expect(parsed.raw).toBe('');
+  });
+
+  it('should treat empty frontmatter block as no frontmatter', () => {
+    const parsed = parseFrontmatter('---\n---\nbody');
+    expect(parsed.hasFrontmatter).toBe(false);
+    expect(parsed.data).toEqual({});
+    expect(parsed.body).toBe('---\n---\nbody');
   });
 
   it('should preserve raw block for round-trip writes', () => {

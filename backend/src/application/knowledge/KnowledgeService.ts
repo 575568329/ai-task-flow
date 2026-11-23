@@ -187,9 +187,11 @@ export class KnowledgeService {
     if (!parseFrontmatter(content).hasFrontmatter) {
       const oldRaw = await fs.readFile(abs, 'utf-8');
       const oldParsed = parseFrontmatter(oldRaw);
-      // 原样沿用旧 frontmatter 块,保留本项目不识别的外部键
+      // 原样沿用旧 frontmatter 块,保留本项目不识别的外部键;
+      // 旧文件以 --- 结尾且无换行时补一个 \n,否则会和正文粘连导致块不再被识别
       if (oldParsed.hasFrontmatter) {
-        body = `${oldParsed.raw}${content}`;
+        const header = oldParsed.raw.endsWith('\n') ? oldParsed.raw : `${oldParsed.raw}\n`;
+        body = `${header}${content}`;
       }
     }
 
