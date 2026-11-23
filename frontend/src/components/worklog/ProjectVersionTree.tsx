@@ -28,6 +28,10 @@ interface ProjectVersionTreeProps {
   onDeleteProject: (project: string) => Promise<void>;
   /** 路径绑定/解绑成功后重拉树(不传则只在弹窗内提示) */
   onPathsChanged?: () => void | Promise<void>;
+  /** 项目 id → 关联到该项目的记录数(树外条目);>0 时节点下显示弱提示 */
+  relatedCounts?: Record<string, number>;
+  /** 点击「另有 N 条关联记录」时把该关联项目设为筛选值(传项目名) */
+  onRelatedFilterChange?: (projectName: string) => void;
 }
 
 /** 路径尾两段(统一用 \ 展示):D:\xunfei\资源加工平台 → …\xunfei\资源加工平台 */
@@ -47,6 +51,7 @@ type PendingAction =
 export function ProjectVersionTree({
   data, selection, onSelect,
   onRenameVersion, onRenameProject, onDeleteVersion, onDeleteProject, onPathsChanged,
+  relatedCounts, onRelatedFilterChange,
 }: ProjectVersionTreeProps) {
   /** 默认全部收起；只记录“已展开”的项目，新项目/新加载的项目也默认收起。 */
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -107,6 +112,7 @@ export function ProjectVersionTree({
         const totalEntries = project.versions.reduce((sum, v) => sum + v.entries.length, 0);
         const boundPaths = project.paths ?? [];
         const isPathMissing = (project.missingPaths?.length ?? 0) > 0;
+        const relatedCount = relatedCounts?.[project.id] ?? 0;
         return (
           <div key={project.name}>
             <ContextMenu>
@@ -168,6 +174,18 @@ export function ProjectVersionTree({
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
+
+            {/* 树外条目对本项目的关联提示:点击切到全局关联筛选 */}
+            {relatedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onRelatedFilterChange?.(project.name)}
+                className="text-muted-foreground hover:text-foreground ml-5 block rounded px-2 py-0.5 text-left text-[11px] hover:underline"
+                title={`查看其他项目里关联「${project.name}」的记录`}
+              >
+                另有 {relatedCount} 条关联记录
+              </button>
+            )}
 
             {/* 删除项目确认态 */}
             {pending?.kind === 'delete-project' && pending.project === project.name && (

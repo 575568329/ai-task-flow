@@ -95,6 +95,30 @@ describe('filterEntries', () => {
     expect(filterEntries(data, { project: '搜题平台' }, '', []).entries).toHaveLength(3);
   });
 
+  it('should filter by related project', () => {
+    const relatedData: WorklogData = {
+      projects: [{
+        id: 'p_a', name: 'A', createdAt: 1,
+        versions: [{
+          name: 'V1', createdAt: 1,
+          entries: [
+            entry({ id: 'e1', title: '跨项目改动', detail: 'd', createdAt: 2, relatedProjects: ['题库'] }),
+            entry({ id: 'e2', title: '普通改动', detail: 'd', createdAt: 1 }),
+          ],
+        }],
+      }],
+    };
+    expect(filterEntries(relatedData, { project: 'A' }, '', [], '题库').entries.map((e) => e.entry.id))
+      .toEqual(['e1']);
+    expect(filterEntries(relatedData, { project: 'A' }, '', [], '题库2').entries).toHaveLength(0);
+    // 不传关联项目 = 不过滤
+    expect(filterEntries(relatedData, { project: 'A' }, '', []).entries).toHaveLength(2);
+    // 仅关联筛选(无树选择/无关键字)也加载:树节点「另有 N 条关联记录」点击后全局列出
+    expect(filterEntries(relatedData, {}, '', [], '题库').entries.map((e) => e.entry.id)).toEqual(['e1']);
+    // 关联筛选与关键字可叠加
+    expect(filterEntries(relatedData, { project: 'A' }, '普通', [], '题库').entries).toHaveLength(0);
+  });
+
   it('should return empty with friendly flag when nothing matches', () => {
     const { entries, isSearching } = filterEntries(data, {}, '不存在的关键字xyz');
     expect(isSearching).toBe(true);

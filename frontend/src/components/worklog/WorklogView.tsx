@@ -31,6 +31,7 @@ export function WorklogView() {
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
   const [stageFilter, setStageFilter] = useState<StageFilter>([]);
+  const [relatedFilter, setRelatedFilter] = useState(''); // 关联项目筛选(项目名快照,空=不过滤)
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
@@ -76,10 +77,54 @@ export function WorklogView() {
   // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择过滤。新在前。
   // 本地过滤(全树已在内存,个人量级零延迟),匹配语义与后端 query_work 一致。
   const { entries: visibleEntries, isSearching } = useMemo(
-    () => filterEntries(data, selection, keyword, stageFilter),
-    [data, selection, keyword, stageFilter],
+    () => filterEntries(data, selection, keyword, stageFilter, relatedFilter),
+    [data, selection, keyword, stageFilter, relatedFilter],
   );
-  const noSelection = !isSearching && !selection.project;
+  // 仅关联筛选时也视为全局视图(不要求树选择),对应树节点「另有 N 条关联记录」入口
+  const noSelection = !isSearching && !selection.project && !relatedFilter;
+
+  // 「关联项目」下拉选项:全树条目 relatedProjects 去重(名称快照,与筛选口径一致)
+  const relatedProjectOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const project of data.projects) {
+      for (const version of project.versions) {
+        for (const entry of version.entries) {
+          for (const name of entry.relatedProjects ?? []) {
+            if (name) names.add(name);
+          }
+        }
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  // 数据刷新后所选关联项目不存在(如关联被清理)则回退为不过滤
+  useEffect(() => {
+    if (relatedFilter && !relatedProjectOptions.includes(relatedFilter)) setRelatedFilter('');
+  }, [relatedFilter, relatedProjectOptions]);
+
+  // 项目 id → 被其他条目关联的次数(树节点「另有 N 条关联记录」;全树已在内存,本地统计)
+  const relatedCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const project of data.projects) {
+      for (const version of project.versions) {
+        for (const entry of version.entries) {
+          for (const id of entry.relatedProjectIds ?? []) {
+            if (!id) continue;
+            counts[id] = (counts[id] ?? 0) + 1;
+          }
+        }
+      }
+    }
+    return counts;
+  }, [data]);
+
+  /** 点击树节点关联提示:清空树选择,切到该关联项目的全局视图 */
+  const handleRelatedFilter = (projectName: string) => {
+    setSelection({});
+    setRelatedFilter(projectName);
+    setMode('entries');
+  };
 
   // 项目名 → 版本列表(挪版本下拉按条目所属项目取,跨项目混看不错配)
   const versionsByProject = useMemo(() => {
@@ -155,7 +200,19 @@ export function WorklogView() {
     ? '加载失败,点左上角刷新重试(后端可能未启动)。'
     : noSelection
       ? '数据量较大,默认不加载全部。请在左侧展开项目,选择版本查看记录。'
-      : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
+      : relatedFilter
+        ? `没有关联「${relatedFilter}」的记录。`
+        : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
+
+  const titleText = isSearching
+    ? `搜索「${keyword.trim()}」`
+    : selection.project
+      ? selection.version
+        ? `${selection.project} / ${selection.version}`
+        : `${selection.project}(全部版本)`
+      : relatedFilter
+        ? `关联「${relatedFilter}」`
+        : '工作记录';
 
   return (
     <WorkspaceLayout
@@ -201,6 +258,8 @@ export function WorklogView() {
                 (prev) => (prev.project === p ? {} : prev),
               )()}
               onPathsChanged={() => refresh()}
+              relatedCounts={relatedCounts}
+              onRelatedFilterChange={handleRelatedFilter}
             />
           )}
         </WorkspaceSidebar>
@@ -217,13 +276,10 @@ export function WorklogView() {
           )}
           title={(
             <>
-              {isSearching
-                ? `搜索「${keyword.trim()}」`
-                : selection.project
-                  ? selection.version
-                    ? `${selection.project} / ${selection.version}`
-                    : `${selection.project}(全部版本)`
-                  : '工作记录'}
+              {titleText}
+              {relatedFilter && (isSearching || selection.project) && (
+                <span className="text-muted-foreground ml-2 text-xs font-normal">· 筛选关联「{relatedFilter}」</span>
+              )}
               {!noSelection && (
                 <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
               )}
@@ -231,6 +287,20 @@ export function WorklogView() {
           )}
           actions={(
             <>
+              {relatedProjectOptions.length > 0 && (
+                <select
+                  aria-label="按关联项目筛选"
+                  title="只看关联了指定项目的记录"
+                  value={relatedFilter}
+                  onChange={(e) => setRelatedFilter(e.target.value)}
+                  className="border-input bg-background h-8 shrink-0 rounded-md border px-2 text-xs"
+                >
+                  <option value="">全部关联项目</option>
+                  {relatedProjectOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              )}
               <WorkStageMultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
@@ -282,7 +352,7 @@ export function WorklogView() {
                 entry={entry}
                 projectVersions={versionsByProject.get(project) ?? [version]}
                 currentVersion={version}
-                contextLabel={isSearching ? `${project} / ${version}` : (!selection.version ? version : undefined)}
+                contextLabel={isSearching || relatedFilter ? `${project} / ${version}` : (!selection.version ? version : undefined)}
                 expandAll={expandAll}
                 onSave={handleSave}
                 onDelete={handleDeleteEntry}

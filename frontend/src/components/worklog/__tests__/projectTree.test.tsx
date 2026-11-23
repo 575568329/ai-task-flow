@@ -103,6 +103,19 @@ describe('ProjectVersionTree 路径三态', () => {
 
     expect(screen.getByText(/xunfei\\资源加工平台/)).toHaveAttribute('title', 'D:\\xunfei\\资源加工平台');
   });
+
+  it('should show related count hint and trigger filter on click', () => {
+    const onRelatedFilterChange = vi.fn();
+    renderTree(
+      [project({ id: 'p1', name: '资源加工平台' }), project({ id: 'p2', name: '组卷', createdAt: 2 })],
+      { relatedCounts: { p1: 3 }, onRelatedFilterChange },
+    );
+
+    fireEvent.click(screen.getByText('另有 3 条关联记录'));
+    expect(onRelatedFilterChange).toHaveBeenCalledWith('资源加工平台');
+    // 计数为 0/缺失的项目不显示提示
+    expect(screen.queryByText(/另有 0 条/)).not.toBeInTheDocument();
+  });
 });
 
 describe('ProjectPathDialog 路径绑定', () => {

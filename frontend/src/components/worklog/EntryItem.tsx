@@ -199,6 +199,16 @@ export function EntryItem({
                 <span>{entry.date}</span>
                 <CopyIdButton id={entry.id} />
                 <WorkStageBadge stage={entry.stage} />
+                {entry.relatedProjects?.length ? (
+                  <Badge variant="outline" className="text-muted-foreground text-xs">
+                    关联: {entry.relatedProjects.join(', ')}
+                  </Badge>
+                ) : null}
+                {entry.pathUnmatched && (
+                  <span className="text-muted-foreground/80" title="记录时的路径未匹配任何已绑定项目,可在左栏为项目绑定路径">
+                    当前路径未归属项目
+                  </span>
+                )}
                 {contextLabel && (
                   <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
                 )}

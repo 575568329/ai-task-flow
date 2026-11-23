@@ -93,6 +93,25 @@ describe('EntryItem', () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith('e_test0001'));
   });
 
+  it('should show related project badge and unmatched path hint', () => {
+    render(
+      <EntryItem
+        {...baseProps}
+        entry={makeEntry({ relatedProjects: ['题库', '组卷'], pathUnmatched: true })}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('关联: 题库, 组卷')).toBeInTheDocument();
+    expect(screen.getByText('当前路径未归属项目')).toBeInTheDocument();
+  });
+
+  it('should not show related badge or unmatched hint for plain entry', () => {
+    render(<EntryItem {...baseProps} entry={makeEntry()} onSave={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.queryByText(/^关联:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('当前路径未归属项目')).not.toBeInTheDocument();
+  });
+
   it('should toggle diff panel with DiffViewer content', () => {
     render(<EntryItem {...baseProps} entry={makeEntry()} onSave={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.queryByText(/diff --git/)).not.toBeInTheDocument();

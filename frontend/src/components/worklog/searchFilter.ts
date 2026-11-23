@@ -24,6 +24,7 @@ export function matchesKeyword(entry: WorklogEntry, keyword: string): boolean {
 /**
  * 计算右栏可见条目(新在前)。
  * - keyword 非空:全局搜索(忽略 selection),命中即显示——方便"想看的需求是怎么做的"直接定位;
+ * - relatedProject 非空:只保留关联了该项目的条目;单独使用时视为全局视图(树节点「另有 N 条关联记录」入口);
  * - 否则:按树选择过滤(项目精确/版本精确);未选不加载全部(数据量大,避免默认渲染 60+ 条)。
  */
 export function filterEntries(
@@ -31,9 +32,11 @@ export function filterEntries(
   selection: TreeSelection,
   keyword: string,
   stage: StageFilter = [],
+  relatedProject?: string,
 ): { entries: VisibleEntry[]; isSearching: boolean } {
   const isSearching = keyword.trim().length > 0;
-  if (!isSearching && !selection.project) return { entries: [], isSearching };
+  const related = relatedProject?.trim() || undefined;
+  if (!isSearching && !selection.project && !related) return { entries: [], isSearching };
   const result: VisibleEntry[] = [];
 
   for (const project of data.projects) {
@@ -42,6 +45,8 @@ export function filterEntries(
       if (!isSearching && selection.version && version.name !== selection.version) continue;
       for (const entry of version.entries) {
         if (!matchStageFilter(entry.stage, stage)) continue;
+        // 关联项目按名称快照匹配(与后端 query_work 的 relatedProject 口径一致)
+        if (related && !entry.relatedProjects?.includes(related)) continue;
         if (isSearching && !matchesKeyword(entry, keyword)) continue;
         result.push({ entry, project: project.name, version: version.name });
       }
