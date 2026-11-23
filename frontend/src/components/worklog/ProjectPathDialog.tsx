@@ -30,18 +30,27 @@ export function ProjectPathDialog({
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [unbinding, setUnbinding] = useState<string | null>(null);
+  /** 用户是否在本地编辑过文本域:编辑后服务端刷新不得覆盖未保存输入 */
+  const [dirty, setDirty] = useState(false);
 
-  // 打开或外部路径变化时回填文本域。paths 每次渲染可能是新数组,按内容 key 比较避免覆盖输入。
   const pathsKey = paths.join('\n');
+
+  // 每次打开视为新会话,清除编辑标记(下一次服务端数据可正常回填)
   useEffect(() => {
-    if (open) setDraft(pathsKey);
-  }, [open, pathsKey]);
+    if (open) setDirty(false);
+  }, [open]);
+
+  // 仅在用户未编辑时用服务端路径回填。解绑触发的 refresh 不会抹掉刚敲的新行。
+  useEffect(() => {
+    if (open && !dirty) setDraft(pathsKey);
+  }, [open, pathsKey, dirty]);
 
   const save = async () => {
     const list = draft.split('\n').map((line) => line.trim()).filter(Boolean);
     setSaving(true);
     try {
       await worklogApi.bindPaths(project, list);
+      setDirty(false);
       toast.success('路径已绑定');
       await onChanged?.();
       onOpenChange(false);
@@ -109,7 +118,7 @@ export function ProjectPathDialog({
 
         <Textarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => { setDraft(e.target.value); setDirty(true); }}
           rows={6}
           disableAutoGrow
           aria-label="项目路径"

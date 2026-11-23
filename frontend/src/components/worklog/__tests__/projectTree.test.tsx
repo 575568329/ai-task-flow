@@ -55,8 +55,8 @@ function renderTree(projects: WorklogProject[], extra: Record<string, unknown> =
     onPathsChanged: vi.fn(),
     ...extra,
   };
-  render(<ProjectVersionTree data={data} {...props} />);
-  return props;
+  const view = render(<ProjectVersionTree data={data} {...props} />);
+  return { props, rerender: view.rerender };
 }
 
 describe('ProjectVersionTree 路径三态', () => {
@@ -117,7 +117,7 @@ describe('ProjectPathDialog 路径绑定', () => {
   });
 
   it('should open dialog from context menu and save parsed paths', async () => {
-    const props = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+    const { props } = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
 
     fireEvent.click(screen.getByText('绑定路径…'));
     const textarea = screen.getByLabelText('项目路径');
@@ -135,7 +135,7 @@ describe('ProjectPathDialog 路径绑定', () => {
   });
 
   it('should unbind a single existing path', async () => {
-    const props = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+    const { props } = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
 
     fireEvent.click(screen.getByText('绑定路径…'));
     fireEvent.click(screen.getByText('解绑'));
@@ -147,12 +147,27 @@ describe('ProjectPathDialog 路径绑定', () => {
 
   it('should toast backend error and not refresh on save failure', async () => {
     mockedBind.mockRejectedValueOnce(new Error('路径已被项目「组卷」占用'));
-    const props = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+    const { props } = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
 
     fireEvent.click(screen.getByText('绑定路径…'));
     fireEvent.click(screen.getByText('保存'));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('绑定失败:路径已被项目「组卷」占用'));
     expect(props.onPathsChanged).not.toHaveBeenCalled();
+  });
+
+  it('should keep unsaved input when unbinding an existing path', async () => {
+    const { props, rerender } = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+
+    fireEvent.click(screen.getByText('绑定路径…'));
+    const textarea = screen.getByLabelText('项目路径');
+    fireEvent.change(textarea, { target: { value: 'D:\\xunfei\\资源加工平台\nE:\\repo' } });
+    fireEvent.click(screen.getByText('解绑'));
+    await waitFor(() => expect(mockedUnbind).toHaveBeenCalledTimes(1));
+
+    // 模拟 onChanged → 父组件 refresh 后服务端路径变化:不得覆盖用户未保存的新输入
+    rerender(<ProjectVersionTree data={{ projects: [project({ paths: [] })] }} {...props} />);
+
+    await waitFor(() => expect(screen.getByLabelText('项目路径')).toHaveValue('E:\\repo'));
   });
 });
