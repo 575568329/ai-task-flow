@@ -122,6 +122,18 @@ export interface KnowledgeImportError {
 /** POST /api/knowledge/import 响应(前后端共用单一来源) */
 export interface KnowledgeImportReport {
   copied: number;
+  /** 目标中已存在内容相同的文件,跳过数(内容级幂等) */
+  skipped: number;
   conflicts: KnowledgeImportConflict[];
   errors: KnowledgeImportError[];
+}
+
+/** GET /api/knowledge/import/suggestion 响应:仓库知识库尚未导入的引导 */
+export interface KnowledgeImportSuggestion {
+  /** 是否建议导入(sourceCount > 0 且 targetCount < sourceCount) */
+  suggested: boolean;
+  /** 源目录(仓库 knowledge-base)可导入文件数;源目录缺失为 0 */
+  sourceCount: number;
+  /** 目标目录(用户知识库)现有文件数 */
+  targetCount: number;
 }

@@ -503,7 +503,15 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
                 {hasFilter ? '无匹配文档' : '暂无关联文档'}
               </div>
             ) : (
-              groups.map((group) => renderGroup(group, 0))
+              <>
+                {/* 全部归入「未关联」:提示如何补关联,避免以为视图坏了 */}
+                {linkStats.linked === 0 && linkStats.unlinked > 0 && (
+                  <div className="text-muted-foreground mx-1 mb-1 rounded border border-dashed p-2 text-xs">
+                    尚未关联任何文档。在文档详情点『编辑关联』即可按版本/项目/阶段归类。
+                  </div>
+                )}
+                {groups.map((group) => renderGroup(group, 0))}
+              </>
             )
           ) : hasFilter ? (
             displayDocs.length === 0 ? (

@@ -4,7 +4,7 @@ import { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { KnowledgeService } from '../../../application/knowledge/KnowledgeService.js';
-import { importKnowledge } from '../../../application/knowledge/KnowledgeImportService.js';
+import { importKnowledge, suggestImport } from '../../../application/knowledge/KnowledgeImportService.js';
 import { isLocalAccess } from '../../../utils/localAccess.js';
 import type {
   KnowledgeCreateRequest,
@@ -138,6 +138,16 @@ export async function registerKnowledgeRoutes(
         return reply.status(403).send({ error: errorText(err) });
       }
       return reply.status(400).send({ error: `创建失败: ${errorText(err)}` });
+    }
+  });
+
+  // GET /api/knowledge/import/suggestion - 是否需要引导导入仓库内旧知识库
+  // 只回计数,不暴露路径;源目录缺失/为空时 suggested=false
+  fastify.get('/api/knowledge/import/suggestion', async (_request, reply) => {
+    try {
+      return await suggestImport({ targetDir: knowledgeService.getRoot() });
+    } catch (err) {
+      return reply.status(500).send({ error: `检测导入建议失败: ${errorText(err)}` });
     }
   });
 

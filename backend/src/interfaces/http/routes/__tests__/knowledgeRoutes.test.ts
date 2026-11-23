@@ -56,6 +56,25 @@ describe('knowledgeRoutes 导入', () => {
     await expect(fs.stat(path.join(targetDir, 'evil.md'))).rejects.toThrow();
   });
 
+  it('should report import suggestion when target is empty', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/knowledge/import/suggestion' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.suggested).toBe(true);
+    expect(body.sourceCount).toBeGreaterThan(0);
+    expect(body.targetCount).toBe(0);
+  });
+
+  it('should stop suggesting once target holds enough files', async () => {
+    // 先导入一次,目标文件数与源一致 → 不再建议
+    await app.inject({ method: 'POST', url: '/api/knowledge/import' });
+
+    const res = await app.inject({ method: 'GET', url: '/api/knowledge/import/suggestion' });
+
+    expect(res.json()).toMatchObject({ suggested: false });
+  });
+
   it('should reject non-local callers', async () => {
     const res = await app.inject({
       method: 'POST',

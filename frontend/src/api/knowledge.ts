@@ -6,6 +6,7 @@ import type {
   KnowledgeCreateRequest,
   KnowledgeDocMetaUpdateRequest,
   KnowledgeImportReport,
+  KnowledgeImportSuggestion,
 } from '@ai-task-flow/shared';
 
 const BASE = '/api';
@@ -20,6 +21,16 @@ export async function importKnowledge(): Promise<KnowledgeImportReport> {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.error || `导入失败 (${res.status})`);
+  }
+  return res.json();
+}
+
+/** 查询是否需要引导导入仓库内旧知识库(只回计数) */
+export async function fetchImportSuggestion(): Promise<KnowledgeImportSuggestion> {
+  const res = await fetch(`${BASE}/knowledge/import/suggestion`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `请求失败 (${res.status})`);
   }
   return res.json();
 }

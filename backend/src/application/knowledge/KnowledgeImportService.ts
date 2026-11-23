@@ -1,12 +1,14 @@
 // backend/src/application/knowledge/KnowledgeImportService.ts
 // 知识库一次性合并导入:把仓库内孤儿知识库(默认 <repo>/knowledge-base)递归复制到
-// 用户数据目录(knowledgeDirPath())。同名不覆盖,新文件改名为 <name>-imported<ext>,
+// 用户数据目录(knowledgeDirPath())。内容级幂等:目标已有内容相同的文件(含历史 -imported
+// 副本)直接跳过;同名但内容不同不覆盖,新文件改名为 <name>-imported<ext>。
 // 源目录保留作为回滚源。跳过隐藏文件与 .git / node_modules 等无关目录。
 import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { KnowledgeImportReport } from '@ai-task-flow/shared';
+import type { KnowledgeImportReport, KnowledgeImportSuggestion } from '@ai-task-flow/shared';
 
 /** 冲突文件改名后缀 */
 const IMPORTED_SUFFIX = '-imported';
@@ -46,20 +48,42 @@ function toPosix(rel: string): string {
 }
 
 /**
- * 计算目标落盘路径:不存在则原路径;已存在则依次尝试 <name>-imported<ext>、
- * <name>-imported-1<ext> … 直到找到空位,保证绝不覆盖已有文件。
+ * 第 slot 个候选落盘路径:
+ * slot 0 = 原路径,slot 1 = <name>-imported<ext>,slot 2 = <name>-imported-1<ext> …
+ * (与历史导入生成的副本命名保持一致,便于二次导入命中已有内容)
  */
-async function resolveTargetPath(targetAbs: string): Promise<string> {
-  if (!(await exists(targetAbs))) return targetAbs;
-
+function candidatePathForSlot(targetAbs: string, slot: number): string {
+  if (slot === 0) return targetAbs;
   const dir = path.dirname(targetAbs);
   const ext = path.extname(targetAbs);
   const base = path.basename(targetAbs, ext);
+  const suffix = slot === 1 ? IMPORTED_SUFFIX : `${IMPORTED_SUFFIX}-${slot - 1}`;
+  return path.join(dir, `${base}${suffix}${ext}`);
+}
 
-  for (let index = 0; ; index += 1) {
-    const suffix = index === 0 ? IMPORTED_SUFFIX : `${IMPORTED_SUFFIX}-${index}`;
-    const candidate = path.join(dir, `${base}${suffix}${ext}`);
-    if (!(await exists(candidate))) return candidate;
+/** 读取文件 sha256(小文件一次读入内存;知识库文档量级可接受) */
+async function fileSha256(abs: string): Promise<string> {
+  const content = await fs.readFile(abs);
+  return createHash('sha256').update(content).digest('hex');
+}
+
+/**
+ * 计算目标落盘路径(内容级幂等):
+ * - 依槽位依次检查已有文件,内容相同 → 跳过(含之前生成的 -imported 副本);
+ * - 遇到空槽位 → 在该位置落盘,保证绝不覆盖已有文件。
+ */
+async function resolveTargetSlot(
+  targetAbs: string,
+  sourceHash: string,
+): Promise<{ targetAbs: string } | { skipped: true }> {
+  for (let slot = 0; ; slot += 1) {
+    const candidate = candidatePathForSlot(targetAbs, slot);
+    if (!(await exists(candidate))) return { targetAbs: candidate };
+    try {
+      if ((await fileSha256(candidate)) === sourceHash) return { skipped: true };
+    } catch {
+      // 读不了(如同名目录)就当作不匹配,继续找下一个槽位
+    }
   }
 }
 
@@ -143,19 +167,63 @@ async function copyDir(
     if (!entry.isFile()) continue;
 
     try {
-      const targetAbs = await resolveTargetPath(childTargetAbs);
-      await fs.copyFile(childSourceAbs, targetAbs);
+      const sourceHash = await fileSha256(childSourceAbs);
+      const slot = await resolveTargetSlot(childTargetAbs, sourceHash);
+      // 目标中已有内容相同的文件(可能是上次导入的产物):跳过,不再生成重复副本
+      if ('skipped' in slot) {
+        report.skipped += 1;
+        continue;
+      }
+      await fs.copyFile(childSourceAbs, slot.targetAbs);
       report.copied += 1;
-      if (targetAbs !== childTargetAbs) {
+      if (slot.targetAbs !== childTargetAbs) {
         report.conflicts.push({
           from: toPosix(childRel),
-          to: toPosix(path.relative(targetRoot, targetAbs)),
+          to: toPosix(path.relative(targetRoot, slot.targetAbs)),
         });
       }
     } catch (err) {
       report.errors.push({ path: toPosix(childRel), message: errorMessage(err) });
     }
   }
+}
+
+/** 递归统计可导入文件数(与导入同一套跳过规则:隐藏文件/目录 + node_modules);目录缺失返回 0 */
+async function countImportableFiles(dir: string): Promise<number> {
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  for (const entry of entries) {
+    if (shouldSkip(entry.name)) continue;
+    if (entry.isDirectory()) total += await countImportableFiles(path.join(dir, entry.name));
+    else if (entry.isFile()) total += 1;
+  }
+  return total;
+}
+
+export interface ImportSuggestionOptions {
+  /** 源目录;缺省为仓库内 knowledge-base */
+  sourceDir?: string;
+  /** 目标目录(通常是 knowledgeDirPath()) */
+  targetDir: string;
+}
+
+/**
+ * 导入引导判断:源目录(仓库 knowledge-base)有可导入文件,且目标比源少 → 建议导入。
+ * 源目录不存在/为空时不建议(避免对已合并或非仓库运行环境弹提示)。
+ */
+export async function suggestImport(
+  options: ImportSuggestionOptions,
+): Promise<KnowledgeImportSuggestion> {
+  const sourceDir = path.resolve(options.sourceDir ?? defaultImportSourceDir());
+  const targetDir = path.resolve(options.targetDir);
+  const sourceCount = await countImportableFiles(sourceDir);
+  const targetCount = await countImportableFiles(targetDir);
+  return { suggested: sourceCount > 0 && targetCount < sourceCount, sourceCount, targetCount };
 }
 
 /**
@@ -188,7 +256,7 @@ export async function importKnowledge(options: ImportOptions): Promise<ImportRep
 
   await fs.mkdir(targetDir, { recursive: true });
 
-  const report: ImportReport = { copied: 0, conflicts: [], errors: [] };
+  const report: ImportReport = { copied: 0, skipped: 0, conflicts: [], errors: [] };
   await copyDir(sourceDir, targetDir, '', report);
   return report;
 }

@@ -132,6 +132,32 @@ describe('KnowledgeTree 多视图', () => {
     expect(screen.getByText('无匹配文档')).toBeTruthy();
   });
 
+  it('shows guidance when every doc in the view is unlinked', () => {
+    // 文档全未关联:视图里只剩「未关联」组,提示如何补关联
+    useKnowledgeStore.setState({
+      manifest: {
+        ...manifest,
+        tree: { ...manifest.tree, children: [unlinkedDoc] },
+        flatDocs: [unlinkedDoc],
+      },
+    });
+    render(<KnowledgeTree />);
+
+    fireEvent.click(screen.getByRole('button', { name: '版本' }));
+
+    expect(
+      screen.getByText('尚未关联任何文档。在文档详情点『编辑关联』即可按版本/项目/阶段归类。'),
+    ).toBeTruthy();
+  });
+
+  it('hides the guidance when at least one doc is linked', () => {
+    render(<KnowledgeTree />);
+
+    fireEvent.click(screen.getByRole('button', { name: '版本' }));
+
+    expect(screen.queryByText(/尚未关联任何文档/)).toBeNull();
+  });
+
   it('restores the remembered view from localStorage', () => {
     localStorage.setItem('ai-task-flow-knowledge-view', 'stage');
     render(<KnowledgeTree />);

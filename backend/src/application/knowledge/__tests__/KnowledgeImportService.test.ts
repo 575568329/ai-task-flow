@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { importKnowledge } from '../KnowledgeImportService.js';
+import { importKnowledge, suggestImport } from '../KnowledgeImportService.js';
 
 describe('importKnowledge', () => {
   let root: string;
@@ -32,6 +32,7 @@ describe('importKnowledge', () => {
     const report = await importKnowledge({ sourceDir, targetDir });
 
     expect(report.copied).toBe(2);
+    expect(report.skipped).toBe(0);
     expect(report.conflicts).toHaveLength(1);
     expect(report.conflicts[0].from).toBe('技术方案/a.md');
     expect(report.conflicts[0].to).toContain('-imported');
@@ -98,6 +99,41 @@ describe('importKnowledge', () => {
     expect(await fs.readdir(path.join(targetDir, 'docs'))).toEqual(['visible.md']);
   });
 
+  it('should skip all files on repeated import when content is identical', async () => {
+    await fs.mkdir(path.join(sourceDir, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+    await fs.writeFile(path.join(sourceDir, 'docs', 'b.md'), '# b');
+
+    const first = await importKnowledge({ sourceDir, targetDir });
+    expect(first.copied).toBe(2);
+    expect(first.skipped).toBe(0);
+
+    // 二次导入:目标已有内容相同的文件 → 全部跳过,不再生成 -imported 副本
+    const second = await importKnowledge({ sourceDir, targetDir });
+    expect(second.copied).toBe(0);
+    expect(second.skipped).toBe(2);
+    expect(second.conflicts).toHaveLength(0);
+    expect((await fs.readdir(targetDir)).sort()).toEqual(['a.md', 'docs']);
+    expect(await fs.readdir(path.join(targetDir, 'docs'))).toEqual(['b.md']);
+  });
+
+  it('should copy changed content as a new -imported copy', async () => {
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# v1');
+
+    await importKnowledge({ sourceDir, targetDir });
+    // 内容改动后不再算「已存在」,按原冲突规则生成副本
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# v2');
+
+    const report = await importKnowledge({ sourceDir, targetDir });
+
+    expect(report.skipped).toBe(0);
+    expect(report.copied).toBe(1);
+    expect(report.conflicts).toHaveLength(1);
+    expect(await fs.readFile(path.join(targetDir, 'a-imported.md'), 'utf-8')).toBe('# v2');
+    expect(await fs.readFile(path.join(targetDir, 'a.md'), 'utf-8')).toBe('# v1');
+  });
+
   it('should not overwrite an existing -imported file on repeated import', async () => {
     await fs.mkdir(sourceDir, { recursive: true });
     await fs.mkdir(targetDir, { recursive: true });
@@ -112,5 +148,64 @@ describe('importKnowledge', () => {
     expect(files).toContain('a-imported.md');
     expect(files).toContain('a-imported-1.md');
     expect(await fs.readFile(path.join(targetDir, 'a-imported.md'), 'utf-8')).toBe('# first imported');
+  });
+});
+
+describe('suggestImport', () => {
+  let root: string;
+  let sourceDir: string;
+  let targetDir: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'ksug-'));
+    sourceDir = path.join(root, 'src');
+    targetDir = path.join(root, 'dst');
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('should not suggest when source dir is missing', async () => {
+    const result = await suggestImport({ sourceDir: path.join(root, 'missing'), targetDir });
+
+    expect(result).toEqual({ suggested: false, sourceCount: 0, targetCount: 0 });
+  });
+
+  it('should suggest when source has more importable files than target', async () => {
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+    await fs.writeFile(path.join(sourceDir, 'b.md'), '# b');
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.writeFile(path.join(targetDir, 'a.md'), '# a');
+
+    const result = await suggestImport({ sourceDir, targetDir });
+
+    expect(result).toEqual({ suggested: true, sourceCount: 2, targetCount: 1 });
+  });
+
+  it('should not suggest when target already has at least as many files', async () => {
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.writeFile(path.join(targetDir, 'a.md'), '# a');
+
+    const result = await suggestImport({ sourceDir, targetDir });
+
+    expect(result).toEqual({ suggested: false, sourceCount: 1, targetCount: 1 });
+  });
+
+  it('should ignore hidden files and node_modules when counting', async () => {
+    await fs.mkdir(path.join(sourceDir, 'node_modules'), { recursive: true });
+    await fs.mkdir(path.join(sourceDir, '.obsidian'), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'node_modules', 'x.js'), 'x');
+    await fs.writeFile(path.join(sourceDir, '.obsidian', 'y.json'), 'y');
+    await fs.writeFile(path.join(sourceDir, '.secret.md'), 's');
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+
+    const result = await suggestImport({ sourceDir, targetDir });
+
+    expect(result.sourceCount).toBe(1);
+    expect(result.suggested).toBe(true);
   });
 });
