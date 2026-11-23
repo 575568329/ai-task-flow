@@ -113,6 +113,20 @@ describe('VersionDialog', () => {
     expect(screen.queryByText('v_new')).toBeNull();
     expect(screen.getByLabelText('版本名')).toHaveValue('V8.0.9');
   });
+
+  it('separates refresh failure from create failure after the version is created', async () => {
+    const onCreated = vi.fn(async () => { throw new Error('refresh failed'); });
+    render(<VersionDialog open onClose={() => {}} onCreated={onCreated} />);
+
+    fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    // 版本已创建:成功态与 id 仍要展示,只提示刷新失败
+    expect(await screen.findByText('v_new')).toBeTruthy();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('版本已创建,但列表刷新失败,请手动刷新'));
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('创建版本失败'));
+    expect(mockedCreateVersion).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('DeleteVersionDialog', () => {
@@ -183,6 +197,27 @@ describe('RequirementDialog', () => {
       versionId: 'v_1',
       title: '澳门底层数据建设',
     });
+  });
+
+  it('separates refresh failure from create failure after the requirement is created', async () => {
+    const onCreated = vi.fn(async () => { throw new Error('refresh failed'); });
+    render(
+      <RequirementDialog
+        open
+        versionId="v_1"
+        versionName="V8.0.8"
+        projects={projects}
+        onClose={() => {}}
+        onCreated={onCreated}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('需求标题'), { target: { value: '刷新失败' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    expect(await screen.findByText('r_new')).toBeTruthy();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('需求已创建,但列表刷新失败,请手动刷新'));
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('创建需求失败'));
   });
 
   it('omits projects when none is selected', async () => {

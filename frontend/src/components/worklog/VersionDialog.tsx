@@ -49,19 +49,28 @@ export function VersionDialog({ open, onClose, onCreated }: VersionDialogProps) 
     const trimmed = name.trim();
     if (!trimmed || saving) return;
     const trimmedDescription = description.trim();
+    // 创建与刷新分两个异常边界:创建成功后的刷新失败绝不能报成「创建失败」
+    let result: { id: string } | null = null;
     setSaving(true);
     try {
-      const { id } = await worklogApi.createVersion({
+      result = await worklogApi.createVersion({
         name: trimmed,
         ...(trimmedDescription ? { description: trimmedDescription } : {}),
       });
-      setCreatedId(id);
-      toast.success(`版本已创建:${trimmed}`);
-      await onCreated?.({ id, name: trimmed });
     } catch (err) {
       toast.error(`创建版本失败:${errMessage(err)}`);
     } finally {
       setSaving(false);
+    }
+    if (!result) return;
+
+    setCreatedId(result.id);
+    toast.success(`版本已创建:${trimmed}`);
+    try {
+      await onCreated?.({ id: result.id, name: trimmed });
+    } catch {
+      // 版本已落库:提示刷新失败即可,不得诱导用户重复创建
+      toast.error('版本已创建,但列表刷新失败,请手动刷新');
     }
   };
 
