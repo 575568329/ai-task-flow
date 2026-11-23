@@ -310,6 +310,73 @@ describe('worklogRoutes', () => {
     expect(cleared.json().projects[0].paths).toEqual([]);
   });
 
+  it('string fields should reject non-string values with 400 (not 500)', async () => {
+    const versionId = await createVersion('v1');
+    const requirementId = await createRequirement(versionId, 'R');
+
+    const badVersionName = await app.inject({
+      method: 'POST', url: '/api/worklog/versions', payload: { name: 123 },
+    });
+    expect(badVersionName.statusCode).toBe(400);
+
+    const badRequirementVersion = await app.inject({
+      method: 'POST', url: '/api/worklog/requirements',
+      payload: { versionId: 123, title: 'R2' },
+    });
+    expect(badRequirementVersion.statusCode).toBe(400);
+
+    const badRequirementTitle = await app.inject({
+      method: 'POST', url: '/api/worklog/requirements',
+      payload: { versionId, title: 123 },
+    });
+    expect(badRequirementTitle.statusCode).toBe(400);
+
+    const badVersionRename = await app.inject({
+      method: 'POST', url: `/api/worklog/versions/${versionId}/rename`, payload: { newName: 123 },
+    });
+    expect(badVersionRename.statusCode).toBe(400);
+
+    const badRequirementRename = await app.inject({
+      method: 'POST', url: `/api/worklog/requirements/${requirementId}/rename`,
+      payload: { versionId, newName: 123 },
+    });
+    expect(badRequirementRename.statusCode).toBe(400);
+
+    // 无 body 的 record:必填校验 → 400,不得因读 undefined.title 变 500
+    const noBody = await app.inject({ method: 'POST', url: '/api/worklog/entries' });
+    expect(noBody.statusCode).toBe(400);
+  });
+
+  it('DELETE project should only remove the dictionary entry and keep entries', async () => {
+    await createProject('p');
+    const versionId = await createVersion('v1');
+    const requirementId = await createRequirement(versionId, 'R');
+    await recordEntry(versionId, requirementId, { project: 'p' });
+
+    const del = await app.inject({ method: 'DELETE', url: '/api/worklog/projects/p' });
+    expect(del.statusCode).toBe(200);
+
+    const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
+    const data = tree.json();
+    expect(data.projects).toHaveLength(0);
+    // 条目属历史数据:项目名称快照保留,条目不被级联删除
+    expect(data.versions[0].requirements[0].entries).toHaveLength(1);
+    expect(data.versions[0].requirements[0].entries[0].project).toBe('p');
+  });
+
+  it('bind/unbind unknown project should map to 404', async () => {
+    const bind = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/ghost/paths',
+      payload: { paths: ['D:\\xunfei\\ghost'] },
+    });
+    expect(bind.statusCode).toBe(404);
+
+    const unbind = await app.inject({
+      method: 'DELETE', url: '/api/worklog/projects/ghost/paths?path=D%3A%5Cx',
+    });
+    expect(unbind.statusCode).toBe(404);
+  });
+
   it('project rename/delete endpoints should keep working', async () => {
     await createProject('p');
 

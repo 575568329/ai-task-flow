@@ -25,6 +25,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** 读取必填字符串字段:非字符串/空串返回 undefined,由调用方统一 400。
+ *  只做真值判断会放过 {name:123},到服务层 validateName 里 .trim() 抛 TypeError → 500。 */
+function readRequiredString(body: unknown, field: string): string | undefined {
+  if (!isPlainObject(body)) return undefined;
+  const value = body[field];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+/** 可选字符串字段:非字符串时丢弃(不写坏数据),缺省返回 undefined */
+function readOptionalString(body: unknown, field: string): string | undefined {
+  if (!isPlainObject(body)) return undefined;
+  const value = body[field];
+  return typeof value === 'string' ? value : undefined;
+}
+
 export async function registerWorklogRoutes(
   fastify: FastifyInstance,
   worklogService: WorklogService,
@@ -42,8 +57,15 @@ export async function registerWorklogRoutes(
   fastify.post<{ Body: WorklogVersionCreateRequest }>(
     '/api/worklog/versions',
     async (request, reply) => {
+      const name = readRequiredString(request.body, 'name');
+      if (!name) {
+        return reply.status(400).send({ error: 'name 必须为非空字符串' });
+      }
       try {
-        const result = await worklogService.createVersion(request.body ?? { name: '' });
+        const result = await worklogService.createVersion({
+          name,
+          description: readOptionalString(request.body, 'description'),
+        });
         return reply.status(201).send(result);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -56,9 +78,9 @@ export async function registerWorklogRoutes(
   fastify.post<{ Params: { id: string }; Body: { newName?: string } }>(
     '/api/worklog/versions/:id/rename',
     async (request, reply) => {
-      const newName = request.body?.newName;
+      const newName = readRequiredString(request.body, 'newName');
       if (!newName) {
-        return reply.status(400).send({ error: 'newName 必填' });
+        return reply.status(400).send({ error: 'newName 必须为非空字符串' });
       }
       try {
         await worklogService.renameVersion(request.params.id, newName);
@@ -92,10 +114,26 @@ export async function registerWorklogRoutes(
   fastify.post<{ Body: WorklogRequirementCreateRequest }>(
     '/api/worklog/requirements',
     async (request, reply) => {
+      const versionId = readRequiredString(request.body, 'versionId');
+      const title = readRequiredString(request.body, 'title');
+      if (!versionId || !title) {
+        return reply.status(400).send({ error: 'versionId 与 title 必须为非空字符串' });
+      }
+      // projects 只接受字符串数组;非数组/元素非字符串直接 400,避免服务层按字符串逐字符迭代
+      const rawProjects = isPlainObject(request.body) ? request.body.projects : undefined;
+      if (
+        rawProjects !== undefined &&
+        (!Array.isArray(rawProjects) || rawProjects.some((item) => typeof item !== 'string'))
+      ) {
+        return reply.status(400).send({ error: 'projects 必须为字符串数组' });
+      }
       try {
-        const result = await worklogService.createRequirement(
-          request.body ?? ({ versionId: '', title: '' } as WorklogRequirementCreateRequest),
-        );
+        const result = await worklogService.createRequirement({
+          versionId,
+          title,
+          description: readOptionalString(request.body, 'description'),
+          projects: rawProjects as string[] | undefined,
+        });
         return reply.status(201).send(result);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -108,9 +146,10 @@ export async function registerWorklogRoutes(
   fastify.post<{ Params: { id: string }; Body: { versionId?: string; newName?: string } }>(
     '/api/worklog/requirements/:id/rename',
     async (request, reply) => {
-      const { versionId, newName } = request.body ?? {};
+      const versionId = readRequiredString(request.body, 'versionId');
+      const newName = readRequiredString(request.body, 'newName');
       if (!versionId || !newName) {
-        return reply.status(400).send({ error: 'versionId 与 newName 必填' });
+        return reply.status(400).send({ error: 'versionId 与 newName 必须为非空字符串' });
       }
       try {
         await worklogService.renameRequirement(versionId, request.params.id, newName);
@@ -127,8 +166,8 @@ export async function registerWorklogRoutes(
   fastify.delete<{ Params: { id: string }; Querystring: { versionId?: string } }>(
     '/api/worklog/requirements/:id',
     async (request, reply) => {
-      const body = isPlainObject(request.body) ? request.body : {};
-      const versionId = request.query.versionId ?? (body.versionId as string | undefined);
+      const bodyVersionId = readRequiredString(request.body, 'versionId');
+      const versionId = request.query.versionId ?? bodyVersionId;
       if (!versionId) {
         return reply.status(400).send({ error: 'versionId 必填(query 或 body)' });
       }
@@ -151,7 +190,8 @@ export async function registerWorklogRoutes(
     '/api/worklog/entries',
     async (request, reply) => {
       try {
-        const result = await worklogService.record(request.body);
+        // 无 body 时传空对象,让服务层走必填校验 → 400,而不是读 undefined.title 抛 TypeError → 500
+        const result = await worklogService.record(request.body ?? ({} as WorklogRecordRequest));
         return reply.status(201).send(result);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
