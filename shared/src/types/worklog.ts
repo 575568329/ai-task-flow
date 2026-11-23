@@ -34,6 +34,14 @@ export interface WorklogEntry {
   date: string;
   createdAt: number;
   updatedAt: number;
+  /** 记录时的 cwd(原始写法),用于追溯与重新归属 */
+  sourcePath?: string;
+  /** 关联项目名称快照(展示兜底) */
+  relatedProjects?: string[];
+  /** 关联项目稳定引用 */
+  relatedProjectIds?: string[];
+  /** 记录时路径未命中任何项目 */
+  pathUnmatched?: boolean;
 }
 
 /** 版本:自由文本名(v1.2.0 / 11月迭代),项目内唯一 */
@@ -45,9 +53,15 @@ export interface WorklogVersion {
 
 /** 项目:唯一键,精确匹配 */
 export interface WorklogProject {
+  /** 稳定身份(p_xxx);迁移前旧数据可能缺失 */
+  id: string;
+  /** 归属路径,可多个;空/缺省 = 未绑定 */
+  paths?: string[];
   name: string;
   createdAt: number;
   versions: WorklogVersion[];
+  /** 仅由 getTree 计算,不持久化 */
+  missingPaths?: string[];
 }
 
 /** worklog.json 的整体结构 */
@@ -69,6 +83,10 @@ export interface WorklogRecordRequest {
   diff?: string;
   tags?: string[];
   stage?: WorkStage;
+  /** 记录端所在路径(MCP handler 自动填 process.cwd());不传则不做路径归属 */
+  sourcePath?: string;
+  /** 关联项目名称;解析失败的项会被忽略并在 warnings 中返回 */
+  relatedProjects?: string[];
 }
 
 /** record 响应:createdXxx 告知调用方是否新建了层(防拼写错误的版本名裂树) */
@@ -78,6 +96,8 @@ export interface WorklogRecordResponse {
   path: string;
   createdProject: boolean;
   createdVersion: boolean;
+  projectId?: string;
+  warnings?: string[];
 }
 
 /** query_work 入参 */
@@ -98,6 +118,8 @@ export interface WorklogQueryRequest {
   limit?: number;
   /** 默认 false:diff 体积大,仅在明确要求时返回 */
   includeDiff?: boolean;
+  /** 按关联项目名称过滤 */
+  relatedProject?: string;
 }
 
 /** 查询结果条目(轻量:files 只给路径列表) */
@@ -112,6 +134,9 @@ export interface WorklogQueryResultEntry {
   stage?: WorkStage;
   files?: string[];
   diff?: string;
+  sourcePath?: string;
+  relatedProjects?: string[];
+  pathUnmatched?: boolean;
 }
 
 /** list_projects 结果:项目/版本树 + 每版本条目数与首末日期 */
@@ -138,6 +163,7 @@ export interface WorklogUpdateRequest {
   date?: string;
   /** 传新值 = 把条目挪到该版本(不存在则自动创建,与 record 建层一致) */
   version?: string;
+  relatedProjects?: string[];
 }
 
 /** rename 入参(版本/项目通用) */

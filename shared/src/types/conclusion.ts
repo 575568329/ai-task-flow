@@ -45,6 +45,12 @@ export interface Conclusion {
   revisions: ConclusionRevision[];
   createdAt: number;
   updatedAt: number;
+  /** 项目稳定引用;项目不存在时为空 */
+  projectId?: string;
+  /** 关联项目名称快照 */
+  relatedProjects?: string[];
+  /** 关联项目稳定引用 */
+  relatedProjectIds?: string[];
 }
 
 export interface ConclusionData {
@@ -66,6 +72,10 @@ export interface ConclusionCreateRequest {
   changeNote?: string;
   conversationName?: string;
   stage?: WorkStage;
+  /** 由接口层查 worklog 后填入;Service 只存储 */
+  projectId?: string;
+  relatedProjectIds?: string[];
+  relatedProjects?: string[];
 }
 
 export interface ConclusionAppendRequest {
@@ -85,6 +95,10 @@ export interface ConclusionAppendRequest {
   changeNote: string;
   conversationName?: string;
   stage?: WorkStage;
+  /** 由接口层查 worklog 后填入;Service 只存储 */
+  projectId?: string;
+  relatedProjectIds?: string[];
+  relatedProjects?: string[];
 }
 
 /**
@@ -107,6 +121,10 @@ export interface ConclusionRecordRequest {
   stage?: WorkStage;
   expectedRev?: number;
   allowCrossConversation?: boolean;
+  /** 由接口层查 worklog 后填入;Service 只存储 */
+  projectId?: string;
+  relatedProjectIds?: string[];
+  relatedProjects?: string[];
 }
 
 export interface ConclusionRecordResponse {
@@ -154,6 +172,7 @@ export interface ConclusionSummary {
   matchedRev?: number;
   createdAt: number;
   updatedAt: number;
+  relatedProjects?: string[];
 }
 
 export interface ConclusionRevisionSummary {
@@ -183,6 +202,7 @@ export interface ConclusionDetail {
   history?: ConclusionRevision[];
   createdAt: number;
   updatedAt: number;
+  relatedProjects?: string[];
 }
 
 export interface ConclusionCreateResponse {

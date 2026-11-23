@@ -2,6 +2,7 @@
 // 工作记录应用服务:MCP 工具与 HTTP API 的唯一入口(partial/建层/重名规则单点)。
 // 写协议(双层锁/备份)由 JsonWorklogRepository 承担,本类只做业务规则与查询过滤。
 import { randomUUID } from 'node:crypto';
+import { nanoid } from 'nanoid';
 import { isWorkStage } from '@ai-task-flow/shared';
 import type {
   WorklogData,
@@ -90,7 +91,7 @@ export class WorklogService {
       let createdProject = false;
       let createdVersion = false;
       if (!proj) {
-        proj = { name: project, createdAt: Date.now(), versions: [] };
+        proj = { id: `p_${nanoid(8)}`, name: project, createdAt: Date.now(), versions: [] };
         data.projects.push(proj);
         createdProject = true;
       }
