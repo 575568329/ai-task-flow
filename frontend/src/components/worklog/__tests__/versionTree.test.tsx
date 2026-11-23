@@ -1,5 +1,6 @@
 // frontend/src/components/worklog/__tests__/versionTree.test.tsx
-// 版本 → 需求树:层级渲染、复制 id、选择回调、计数/关联项目徽标、最小新建/重命名/删除入口。
+// 版本 → 需求树:层级渲染、复制 id、选择回调、计数/关联项目徽标、
+// 新建/删除版本与新建需求走弹窗回调、重命名行内编辑、删除需求行内二次确认。
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { VersionRequirementTree } from '../VersionRequirementTree';
@@ -105,27 +106,28 @@ describe('VersionRequirementTree', () => {
     expect(names).toEqual(['V8.0.10', 'V8.0.9']);
   });
 
-  it('creates a version through the minimal inline entry', () => {
-    const onCreateVersion = vi.fn();
+  it('opens the version dialog from the bottom entry', () => {
+    const onCreateVersionClick = vi.fn();
     render(
-      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateVersion={onCreateVersion} />,
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateVersionClick={onCreateVersionClick} />,
     );
     fireEvent.click(screen.getByText('新建版本'));
-    fireEvent.change(screen.getByLabelText('新版本名'), { target: { value: 'V8.0.9' } });
-    fireEvent.click(screen.getByLabelText('确认'));
-    expect(onCreateVersion).toHaveBeenCalledWith('V8.0.9');
+    expect(onCreateVersionClick).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a requirement from the version context menu', () => {
-    const onCreateRequirement = vi.fn();
+  it('opens the requirement dialog from the version context menu', () => {
+    const onCreateRequirementClick = vi.fn();
     render(
-      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateRequirement={onCreateRequirement} />,
+      <VersionRequirementTree
+        data={data}
+        selection={{}}
+        onSelect={() => {}}
+        onCreateRequirementClick={onCreateRequirementClick}
+      />,
     );
     // 每个版本行都有菜单项,取第一个(版本 v_1)
     fireEvent.click(screen.getAllByText('新建需求')[0]);
-    fireEvent.change(screen.getByLabelText('新需求标题'), { target: { value: '新需求' } });
-    fireEvent.click(screen.getByLabelText('确认'));
-    expect(onCreateRequirement).toHaveBeenCalledWith('v_1', '新需求');
+    expect(onCreateRequirementClick).toHaveBeenCalledWith('v_1');
   });
 
   it('renames a version inline', () => {
@@ -142,14 +144,23 @@ describe('VersionRequirementTree', () => {
     expect(onRenameVersion).toHaveBeenCalledWith('v_1', 'V8.0.10');
   });
 
-  it('requires a second click before deleting a version', () => {
-    const onDeleteVersion = vi.fn();
+  it('opens the delete-version dialog from the version context menu', () => {
+    const onDeleteVersionClick = vi.fn();
     render(
-      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onDeleteVersion={onDeleteVersion} />,
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onDeleteVersionClick={onDeleteVersionClick} />,
     );
     fireEvent.click(screen.getAllByText('删除版本')[0]);
-    expect(onDeleteVersion).not.toHaveBeenCalled();
+    expect(onDeleteVersionClick).toHaveBeenCalledWith('v_1');
+  });
+
+  it('requires a second click before deleting a requirement', () => {
+    const onDeleteRequirement = vi.fn();
+    render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onDeleteRequirement={onDeleteRequirement} />,
+    );
+    fireEvent.click(screen.getAllByText('删除需求')[0]);
+    expect(onDeleteRequirement).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('确认'));
-    expect(onDeleteVersion).toHaveBeenCalledWith('v_1');
+    expect(onDeleteRequirement).toHaveBeenCalledWith('v_1', 'r_1');
   });
 });

@@ -14,6 +14,9 @@ import type {
   WorkStage,
 } from '@ai-task-flow/shared';
 import { VersionRequirementTree, type RequirementSelection } from './VersionRequirementTree';
+import { VersionDialog } from './VersionDialog';
+import { RequirementDialog } from './RequirementDialog';
+import { DeleteVersionDialog } from './DeleteVersionDialog';
 import { ProjectDictionaryDialog } from './ProjectDictionaryDialog';
 import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
@@ -38,6 +41,10 @@ export function WorklogView() {
   const [relatedFilter, setRelatedFilter] = useState(''); // 关联项目筛选(项目名快照,空=不过滤)
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  /** 弹窗目标:新建版本 / 新建需求(所属版本 id) / 删除版本(版本 id) */
+  const [versionDialogOpen, setVersionDialogOpen] = useState(false);
+  const [requirementVersionId, setRequirementVersionId] = useState<string | null>(null);
+  const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
   const refreshSeq = useRef(0);
@@ -143,33 +150,26 @@ export function WorklogView() {
     }
   };
 
-  const handleCreateVersion = async (name: string) => {
-    try {
-      const { id } = await worklogApi.createVersion({ name });
-      setSelection({ versionId: id });
-      await refresh();
-      toast.success(`版本已创建:${name}`);
-    } catch (err) {
-      toast.error(`创建版本失败:${errMessage(err)}`);
-    }
+  /** 版本创建成功:刷新并把选择落在新版本上(树对新版本天然展开) */
+  const handleVersionCreated = async ({ id }: { id: string; name: string }) => {
+    setSelection({ versionId: id });
+    await refresh();
   };
 
-  const handleCreateRequirement = async (versionId: string, title: string) => {
-    try {
-      const { id } = await worklogApi.createRequirement({ versionId, title });
-      setSelection({ versionId, requirementId: id });
-      await refresh();
-      toast.success(`需求已创建:${title}`);
-    } catch (err) {
-      toast.error(`创建需求失败:${errMessage(err)}`);
-    }
+  /** 需求创建成功:刷新并选中新需求(树会自动展开所属版本) */
+  const handleRequirementCreated = async (
+    { versionId, id }: { id: string; versionId: string; title: string },
+  ) => {
+    setSelection({ versionId, requirementId: id });
+    await refresh();
   };
 
-  const handleDeleteVersion = async (versionId: string) => {
-    await runTreeAction(async () => {
-      await worklogApi.deleteVersion(versionId);
-      if (selection.versionId === versionId) setSelection({});
-    }, '版本已删除');
+  /** 强确认弹窗的删除动作:失败向上抛,由弹窗提示并保持打开 */
+  const confirmDeleteVersion = async (versionId: string) => {
+    await worklogApi.deleteVersion(versionId);
+    if (selection.versionId === versionId) setSelection({});
+    await refresh();
+    toast.success('版本已删除');
   };
 
   const handleDeleteRequirement = async (versionId: string, requirementId: string) => {
@@ -259,6 +259,14 @@ export function WorklogView() {
           ? `关联「${relatedFilter}」`
           : '工作记录';
 
+  // 弹窗目标从最新树数据反查;目标被外部删除时弹窗自动卸载
+  const requirementTargetVersion = requirementVersionId
+    ? data.versions.find((v) => v.id === requirementVersionId)
+    : undefined;
+  const deleteTargetVersion = deleteVersionId
+    ? data.versions.find((v) => v.id === deleteVersionId)
+    : undefined;
+
   return (
     <WorkspaceLayout
       sidebar={(
@@ -266,6 +274,13 @@ export function WorklogView() {
           title="工作记录"
           actions={(
             <>
+              <Button
+                variant="ghost" size="sm" className="size-7 p-0"
+                title="新建版本"
+                onClick={() => setVersionDialogOpen(true)}
+              >
+                <Plus className="size-3.5" />
+              </Button>
               <Button variant="ghost" size="sm" className="size-7 p-0" title="刷新(AI 刚记的条目点这里可见;切换视图也会自动刷新)" onClick={() => void refresh()}>
                 <RefreshCw className="size-3.5" />
               </Button>
@@ -290,12 +305,12 @@ export function WorklogView() {
             data={data}
             selection={selection}
             onSelect={handleSelect}
-            onCreateVersion={(name) => handleCreateVersion(name)}
+            onCreateVersionClick={() => setVersionDialogOpen(true)}
+            onCreateRequirementClick={(versionId) => setRequirementVersionId(versionId)}
+            onDeleteVersionClick={(versionId) => setDeleteVersionId(versionId)}
             onRenameVersion={(versionId, newName) => runTreeAction(
               () => worklogApi.renameVersion(versionId, newName), '版本已重命名',
             )}
-            onDeleteVersion={(versionId) => handleDeleteVersion(versionId)}
-            onCreateRequirement={(versionId, title) => handleCreateRequirement(versionId, title)}
             onRenameRequirement={(versionId, requirementId, newTitle) => runTreeAction(
               () => worklogApi.renameRequirement(versionId, requirementId, newTitle), '需求已重命名',
             )}
@@ -402,6 +417,32 @@ export function WorklogView() {
             ))
           )}
         </div>
+      )}
+
+      <VersionDialog
+        open={versionDialogOpen}
+        onClose={() => setVersionDialogOpen(false)}
+        onCreated={handleVersionCreated}
+      />
+
+      {requirementTargetVersion && (
+        <RequirementDialog
+          open
+          versionId={requirementTargetVersion.id}
+          versionName={requirementTargetVersion.name}
+          projects={data.projects}
+          onClose={() => setRequirementVersionId(null)}
+          onCreated={handleRequirementCreated}
+        />
+      )}
+
+      {deleteTargetVersion && (
+        <DeleteVersionDialog
+          open
+          versionName={deleteTargetVersion.name}
+          onClose={() => setDeleteVersionId(null)}
+          onConfirm={() => confirmDeleteVersion(deleteTargetVersion.id)}
+        />
       )}
 
       <ProjectDictionaryDialog

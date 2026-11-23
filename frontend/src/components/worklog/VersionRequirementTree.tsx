@@ -2,7 +2,8 @@
 // 左栏:版本 → 需求树(条目在右栏)。
 // 版本行:名称 / 展开收起 / 复制 id / 需求数·条目数；需求行:标题 / 关联项目徽标 / 条目数 / 复制 id。
 // 项目路径三态与绑定已移出树(见 ProjectDictionaryDialog),树只保留组织层级。
-// 新建/重命名/删除先给最小内联入口,强确认弹窗由后续任务补足。
+// 新建版本 / 新建需求 / 删除版本走正式弹窗(VersionDialog/RequirementDialog/DeleteVersionDialog);
+// 重命名保持行内快速编辑,删除需求保留行内二次确认(普通确认即可,不涉及级联整版)。
 import { useEffect, useState } from 'react';
 import {
   ChevronDown, ChevronRight, Tag, FileText, Pencil, Trash2, Check, X, Plus,
@@ -21,10 +22,7 @@ export interface RequirementSelection {
 }
 
 type PendingAction =
-  | { kind: 'create-version' }
   | { kind: 'rename-version'; versionId: string; current: string }
-  | { kind: 'delete-version'; versionId: string }
-  | { kind: 'create-requirement'; versionId: string }
   | { kind: 'rename-requirement'; versionId: string; requirementId: string; current: string }
   | { kind: 'delete-requirement'; versionId: string; requirementId: string };
 
@@ -32,11 +30,13 @@ interface VersionRequirementTreeProps {
   data: WorklogData;
   selection: RequirementSelection;
   onSelect: (sel: RequirementSelection) => void;
-  /** 最小新建入口(完整弹窗后续任务提供);未传则该入口不渲染动作 */
-  onCreateVersion?: (name: string) => Promise<void> | void;
+  /** 打开「新建版本」弹窗 */
+  onCreateVersionClick?: () => void;
+  /** 打开「新建需求」弹窗(携带所属版本 id) */
+  onCreateRequirementClick?: (versionId: string) => void;
+  /** 打开「删除版本」强确认弹窗(携带版本 id) */
+  onDeleteVersionClick?: (versionId: string) => void;
   onRenameVersion?: (versionId: string, newName: string) => Promise<void> | void;
-  onDeleteVersion?: (versionId: string) => Promise<void> | void;
-  onCreateRequirement?: (versionId: string, title: string) => Promise<void> | void;
   onRenameRequirement?: (versionId: string, requirementId: string, newTitle: string) => Promise<void> | void;
   onDeleteRequirement?: (versionId: string, requirementId: string) => Promise<void> | void;
 }
@@ -48,8 +48,8 @@ function countVersionEntries(version: WorklogData['versions'][number]): number {
 
 export function VersionRequirementTree({
   data, selection, onSelect,
-  onCreateVersion, onRenameVersion, onDeleteVersion,
-  onCreateRequirement, onRenameRequirement, onDeleteRequirement,
+  onCreateVersionClick, onCreateRequirementClick, onDeleteVersionClick,
+  onRenameVersion, onRenameRequirement, onDeleteRequirement,
 }: VersionRequirementTreeProps) {
   /** 默认全部展开；只记录“已收起”的版本,新版本/新加载的版本天然展开。 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -89,14 +89,8 @@ export function VersionRequirementTree({
     const action = pending;
     setPending(null);
     const text = inputValue.trim();
-    if (action.kind === 'create-version') {
-      if (text) await onCreateVersion?.(text);
-    } else if (action.kind === 'rename-version') {
+    if (action.kind === 'rename-version') {
       if (text) await onRenameVersion?.(action.versionId, text);
-    } else if (action.kind === 'delete-version') {
-      await onDeleteVersion?.(action.versionId);
-    } else if (action.kind === 'create-requirement') {
-      if (text) await onCreateRequirement?.(action.versionId, text);
     } else if (action.kind === 'rename-requirement') {
       if (text) await onRenameRequirement?.(action.versionId, action.requirementId, text);
     } else {
@@ -155,7 +149,7 @@ export function VersionRequirementTree({
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem
-                    onSelect={() => start({ kind: 'create-requirement', versionId: version.id })}
+                    onSelect={() => onCreateRequirementClick?.(version.id)}
                   >
                     <Plus className="mr-2 size-4" /> 新建需求
                   </ContextMenuItem>
@@ -169,7 +163,7 @@ export function VersionRequirementTree({
                   </ContextMenuItem>
                   <ContextMenuItem
                     className="text-destructive"
-                    onSelect={() => setPending({ kind: 'delete-version', versionId: version.id })}
+                    onSelect={() => onDeleteVersionClick?.(version.id)}
                   >
                     <Trash2 className="mr-2 size-4" /> 删除版本
                   </ContextMenuItem>
@@ -181,7 +175,6 @@ export function VersionRequirementTree({
               <CopyIdButton id={version.id} iconOnly className="text-muted-foreground shrink-0" />
             </div>
 
-            {/* 新建版本:最小内联入口 */}
             {pending?.kind === 'rename-version' && pending.versionId === version.id && (
               <InlineInput
                 value={inputValue}
@@ -190,25 +183,6 @@ export function VersionRequirementTree({
                 onCancel={cancel}
                 ariaLabel="新版本名"
               />
-            )}
-            {pending?.kind === 'delete-version' && pending.versionId === version.id && (
-              <ConfirmRow
-                label={`删除版本「${version.name}」(${entryCount} 条)?`}
-                onConfirm={() => void confirmPending()}
-                onCancel={cancel}
-              />
-            )}
-
-            {pending?.kind === 'create-requirement' && pending.versionId === version.id && (
-              <div className="ml-5">
-                <InlineInput
-                  value={inputValue}
-                  onChange={setInputValue}
-                  onConfirm={() => void confirmPending()}
-                  onCancel={cancel}
-                  ariaLabel="新需求标题"
-                />
-              </div>
             )}
 
             {!isCollapsed && version.requirements.map((req) => {
@@ -292,29 +266,19 @@ export function VersionRequirementTree({
         );
       })}
 
-      {pending?.kind === 'create-version' ? (
-        <InlineInput
-          value={inputValue}
-          onChange={setInputValue}
-          onConfirm={() => void confirmPending()}
-          onCancel={cancel}
-          ariaLabel="新版本名"
-        />
-      ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-foreground mt-1 w-full justify-start px-2 text-xs"
-          onClick={() => start({ kind: 'create-version' })}
-        >
-          <Plus className="size-3.5" /> 新建版本
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:text-foreground mt-1 w-full justify-start px-2 text-xs"
+        onClick={() => onCreateVersionClick?.()}
+      >
+        <Plus className="size-3.5" /> 新建版本
+      </Button>
     </div>
   );
 }
 
-/** 二次确认行:删除类操作,首点变确认态再点执行(强确认弹窗由后续任务替换) */
+/** 二次确认行:删除需求(普通确认,不涉级联整版) */
 function ConfirmRow({ label, onConfirm, onCancel }: { label: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="bg-destructive/5 border-destructive/30 mx-2 my-1 flex items-center gap-2 rounded-md border px-2 py-1.5">
@@ -329,7 +293,7 @@ function ConfirmRow({ label, onConfirm, onCancel }: { label: string; onConfirm: 
   );
 }
 
-/** 内联输入行(新建/重命名共用) */
+/** 内联输入行(重命名共用) */
 function InlineInput({ value, onChange, onConfirm, onCancel, ariaLabel }: {
   value: string;
   onChange: (v: string) => void;
