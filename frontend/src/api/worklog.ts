@@ -34,4 +34,15 @@ export const worklogApi = {
 
   renameProject: (project: string, newName: string) =>
     http.post<{ ok: boolean }>(`/worklog/projects/${encodeURIComponent(project)}/rename`, { newName }, true),
+
+  /** 绑定项目路径(整体替换;后端校验绝对路径与跨项目冲突) */
+  bindPaths: (project: string, paths: string[]) =>
+    http.put<{ ok: boolean }>(`/worklog/projects/${encodeURIComponent(project)}/paths`, { paths }, true),
+
+  /** 解绑单个已绑定路径 */
+  unbindPath: (project: string, path: string) =>
+    http.delete<{ ok: boolean }>(
+      `/worklog/projects/${encodeURIComponent(project)}/paths?path=${encodeURIComponent(path)}`,
+      true,
+    ),
 };

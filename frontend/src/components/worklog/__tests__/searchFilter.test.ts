@@ -14,7 +14,7 @@ function entry(over: Partial<WorklogEntry>): WorklogEntry {
 const data: WorklogData = {
   projects: [
     {
-      name: '搜题平台', createdAt: 1,
+      id: 'p_1', name: '搜题平台', createdAt: 1,
       versions: [
         { name: 'V8.0.5', createdAt: 1, entries: [
           entry({ id: 'e_a', title: '澳门试题管理页与检索域切换', detail: '字典域切换改造', files: [{ path: 'src/exam/SearchPanel.vue' }], createdAt: 3, stage: 'dev' }),
@@ -26,7 +26,7 @@ const data: WorklogData = {
       ],
     },
     {
-      name: 'ai-task-flow', createdAt: 3,
+      id: 'p_2', name: 'ai-task-flow', createdAt: 3,
       versions: [
         { name: 'v0.1.0', createdAt: 3, entries: [
           entry({ id: 'e_d', title: '修复白屏 bug', detail: 'ENOENT 容错', createdAt: 9 }),

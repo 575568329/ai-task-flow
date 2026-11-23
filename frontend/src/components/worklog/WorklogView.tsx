@@ -200,6 +200,7 @@ export function WorklogView() {
                 () => worklogApi.deleteProject(p), '项目已删除',
                 (prev) => (prev.project === p ? {} : prev),
               )()}
+              onPathsChanged={() => refresh()}
             />
           )}
         </WorkspaceSidebar>

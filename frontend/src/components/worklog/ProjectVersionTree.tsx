@@ -1,8 +1,9 @@
 // frontend/src/components/worklog/ProjectVersionTree.tsx
-// 左栏:项目/版本树(计数徽标 + 右键 重命名/删除)。重命名与删除均内联/确认态,零二级弹窗。
+// 左栏:项目/版本树(计数徽标 + 右键 重命名/删除/绑定路径)。
+// 项目第二行显示路径三态:已绑定尾段(+N)/未绑定/路径不存在标红。重命名与删除仍内联/确认态。
 import { useEffect, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, FolderGit2, Tag, Pencil, Trash2, Check, X,
+  ChevronDown, ChevronRight, FolderGit2, Tag, Pencil, Trash2, Check, X, Link2,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { WorklogData } from '@ai-task-flow/shared';
+import { ProjectPathDialog } from './ProjectPathDialog';
 
 export interface TreeSelection {
   project?: string;
@@ -24,6 +26,16 @@ interface ProjectVersionTreeProps {
   onRenameProject: (project: string, newName: string) => Promise<void>;
   onDeleteVersion: (project: string, version: string) => Promise<void>;
   onDeleteProject: (project: string) => Promise<void>;
+  /** 路径绑定/解绑成功后重拉树(不传则只在弹窗内提示) */
+  onPathsChanged?: () => void | Promise<void>;
+}
+
+/** 路径尾两段(统一用 \ 展示):D:\xunfei\资源加工平台 → …\xunfei\资源加工平台 */
+export function formatPathTail(path: string): string {
+  const segments = path.split(/[\\/]+/).filter(Boolean);
+  if (segments.length === 0) return path;
+  const tail = segments.slice(-2).join('\\');
+  return segments.length > 2 ? `…\\${tail}` : tail;
 }
 
 type PendingAction =
@@ -34,12 +46,14 @@ type PendingAction =
 
 export function ProjectVersionTree({
   data, selection, onSelect,
-  onRenameVersion, onRenameProject, onDeleteVersion, onDeleteProject,
+  onRenameVersion, onRenameProject, onDeleteVersion, onDeleteProject, onPathsChanged,
 }: ProjectVersionTreeProps) {
   /** 默认全部收起；只记录“已展开”的项目，新项目/新加载的项目也默认收起。 */
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  /** 正在绑定路径的项目名(弹窗挂载即 open;关闭置空) */
+  const [bindingProject, setBindingProject] = useState<string | null>(null);
 
   const toggle = (project: string) => {
     setExpanded((prev) => {
@@ -77,6 +91,10 @@ export function ProjectVersionTree({
     void version; // rename-project 时 version 不用
   };
 
+  const bindingTarget = bindingProject
+    ? data.projects.find((p) => p.name === bindingProject)
+    : undefined;
+
   return (
     <div className="space-y-0.5">
       {data.projects.map((project) => {
@@ -87,6 +105,8 @@ export function ProjectVersionTree({
         );
         const isProjectActive = selection.project === project.name && !selection.version;
         const totalEntries = project.versions.reduce((sum, v) => sum + v.entries.length, 0);
+        const boundPaths = project.paths ?? [];
+        const isPathMissing = (project.missingPaths?.length ?? 0) > 0;
         return (
           <div key={project.name}>
             <ContextMenu>
@@ -95,18 +115,40 @@ export function ProjectVersionTree({
                   type="button"
                   onClick={() => { onSelect({ project: project.name }); toggle(project.name); }}
                   className={cn(
-                    'hover:bg-accent flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm font-medium',
+                    'hover:bg-accent flex w-full flex-col items-stretch gap-0.5 rounded-md px-2 py-1.5 text-left text-sm font-medium',
                     isProjectActive && 'bg-accent',
                   )}
                 >
-                  {project.versions.length > 0 && (
-                    isCollapsed
-                      ? <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
-                      : <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-                  )}
-                  <FolderGit2 className="text-primary size-4 shrink-0" />
-                  <span className="flex-1 truncate">{project.name}</span>
-                  <Badge variant="secondary" className="shrink-0">{totalEntries}</Badge>
+                  <span className="flex items-center gap-1.5">
+                    {project.versions.length > 0 && (
+                      isCollapsed
+                        ? <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+                        : <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
+                    )}
+                    <FolderGit2 className="text-primary size-4 shrink-0" />
+                    <span className="flex-1 truncate">{project.name}</span>
+                    <Badge variant="secondary" className="shrink-0">{totalEntries}</Badge>
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1 pl-5 text-[11px] font-normal">
+                    {boundPaths.length > 0 ? (
+                      <>
+                        <span
+                          className={cn(
+                            'truncate',
+                            isPathMissing ? 'text-destructive' : 'text-muted-foreground',
+                          )}
+                          title={isPathMissing ? '路径不存在' : boundPaths[0]}
+                        >
+                          {formatPathTail(boundPaths[0])}
+                        </span>
+                        {boundPaths.length > 1 && (
+                          <span className="text-muted-foreground shrink-0">+{boundPaths.length - 1}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/70">未绑定路径</span>
+                    )}
+                  </span>
                 </button>
               </ContextMenuTrigger>
               <ContextMenuContent>
@@ -114,6 +156,9 @@ export function ProjectVersionTree({
                   onSelect={() => startRename('rename-project', project.name, '', project.name)}
                 >
                   <Pencil className="mr-2 size-4" /> 重命名
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => setBindingProject(project.name)}>
+                  <Link2 className="mr-2 size-4" /> 绑定路径…
                 </ContextMenuItem>
                 <ContextMenuItem
                   className="text-destructive"
@@ -197,6 +242,17 @@ export function ProjectVersionTree({
           </div>
         );
       })}
+
+      {bindingTarget && (
+        <ProjectPathDialog
+          project={bindingTarget.name}
+          paths={bindingTarget.paths ?? []}
+          missingPaths={bindingTarget.missingPaths}
+          open
+          onOpenChange={(open) => { if (!open) setBindingProject(null); }}
+          onChanged={onPathsChanged}
+        />
+      )}
     </div>
   );
 }
