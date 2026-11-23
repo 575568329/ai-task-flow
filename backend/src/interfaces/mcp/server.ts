@@ -26,11 +26,11 @@ import { ALL_TOOLS, HANDLERS } from './tools/index.js';
  * AI Task Flow MCP Server
  *
  * 提供给 Claude Code/ZCode 的 MCP 工具：
- * - worklog 九工具(record_work/query_work/list_projects/update_work/delete_work/
- *   delete_version/delete_project/rename_version/rename_project)
+ * - worklog 十一工具(record_work/query_work/list_projects/list_versions/list_requirements/
+ *   update_work/delete_work/delete_version/delete_project/rename_version/rename_project)
  * - 结论卡双工具(record_conclusion/query_conclusions)
  * - save_to_knowledge: 写入知识库
- * 共 12 个工具。
+ * 共 14 个工具。
  */
 class AITaskFlowServer {
   private server: Server;

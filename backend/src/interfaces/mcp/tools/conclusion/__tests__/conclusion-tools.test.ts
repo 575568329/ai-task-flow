@@ -118,7 +118,8 @@ describe('conclusion MCP tools', () => {
   });
 
   it('should resolve project id and warn on unknown related projects', async () => {
-    await deps.worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    // 新模型:项目是字典,record_conclusion 只需项目已存在即可解析 id(不再依赖条目)
+    await deps.worklogService.createProject({ name: '题库' });
     const projectId = (await deps.worklogService.getTree()).projects[0].id;
 
     const created = await record({
@@ -141,7 +142,7 @@ describe('conclusion MCP tools', () => {
 
   it('should expose and pass through relatedProject filter', async () => {
     expect(queryToolDef.inputSchema.properties).toHaveProperty('relatedProject');
-    await deps.worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await deps.worklogService.createProject({ name: '题库' });
     await record({
       scope: 'project', project: '题库', title: '跨项目卡', decision: 'd',
       relatedProjects: ['题库'],

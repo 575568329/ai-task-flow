@@ -1,5 +1,6 @@
 // backend/src/interfaces/mcp/tools/worklog/record-work.ts
-import type { WorkStage } from '@ai-task-flow/shared';
+// 新模型:版本/需求由用户在页面创建,AI 只传 id;不存在时报服务层的可操作错误(含候选)。
+import { isWorkStage, type WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { STAGE_SCHEMA } from '../stageSchema.js';
 import { CATALOG, ok, fail } from './_shared.js';
@@ -10,10 +11,16 @@ export const toolDef = {
   inputSchema: {
     type: 'object' as const,
     properties: {
-      project: { type: 'string' as const, description: '项目名(唯一键,如 ai-task-flow)' },
-      version: { type: 'string' as const, description: '版本名(自由文本,如 v1.2.0 / 11月迭代,不存在会自动创建)' },
+      versionId: { type: 'string' as const, description: '版本 id(如 v_ab12cd34),由用户在页面创建后复制;先 list_versions 获取' },
+      requirementId: { type: 'string' as const, description: '需求 id(如 r_ab12cd34),由用户在页面创建后复制;先 list_requirements 获取' },
       title: { type: 'string' as const, description: '一句话功能点' },
       detail: { type: 'string' as const, description: 'markdown 详细改动说明:改了什么/为什么/影响面' },
+      project: { type: 'string' as const, description: '本次实际改动的项目名(可选,不传按路径归属;项目须已存在)' },
+      relatedProjects: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
+        description: '同时涉及的其他项目名称(可选)',
+      },
       files: {
         type: 'array' as const,
         description: '改动文件引用(从 git status/diff 提取),可选',
@@ -32,40 +39,47 @@ export const toolDef = {
         type: 'array' as const, items: { type: 'string' as const },
         description: '标签,约定 feat/fix/refactor/docs,可选(缺陷修改用 fix)',
       },
-      relatedProjects: {
-        type: 'array' as const,
-        items: { type: 'string' as const },
-        description: '同时涉及的其他项目名称(可选)',
-      },
       stage: STAGE_SCHEMA,
     },
-    required: ['project', 'version', 'title', 'detail', 'stage'],
+    required: ['versionId', 'requirementId', 'title', 'detail', 'stage'],
   },
 };
 
 export async function handle(args: Record<string, unknown> | undefined, deps: ToolDeps) {
   args ??= {};
   try {
+    const versionId = String(args.versionId ?? '').trim();
+    const requirementId = String(args.requirementId ?? '').trim();
+    if (!versionId || !requirementId) {
+      return fail(new Error(
+        'versionId 与 requirementId 必填:请先 list_versions / list_requirements 获取 id,并让用户确认',
+      ));
+    }
+    if (!isWorkStage(args.stage)) {
+      return fail(new Error(
+        'stage 必填且必须是唯一阶段值(req/design/dev/self-test/review/coverage/release/retro);缺陷修改用 tags 的 fix,不占 stage',
+      ));
+    }
+
     const result = await deps.worklogService.record({
-      project: String(args.project ?? ''),
-      version: String(args.version ?? ''),
+      versionId,
+      requirementId,
       title: String(args.title ?? ''),
       detail: String(args.detail ?? ''),
+      project: args.project !== undefined && args.project !== null ? String(args.project) : undefined,
       files: args.files as never,
       diff: args.diff ? String(args.diff) : undefined,
       tags: args.tags as string[] | undefined,
       relatedProjects: Array.isArray(args.relatedProjects) ? (args.relatedProjects as string[]) : undefined,
       // cwd 不暴露给 AI:记录端进程所在目录,用于服务端按项目路径归属记录
       sourcePath: process.cwd(),
-      stage: args.stage as WorkStage | undefined,
+      stage: args.stage as WorkStage,
     });
-    const notes: string[] = ['✅ 已记录'];
-    if (result.createdProject) notes.push(`(已新建项目 "${String(args.project)}")`);
-    if (result.createdVersion) notes.push(`(已新建版本 "${String(args.version)}"——若非本意请用 rename_version 纠正)`);
+
     // warnings:关联项目拼错被忽略、路径未归属等,必须回传给 AI 让它可纠正
     const warnings = (result.warnings ?? []).map((w) => `⚠ ${w}`);
     return ok([
-      ...notes,
+      '✅ 已记录',
       '',
       `**路径**: \`${result.path}\``,
       ...(warnings.length ? ['', ...warnings] : []),

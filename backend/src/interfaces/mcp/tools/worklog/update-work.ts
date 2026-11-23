@@ -18,7 +18,11 @@ export const toolDef = {
       files: { type: 'array' as const, description: '新文件引用,可选', items: { type: 'object' as const, properties: { path: { type: 'string' as const }, startLine: { type: 'number' as const }, endLine: { type: 'number' as const } }, required: ['path'] } },
       diff: { type: 'string' as const, description: '新 diff 原文,可选' },
       date: { type: 'string' as const, description: '新日期 YYYY-MM-DD,可选' },
-      version: { type: 'string' as const, description: '挪到该版本(不存在自动创建),可选' },
+      relatedProjects: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
+        description: '新关联项目名称列表,可选;传空数组表示清空关联',
+      },
     },
     required: ['entryId'],
   },
@@ -35,9 +39,16 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       files: args.files as never,
       diff: args.diff !== undefined ? String(args.diff) : undefined,
       date: args.date !== undefined ? String(args.date) : undefined,
-      version: args.version !== undefined ? String(args.version) : undefined,
+      relatedProjects: Array.isArray(args.relatedProjects) ? (args.relatedProjects as string[]) : undefined,
     });
-    return ok(`✅ 已更新(仅改动传入字段)\n\n**路径**: \`${result.path}\``);
+    // 关联项目拼错被忽略时回传警告,让 AI 可纠正
+    const warnings = (result.warnings ?? []).map((w) => `⚠ ${w}`);
+    return ok([
+      '✅ 已更新(仅改动传入字段)',
+      '',
+      `**路径**: \`${result.path}\``,
+      ...(warnings.length ? ['', ...warnings] : []),
+    ].join('\n'));
   } catch (err) {
     return fail(err);
   }

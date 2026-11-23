@@ -1,11 +1,13 @@
 // backend/src/interfaces/mcp/tools/index.ts
 // Barrel export: 所有 MCP 工具处理器。
-// worklog 九工具的 name/description 单一来源为 shared mcpToolCatalog。
+// worklog 十一工具的 name/description 单一来源为 shared mcpToolCatalog。
 import type { ToolDeps } from './types.js';
 import { toolDef as knowledgeDef, handle as knowledgeHandler } from './save-to-knowledge.js';
 import { toolDef as recordDef, handle as recordHandler } from './worklog/record-work.js';
 import { toolDef as queryDef, handle as queryHandler } from './worklog/query-work.js';
 import { toolDef as listProjectsDef, handle as listProjectsHandler } from './worklog/list-projects.js';
+import { toolDef as listVersionsDef, handle as listVersionsHandler } from './worklog/list-versions.js';
+import { toolDef as listRequirementsDef, handle as listRequirementsHandler } from './worklog/list-requirements.js';
 import { toolDef as updateDef, handle as updateHandler } from './worklog/update-work.js';
 import { toolDef as deleteWorkDef, handle as deleteWorkHandler } from './worklog/delete-work.js';
 import { toolDef as deleteVersionDef, handle as deleteVersionHandler } from './worklog/delete-version.js';
@@ -25,6 +27,8 @@ export const ALL_TOOLS = [
   recordDef,
   queryDef,
   listProjectsDef,
+  listVersionsDef,
+  listRequirementsDef,
   updateDef,
   deleteWorkDef,
   deleteVersionDef,
@@ -41,6 +45,8 @@ export const HANDLERS: Record<string, ToolHandler> = {
   record_work: recordHandler,
   query_work: queryHandler,
   list_projects: listProjectsHandler,
+  list_versions: listVersionsHandler,
+  list_requirements: listRequirementsHandler,
   update_work: updateHandler,
   delete_work: deleteWorkHandler,
   delete_version: deleteVersionHandler,

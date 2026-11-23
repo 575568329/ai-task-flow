@@ -61,9 +61,10 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
   {
     name: 'record_work',
     description:
-      '记录一条工作内容(项目→版本→功能点)。干完一波修改后调用;项目/版本不存在会自动创建;' +
+      '记录一条工作内容(版本 → 需求 → 功能点条目)。版本与需求必须由用户在页面创建,AI 只传 id;不要尝试创建或猜名称——id 不存在时会报错并列出可选值。' +
+      '记录前先调 list_versions / list_requirements 拿到 versionId 与 requirementId。' +
       'files 从 git status/diff 取改动文件路径与行号,diff 附 git diff 原文;' +
-      'relatedProjects 传同时涉及的其他项目名;记录时自动带上当前工作目录用于路径归属。' +
+      'project 传本次实际改动的项目名(可选,不传按路径归属);relatedProjects 传同时涉及的其他项目名;记录时自动带上当前工作目录用于路径归属。' +
       'detail 必须结构化分条,禁止大段流水账:Bug 修复按「### 问题(现象+报错)→### 原因→### 解决(1.2.3.分点)→### 验证」;' +
       '任务功能按「### 需求→### 方案→### 实现(1.2.3.分点)→### 验证」。' +
       '内容要完善可追溯:文件路径/版本号/数字必须属实,禁止臆造。' +
@@ -72,30 +73,49 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
       'review 代码评审 / coverage 覆盖度测试 / release 上线 / retro 复盘；缺陷修改用 tags 的 fix 表示,不占 stage。' +
       '本工具只记录代码变更(diff/文件/行号);讨论结论、决策理由、关键数据请用 record_conclusion。',
     whenToUse: 'AI 完成一波代码修改、准备汇报时——先记录再汇报,别让成果只留在对话里。',
-    userPromptExample: '「把这次改动记录到 ai-task-flow 的 v1.2.0,带上 diff 和改动文件,Bug 按问题/原因/解决/验证 格式写清楚」',
+    userPromptExample: '「把这次改动记录到 V8.0.8 的澳门底层数据建设需求下,带上 diff 和改动文件,Bug 按问题/原因/解决/验证 格式写清楚」',
   },
   {
     name: 'query_work',
     description:
       '回溯查询工作记录。entryId 按条目 id 精确查询(页面上复制的 e_xxx),传入时忽略其他过滤条件;' +
-      '其余支持项目/版本精确过滤、关联项目(relatedProject)过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、' +
-      '日期范围(dateFrom/dateTo)。结果每条都带 ID:xxx,可用于后续 update_work/delete_work。' +
+      '其余支持 versionId / requirementId 精确过滤(先 list_versions / list_requirements 获取)、项目(project)精确过滤、' +
+      '关联项目(relatedProject)过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、日期范围(dateFrom/dateTo)。' +
+      '结果每条都带 ID:xxx 与所属版本名/需求名,可用于后续 update_work/delete_work。' +
       'diff 默认不返回,includeDiff:true 时携带。',
     whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的",或直接给出记录 id 时,先查记录再回答。',
-    userPromptExample: '「查一下 ai-task-flow 上周关于登录页的改动记录」',
+    userPromptExample: '「查一下 V8.0.8 澳门底层数据建设需求下上周的改动记录」',
   },
   {
     name: 'list_projects',
-    description: '列出所有项目与版本树(含项目 id、路径尾段、每版本条目数与首末日期)。记录前先查,对齐已有项目/版本名,防止拼错裂树。输出项目 id 与路径尾段,绑定路径请让用户在页面操作。',
-    whenToUse: '记录前不确定项目/版本的准确名字时,先调它看一眼再 record_work。',
-    userPromptExample: '「看下工作记录里已经有哪些项目和版本」',
+    description:
+      '列出项目字典(项目 id、名称、路径尾段、关联条目数)。新模型下项目只是条目属性与路径归属字典,不再承载版本树;' +
+      '版本/需求请用 list_versions / list_requirements 获取 id。本工具只读,路径绑定请让用户在页面操作。',
+    whenToUse: '记录前不确定项目名,或想确认项目 id 与路径绑定情况时,先调它看一眼再 record_work。',
+    userPromptExample: '「看下工作记录里已经有哪些项目、id 是什么、有没有绑定路径」',
+  },
+  {
+    name: 'list_versions',
+    description:
+      '列出所有版本(id、名称、需求数、条目数、首末日期)。只读,用于让 AI 获取 versionId;版本只能由用户在页面创建,AI 不得创建或猜名称。',
+    whenToUse: '记录前拿 versionId,或用户问"现在有哪些版本/版本 id 是什么"时。',
+    userPromptExample: '「看下现在有哪些版本,各自的 id 是什么」',
+  },
+  {
+    name: 'list_requirements',
+    description:
+      '列出需求(id、标题、所属版本、关联项目、条目数)。只读,用于让 AI 获取 requirementId;' +
+      '传 versionId 只看该版本,不传则列全部。需求只能由用户在页面创建,AI 不得创建或猜名称。',
+    whenToUse: '拿到 versionId 后找需求 id,或用户问"某版本下有哪些需求"时。',
+    userPromptExample: '「V8.0.8 下面有哪些需求,把 id 给我」',
   },
   {
     name: 'update_work',
     description:
-      '部分更新一条记录(只改传入的字段:title/detail/tags/stage/files/diff/date)。version 传新值=把条目挪到该版本(不存在则自动创建)。' +
+      '部分更新一条记录(只改传入的字段:title/detail/tags/stage/files/diff/date/relatedProjects)。' +
+      'relatedProjects 传空数组表示清空关联;不支持挪版本(条目所属版本/需求由用户决定)。' +
       '补写 detail 时遵循与 record_work 相同的结构化模板与自查规则。',
-    whenToUse: '记录写错了要改、要补充内容、或要把条目挪到别的版本时。',
+    whenToUse: '记录写错了要改、要补充内容或调整关联项目时。',
     userPromptExample: '「把刚才那条记录的标题改准确一点,diff 也补上」',
   },
   {
@@ -106,21 +126,23 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
   },
   {
     name: 'delete_version',
-    description: '删除整个版本及其全部条目,可删非空版本(执行前自动快照备份)。',
+    description:
+      '按 versionId 删除整个版本及其全部需求与条目,可删非空版本(执行前自动快照备份)。versionId 用 list_versions 获取。',
     whenToUse: '某个迭代/版本整体作废时。',
     userPromptExample: '「v0.9 那个废弃版本整个删掉」',
   },
   {
     name: 'delete_project',
-    description: '删除整个项目及其全部版本与条目(执行前自动快照备份)。',
-    whenToUse: '项目不再跟进、记录整体清理时。',
-    userPromptExample: '「demo-project 不做了,工作记录也删了」',
+    description: '从项目字典移除该项目,不删除历史条目(项目名快照保留;执行前自动快照备份)。',
+    whenToUse: '项目不再跟进、要从项目字典清理时。',
+    userPromptExample: '「demo-project 不做了,从项目字典里删掉」',
   },
   {
     name: 'rename_version',
-    description: '重命名版本(执行前自动快照备份)。新名与项目内既有版本重名会报错且不改动。',
+    description:
+      '按 versionId 重命名版本(执行前自动快照备份)。新名与既有版本重名会报错且不改动。versionId 用 list_versions 获取。',
     whenToUse: '版本名写错(如 v1.2 写成 1.2)要纠正时。',
-    userPromptExample: '「把 ai-task-flow 的 1.2 版本名改成 v1.2.0」',
+    userPromptExample: '「把 1.2 那个版本名改成 v1.2.0」',
   },
   {
     name: 'rename_project',

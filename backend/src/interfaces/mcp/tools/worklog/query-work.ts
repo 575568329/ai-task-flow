@@ -11,8 +11,9 @@ export const toolDef = {
     type: 'object' as const,
     properties: {
       entryId: { type: 'string' as const, description: '按条目 id 精确查询(如 e_d3744a73,页面上可复制);传入时忽略其他过滤条件,可选' },
+      versionId: { type: 'string' as const, description: '按版本 id 精确过滤(先 list_versions 获取),可选' },
+      requirementId: { type: 'string' as const, description: '按需求 id 精确过滤(先 list_requirements 获取),可选' },
       project: { type: 'string' as const, description: '按项目精确过滤,可选' },
-      version: { type: 'string' as const, description: '按版本精确过滤,可选' },
       keyword: { type: 'string' as const, description: '关键词,对标题/详情/文件路径不区分大小写模糊,可选' },
       relatedProject: { type: 'string' as const, description: '按关联项目名称过滤(条目同时涉及该项目),可选' },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签任一命中,可选' },
@@ -30,8 +31,9 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
   try {
     const entries = await deps.worklogService.query({
       entryId: args.entryId ? String(args.entryId) : undefined,
+      versionId: args.versionId ? String(args.versionId) : undefined,
+      requirementId: args.requirementId ? String(args.requirementId) : undefined,
       project: args.project ? String(args.project) : undefined,
-      version: args.version ? String(args.version) : undefined,
       keyword: args.keyword ? String(args.keyword) : undefined,
       relatedProject: args.relatedProject ? String(args.relatedProject) : undefined,
       tags: args.tags as string[] | undefined,
@@ -48,7 +50,12 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       const head = `### ${e.title}`;
       const stage = e.stage ? WORK_STAGE_LABELS[e.stage] : '未标注';
       const related = e.relatedProjects?.length ? [`关联:${e.relatedProjects.join(',')}`] : [];
-      const meta = [`ID:${e.id}`, `${e.project}/${e.version}`, e.date, `阶段:${stage}`, ...related, ...(e.tags ?? [])].join(' · ');
+      const project = e.project ? [`项目:${e.project}`] : [];
+      // 新模型:展示版本名/需求名,让 AI 知道条目落在哪一层
+      const meta = [
+        `ID:${e.id}`, `${e.versionName} / ${e.requirementTitle}`, e.date, `阶段:${stage}`,
+        ...project, ...related, ...(e.tags ?? []),
+      ].join(' · ');
       const files = e.files?.length ? `\n文件: ${e.files.join(', ')}` : '';
       const unmatched = e.pathUnmatched ? '\n⚠ 路径未归属任何项目，可在页面绑定路径' : '';
       const diff = e.diff ? `\n\n\`\`\`diff\n${e.diff}\n\`\`\`` : '';
