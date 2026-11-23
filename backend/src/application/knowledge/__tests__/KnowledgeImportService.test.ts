@@ -55,6 +55,27 @@ describe('importKnowledge', () => {
     expect(await fs.readFile(path.join(sourceDir, 'only.md'), 'utf-8')).toBe('# only');
   });
 
+  it('should reject when target is inside source (recursive copy guard)', async () => {
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+    const nestedTarget = path.join(sourceDir, 'nested-target');
+
+    await expect(importKnowledge({ sourceDir, targetDir: nestedTarget })).rejects.toThrow(
+      /不能互相包含/,
+    );
+  });
+
+  it('should reject when source is inside target (recursive copy guard)', async () => {
+    await fs.mkdir(targetDir, { recursive: true });
+    const nestedSource = path.join(targetDir, 'nested-source');
+    await fs.mkdir(nestedSource, { recursive: true });
+    await fs.writeFile(path.join(nestedSource, 'a.md'), '# a');
+
+    await expect(importKnowledge({ sourceDir: nestedSource, targetDir })).rejects.toThrow(
+      /不能互相包含/,
+    );
+  });
+
   it('should reject with readable error when source dir missing', async () => {
     await expect(
       importKnowledge({ sourceDir: path.join(root, 'missing'), targetDir }),

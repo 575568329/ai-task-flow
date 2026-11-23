@@ -11,12 +11,12 @@ export interface KnowledgeImportReport {
   errors: Array<{ path: string; message: string }>;
 }
 
-/** 一次性导入旧知识库(sourceDir 缺省时由服务端定位仓库内 knowledge-base) */
-export async function importKnowledge(sourceDir?: string): Promise<KnowledgeImportReport> {
+/** 一次性导入旧知识库(源目录固定由服务端解析仓库内 knowledge-base,前端不可指定路径) */
+export async function importKnowledge(): Promise<KnowledgeImportReport> {
   const res = await fetch(`${BASE}/knowledge/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sourceDir ? { sourceDir } : {}),
+    body: JSON.stringify({}),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

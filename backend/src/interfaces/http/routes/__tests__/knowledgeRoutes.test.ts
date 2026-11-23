@@ -1,5 +1,5 @@
 // backend/src/interfaces/http/routes/__tests__/knowledgeRoutes.test.ts
-// 知识库导入端点:成功返回报告、非本机拒绝、源目录缺失映射 400。
+// 知识库导入端点:默认源目录导入、body.sourceDir 被忽略(安全回归)、非本机拒绝。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import fs from 'node:fs/promises';
@@ -12,12 +12,10 @@ describe('knowledgeRoutes 导入', () => {
   let app: ReturnType<typeof Fastify>;
   let root: string;
   let targetDir: string;
-  let sourceDir: string;
 
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'kimp-routes-'));
     targetDir = path.join(root, 'dst');
-    sourceDir = path.join(root, 'src');
     app = Fastify();
     await registerKnowledgeRoutes(app, new KnowledgeService(targetDir));
   });
@@ -27,19 +25,33 @@ describe('knowledgeRoutes 导入', () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  it('should copy files and return import report', async () => {
-    await fs.mkdir(sourceDir, { recursive: true });
-    await fs.writeFile(path.join(sourceDir, 'a.md'), '# a');
+  it('should import default repo knowledge-base and return report', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/knowledge/import' });
+
+    expect(res.statusCode).toBe(200);
+    const report = res.json();
+    expect(report.copied).toBeGreaterThan(0);
+    expect(report.errors).toEqual([]);
+    // 目标目录已落盘至少一个 md 文档
+    const files = await fs.readdir(targetDir, { recursive: true });
+    expect(files.some((f) => String(f).endsWith('.md'))).toBe(true);
+  });
+
+  it('should ignore sourceDir in body (no arbitrary local path import)', async () => {
+    // 攻击者构造的敏感目录:若 body.sourceDir 被采纳,该文件会出现在目标根
+    const evilDir = path.join(root, 'evil');
+    await fs.mkdir(evilDir, { recursive: true });
+    await fs.writeFile(path.join(evilDir, 'evil.md'), '# secret');
 
     const res = await app.inject({
       method: 'POST',
       url: '/api/knowledge/import',
-      payload: { sourceDir },
+      payload: { sourceDir: evilDir },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ copied: 1, conflicts: [], errors: [] });
-    expect(await fs.readFile(path.join(targetDir, 'a.md'), 'utf-8')).toBe('# a');
+    // 只导入了仓库内默认知识库,evil.md 不得落盘
+    await expect(fs.stat(path.join(targetDir, 'evil.md'))).rejects.toThrow();
   });
 
   it('should reject non-local callers', async () => {
@@ -47,20 +59,8 @@ describe('knowledgeRoutes 导入', () => {
       method: 'POST',
       url: '/api/knowledge/import',
       remoteAddress: '10.0.0.9',
-      payload: { sourceDir },
     });
 
     expect(res.statusCode).toBe(403);
-  });
-
-  it('should return 400 when source dir missing', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/knowledge/import',
-      payload: { sourceDir: path.join(root, 'missing') },
-    });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain('源目录不存在');
   });
 });

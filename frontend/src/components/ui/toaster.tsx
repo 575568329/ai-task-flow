@@ -3,10 +3,10 @@
 // 业务层契约:api/http.ts、stores/llmConfigStore.ts 直接 import { toast } 并调
 // toast.success/error/info —— 此 API 务必保持稳定,不可改名。
 import { create } from 'zustand';
-import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
-type ToastType = 'success' | 'error' | 'info';
+type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface ToastItem {
   id: number;
@@ -40,18 +40,21 @@ export const toast = {
   success: (message: string) => useToastStore.getState().push('success', message),
   error: (message: string) => useToastStore.getState().push('error', message),
   info: (message: string) => useToastStore.getState().push('info', message),
+  warning: (message: string) => useToastStore.getState().push('warning', message),
 };
 
 const ICON_MAP: Record<ToastType, typeof CheckCircle2> = {
   success: CheckCircle2,
   error: XCircle,
   info: Info,
+  warning: AlertTriangle,
 };
 
 const ICON_CLASS: Record<ToastType, string> = {
   success: 'text-emerald-500',
   error: 'text-destructive',
   info: 'text-primary',
+  warning: 'text-amber-500',
 };
 
 export function Toaster() {

@@ -84,6 +84,31 @@ async function exists(abs: string): Promise<boolean> {
   }
 }
 
+/**
+ * 宽松 realpath:路径尚不存在时沿父目录上溯解析,保证未创建的目标目录
+ * 也能与源目录按真实路径比较(防符号链接 / 大小写差异导致自我导入)。
+ */
+async function realpathLoose(abs: string): Promise<string> {
+  try {
+    return await fs.realpath(abs);
+  } catch {
+    const parent = path.dirname(abs);
+    if (parent === abs) return abs;
+    return path.join(await realpathLoose(parent), path.basename(abs));
+  }
+}
+
+/** 路径比较归一化:Windows 文件系统大小写不敏感 */
+function normalizeForCompare(abs: string): string {
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
+}
+
+/** child 是否严格位于 parent 之内(等于 parent 不算) */
+function isStrictlyInside(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -152,10 +177,6 @@ export async function importKnowledge(options: ImportOptions): Promise<ImportRep
   const sourceDir = path.resolve(options.sourceDir ?? defaultImportSourceDir());
   const targetDir = path.resolve(options.targetDir);
 
-  if (sourceDir === targetDir) {
-    throw new Error('源目录与目标目录相同,无需导入');
-  }
-
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
     stat = await fs.stat(sourceDir);
@@ -164,6 +185,17 @@ export async function importKnowledge(options: ImportOptions): Promise<ImportRep
   }
   if (!stat.isDirectory()) {
     throw new Error(`源路径不是目录: ${sourceDir}`);
+  }
+
+  // 按真实路径比较(解符号链接 + Windows 大小写),拒绝自我导入与互相包含,
+  // 否则递归复制可能失控(把目标写进源里无限套娃)。
+  const normSource = normalizeForCompare(await realpathLoose(sourceDir));
+  const normTarget = normalizeForCompare(await realpathLoose(targetDir));
+  if (normSource === normTarget) {
+    throw new Error('源目录与目标目录相同,无需导入');
+  }
+  if (isStrictlyInside(normSource, normTarget) || isStrictlyInside(normTarget, normSource)) {
+    throw new Error('源目录与目标目录不能互相包含');
   }
 
   await fs.mkdir(targetDir, { recursive: true });

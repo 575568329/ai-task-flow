@@ -128,22 +128,17 @@ export async function registerKnowledgeRoutes(
     }
   });
 
-  // POST /api/knowledge/import - 一次性导入旧知识库(body 可选 { sourceDir })
-  // 默认源目录由服务层解析为仓库内 knowledge-base;仅允许本机调用。
-  fastify.post<{
-    Body: { sourceDir?: string } | undefined;
-  }>('/api/knowledge/import', async (request, reply) => {
+  // POST /api/knowledge/import - 一次性导入旧知识库(源目录固定为仓库内 knowledge-base)
+  // 安全:刻意不接受 body 中的 sourceDir。后端 CORS 为 * 且 text/plain 可当 JSON 解析,
+  // 任意网页都能发简单请求;若允许外部指定路径,回环 IP gate 挡不住,会把本机任意目录
+  // 复制进知识库再经 manifest/raw 读出(跨站本地文件外泄)。源目录只由服务层按仓库位置解析。
+  fastify.post('/api/knowledge/import', async (request, reply) => {
     if (!isLocalAccess(request.ip)) {
       return reply.status(403).send({ error: '仅允许本机调用导入' });
     }
 
-    const sourceDir = request.body?.sourceDir?.trim() || undefined;
-
     try {
-      const report = await importKnowledge({
-        sourceDir,
-        targetDir: knowledgeService.getRoot(),
-      });
+      const report = await importKnowledge({ targetDir: knowledgeService.getRoot() });
       // 导入后刷新 manifest,前端随后拉取即可看到新文档
       await knowledgeService.refreshManifest();
       return report;

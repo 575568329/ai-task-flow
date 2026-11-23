@@ -10,8 +10,10 @@ import {
 } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { useKnowledgeStore } from '@/stores/knowledgeStore';
+import { useUIStore } from '@/stores/uiStore';
 import { fetchManifest, importKnowledge } from '@/api/knowledge';
 import { toast } from '@/components/ui/toaster';
+import { useConfirm } from '@/components/ui/confirm';
 import { useNarrowViewport } from '@/hooks/useNarrowViewport';
 import { KnowledgeTree } from './KnowledgeTree';
 import { KnowledgeViewer } from './KnowledgeViewer';
@@ -22,6 +24,11 @@ export function KnowledgeView() {
   const setError = useKnowledgeStore((s) => s.setError);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  /** 本次会话是否已导入过(再次导入会产生 -imported 副本,需二次确认) */
+  const [importedOnce, setImportedOnce] = useState(false);
+  // 导入端点仅回环可达,LAN 访问下隐藏入口
+  const localAccess = useUIStore((s) => s.localAccess);
+  const { confirm } = useConfirm();
   // 紧凑视口树面板收窄(与 docs 同策略),保查看器可用宽度
   const narrow = useNarrowViewport();
 
@@ -42,15 +49,29 @@ export function KnowledgeView() {
     void load();
   }, []);
 
-  /** 一次性导入旧知识库(缺省源目录由后端定位仓库内 knowledge-base),成功后刷新 */
+  /** 导入旧知识库(源目录固定由后端解析仓库内 knowledge-base),成功后刷新 */
   const onImport = async () => {
+    // 重复导入不覆盖,但会不断产生 -imported 副本,先确认
+    if (
+      importedOnce &&
+      !(await confirm({
+        title: '再次导入',
+        description:
+          '重复导入不会覆盖已有文件,同名文件会生成 -imported 副本,可能产生大量重复文档。继续吗?',
+        confirmText: '继续导入',
+      }))
+    ) {
+      return;
+    }
     setImporting(true);
     try {
       const report = await importKnowledge();
       const suffix = report.errors.length > 0 ? `,失败 ${report.errors.length} 篇` : '';
-      toast.success(
-        `已复制 ${report.copied} 篇,冲突 ${report.conflicts.length} 篇${suffix}`,
-      );
+      const message = `已复制 ${report.copied} 篇,冲突 ${report.conflicts.length} 篇${suffix}`;
+      // 部分文件失败属可继续的告警,不应报成功
+      if (report.errors.length > 0) toast.warning(message);
+      else toast.success(message);
+      setImportedOnce(true);
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '导入失败');
@@ -68,16 +89,18 @@ export function KnowledgeView() {
             {manifest.flatDocs.length} 篇
           </span>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          disabled={importing}
-          onClick={() => void onImport()}
-        >
-          <Import className="size-3.5" />
-          {importing ? '导入中…' : '导入旧知识库'}
-        </Button>
+        {localAccess && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            disabled={importing}
+            onClick={() => void onImport()}
+          >
+            <Import className="size-3.5" />
+            {importing ? '导入中…' : importedOnce ? '再次导入(会产生副本)' : '导入旧知识库'}
+          </Button>
+        )}
       </header>
 
       <div className="flex-1 overflow-hidden p-2">
