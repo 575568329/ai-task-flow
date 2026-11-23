@@ -134,7 +134,7 @@ export function RequirementDialog({
               />
               {projectOptions.length === 0 && (
                 <p className="text-muted-foreground text-xs">
-                  项目字典为空。先在「项目字典」里绑定路径或记录时传项目,这里才会有选项。
+                  项目字典为空。先在「项目字典」里新建项目并可选绑定路径,这里才会有选项。
                 </p>
               )}
             </div>

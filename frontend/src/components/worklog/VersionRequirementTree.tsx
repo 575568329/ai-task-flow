@@ -30,6 +30,8 @@ interface VersionRequirementTreeProps {
   data: WorklogData;
   selection: RequirementSelection;
   onSelect: (sel: RequirementSelection) => void;
+  /** 全树拉取失败:空树时不得显示「还没有版本」(会误导为数据为空) */
+  loadFailed?: boolean;
   /** 打开「新建版本」弹窗 */
   onCreateVersionClick?: () => void;
   /** 打开「新建需求」弹窗(携带所属版本 id) */
@@ -47,7 +49,7 @@ function countVersionEntries(version: WorklogData['versions'][number]): number {
 }
 
 export function VersionRequirementTree({
-  data, selection, onSelect,
+  data, selection, onSelect, loadFailed,
   onCreateVersionClick, onCreateRequirementClick, onDeleteVersionClick,
   onRenameVersion, onRenameRequirement, onDeleteRequirement,
 }: VersionRequirementTreeProps) {
@@ -107,7 +109,9 @@ export function VersionRequirementTree({
     <div className="space-y-0.5">
       {data.versions.length === 0 && (
         <p className="text-muted-foreground px-2 py-1 text-xs leading-relaxed">
-          还没有版本。先新建版本,再建需求,记录会挂在需求下。
+          {loadFailed
+            ? '加载失败，请刷新重试。'
+            : '还没有版本。先新建版本,再建需求,记录会挂在需求下。'}
         </p>
       )}
 

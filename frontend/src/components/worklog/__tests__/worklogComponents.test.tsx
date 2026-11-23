@@ -60,6 +60,28 @@ describe('EntryItem', () => {
     expect(screen.getByText(/backend\/src\/server\.ts:12/)).toBeInTheDocument();
   });
 
+  it('should show the actual project badge when entry.project is set', () => {
+    render(
+      <EntryItem
+        {...baseProps}
+        entry={makeEntry({ project: '资源加工平台' })}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const badge = screen.getByText('资源加工平台');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute('title', '本条实际改动的项目');
+  });
+
+  it('should not render a project badge when entry.project is absent', () => {
+    const { container } = render(
+      <EntryItem {...baseProps} entry={makeEntry()} onSave={vi.fn()} onDelete={vi.fn()} />,
+    );
+    // 只读徽标不出现(其它元信息仍正常)
+    expect(container.querySelector('[title="本条实际改动的项目"]')).toBeNull();
+  });
+
   it('should call onSave with partial fields only (diff untouched by form)', async () => {
     // 表单只含 title/detail/tags/version——diff/files 不在 payload,后端 partial 语义保留它们
     const onSave = vi.fn().mockResolvedValue(undefined);

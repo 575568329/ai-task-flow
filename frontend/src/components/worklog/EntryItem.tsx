@@ -152,6 +152,12 @@ export function EntryItem({
                 <span>{entry.date}</span>
                 <CopyIdButton id={entry.id} />
                 <WorkStageBadge stage={entry.stage} />
+                {/* 条目实际改动项目(路径归属或显式传入);无项目时不占位 */}
+                {entry.project && (
+                  <Badge variant="outline" className="text-xs" title="本条实际改动的项目">
+                    {entry.project}
+                  </Badge>
+                )}
                 {entry.relatedProjects?.length ? (
                   <Badge variant="outline" className="text-muted-foreground text-xs">
                     关联:

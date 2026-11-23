@@ -153,6 +153,20 @@ describe('VersionRequirementTree', () => {
     expect(onDeleteVersionClick).toHaveBeenCalledWith('v_1');
   });
 
+  it('shows load-failed hint instead of empty state when tree fetch failed', () => {
+    const empty: WorklogData = { projects: [], versions: [] };
+    render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} loadFailed />);
+    expect(screen.getByText('加载失败，请刷新重试。')).toBeTruthy();
+    expect(screen.queryByText(/还没有版本/)).toBeNull();
+  });
+
+  it('shows the normal empty state when load succeeded with no versions', () => {
+    const empty: WorklogData = { projects: [], versions: [] };
+    render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} />);
+    expect(screen.getByText(/还没有版本/)).toBeTruthy();
+    expect(screen.queryByText(/加载失败/)).toBeNull();
+  });
+
   it('requires a second click before deleting a requirement', () => {
     const onDeleteRequirement = vi.fn();
     render(

@@ -326,6 +326,7 @@ export function WorklogView() {
           <VersionRequirementTree
             data={data}
             selection={selection}
+            loadFailed={loadFailed}
             onSelect={handleSelect}
             onCreateVersionClick={() => setVersionDialogOpen(true)}
             onCreateRequirementClick={(versionId) => setRequirementVersionId(versionId)}
@@ -494,7 +495,7 @@ export function WorklogView() {
         projects={data.projects}
         open={projectDialogOpen}
         onOpenChange={setProjectDialogOpen}
-        onPathsChanged={() => refresh()}
+        onChanged={() => refresh()}
       />
     </WorkspaceLayout>
   );
