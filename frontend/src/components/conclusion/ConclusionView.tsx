@@ -16,6 +16,7 @@ import { WorkspaceLayout, WorkspaceSidebar, WorkspaceToolbar } from '@/component
 import type { StageFilter } from '@/lib/workStage';
 import {
   filterConclusions,
+  filterConclusionsByRelatedProject,
   filterConclusionsByStage,
   type ConclusionSelection,
 } from './searchFilter';
@@ -35,6 +36,7 @@ export function ConclusionView() {
   const [selection, setSelection] = useState<ConclusionSelection | null>(null);
   const [keyword, setKeyword] = useState('');
   const [stageFilter, setStageFilter] = useState<StageFilter>([]);
+  const [relatedFilter, setRelatedFilter] = useState('');
   const [searchResults, setSearchResults] = useState<ConclusionSummary[] | null>(null);
   /** 写操作/刷新后自增:让带关键词的搜索结果重新拉取,避免列表已更新、搜索仍是旧快照 */
   const [searchTick, setSearchTick] = useState(0);
@@ -108,10 +110,34 @@ export function ConclusionView() {
   }, [keyword, searchTick]);
 
   const visible = useMemo(() => {
-    if (searchResults) return filterConclusionsByStage(searchResults, stageFilter);
+    if (searchResults) {
+      return filterConclusionsByRelatedProject(
+        filterConclusionsByStage(searchResults, stageFilter),
+        relatedFilter,
+      );
+    }
     if (!selection) return [];
-    return filterConclusionsByStage(filterConclusions(cards, selection), stageFilter);
-  }, [searchResults, cards, selection, stageFilter]);
+    return filterConclusionsByRelatedProject(
+      filterConclusionsByStage(filterConclusions(cards, selection), stageFilter),
+      relatedFilter,
+    );
+  }, [searchResults, cards, selection, stageFilter, relatedFilter]);
+
+  // 「关联项目」下拉选项:已加载卡片的 relatedProjects 去重(名称快照,与筛选口径一致)
+  const relatedProjectOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const card of cards) {
+      for (const name of card.relatedProjects ?? []) {
+        if (name) names.add(name);
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [cards]);
+
+  // 数据刷新后所选关联项目不存在(如关联被清理)则回退为不过滤
+  useEffect(() => {
+    if (relatedFilter && !relatedProjectOptions.includes(relatedFilter)) setRelatedFilter('');
+  }, [relatedFilter, relatedProjectOptions]);
   const projects = useMemo(
     () => [...new Set(cards.filter((c) => c.scope === 'project').map((c) => c.project ?? '未归类'))],
     [cards],
@@ -280,6 +306,20 @@ export function ConclusionView() {
           }
           actions={(
             <>
+              {relatedProjectOptions.length > 0 && (
+                <select
+                  aria-label="按关联项目筛选结论卡"
+                  title="只看关联了指定项目的结论卡"
+                  value={relatedFilter}
+                  onChange={(e) => setRelatedFilter(e.target.value)}
+                  className="border-input bg-background h-8 shrink-0 rounded-md border px-2 text-xs"
+                >
+                  <option value="">全部关联项目</option>
+                  {relatedProjectOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              )}
               <WorkStageMultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}

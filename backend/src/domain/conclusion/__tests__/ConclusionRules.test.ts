@@ -170,6 +170,15 @@ describe('appendRevision', () => {
     expect(rev.rev).toBe(2);
     expect(c.title).toBe('新标题');
   });
+
+  it('should clear projectId when the append switches to personal scope', () => {
+    const c = make();
+    c.projectId = 'p_a';
+    appendRevision(c, { scope: 'personal', changeNote: '改为个人问题' }, source, 2000);
+    expect(c.scope).toBe('personal');
+    expect(c.project).toBeUndefined();
+    expect(c.projectId).toBeUndefined();
+  });
 });
 
 describe('patchConclusionMeta', () => {

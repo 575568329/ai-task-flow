@@ -24,6 +24,10 @@ export const toolDef = {
       scope: { type: 'string' as const, enum: ['project', 'personal'], description: '按问题域过滤' },
       project: { type: 'string' as const, description: '按项目精确过滤' },
       version: { type: 'string' as const, description: '按版本精确过滤' },
+      relatedProject: {
+        type: 'string' as const,
+        description: '按关联项目名称过滤（只返回关联了该项目的结论卡，可选）',
+      },
       keyword: {
         type: 'string' as const,
         description: '仅在不知道 cardId 且用户明确要求查找时使用；匹配标题 + 全部历史版本内容。不要用于写前自动定位',
@@ -107,6 +111,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
         ? args.scope as ProblemScope : undefined,
       project: text(args.project),
       version: text(args.version),
+      relatedProject: text(args.relatedProject),
       keyword: text(args.keyword),
       tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
       stage: args.stage as WorkStage | undefined,

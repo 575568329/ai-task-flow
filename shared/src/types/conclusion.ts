@@ -150,6 +150,8 @@ export interface ConclusionQueryRequest {
   scope?: ProblemScope;
   project?: string;
   version?: string;
+  /** 按关联项目名称快照过滤(与 relatedProjects 同口径) */
+  relatedProject?: string;
   keyword?: string;
   tags?: string[];
   stage?: WorkStage;

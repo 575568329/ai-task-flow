@@ -1,6 +1,6 @@
 // backend/src/interfaces/http/routes/__tests__/conclusionRoutes.test.ts
 // 结论卡 HTTP API 集成测试:六端点全路径 + 参数类型防御(坏 body 不得变 500) + limit 兜底。
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -110,6 +110,66 @@ describe('conclusionRoutes', () => {
     expect(card.relatedProjectIds).toEqual([projectId]);
   });
 
+  it('should never trust a client-supplied projectId', async () => {
+    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    const realId = (await worklogService.getTree()).projects[0].id;
+
+    // 项目存在:服务端解析结果覆盖客户端伪造值
+    const known = await app.inject({
+      method: 'POST',
+      url: '/api/conclusions',
+      payload: {
+        scope: 'project', project: '题库', title: '伪造引用', decision: 'd', projectId: 'p_forged',
+      },
+    });
+    expect(known.statusCode).toBe(201);
+    const knownBody = JSON.parse(known.body);
+    const knownCard = JSON.parse((await app.inject({
+      method: 'GET', url: `/api/conclusions/${knownBody.id}`,
+    })).body);
+    expect(knownCard.projectId).toBe(realId);
+    expect(knownCard.projectId).not.toBe('p_forged');
+
+    // 项目不存在:伪造值被清空,只保留名称快照
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/conclusions',
+      payload: {
+        scope: 'project', project: '不存在项目', title: '伪造引用2', decision: 'd', projectId: 'p_forged',
+      },
+    });
+    expect(unknown.statusCode).toBe(201);
+    const unknownBody = JSON.parse(unknown.body);
+    const unknownCard = JSON.parse((await app.inject({
+      method: 'GET', url: `/api/conclusions/${unknownBody.id}`,
+    })).body);
+    expect(unknownCard.project).toBe('不存在项目');
+    expect(unknownCard.projectId).toBeUndefined();
+  });
+
+  it('should resolve project refs without probing project paths', async () => {
+    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    const projectId = (await worklogService.getProjectRefs())[0].id;
+    // 绑一个不存在的路径:若建卡走 getTree 就会触发 fs.access(可能拖慢/报错)
+    await worklogService.bindProjectPaths('题库', [path.resolve('definitely-missing-repo')]);
+
+    const getTreeSpy = vi.spyOn(worklogService, 'getTree');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conclusions',
+      payload: { scope: 'project', project: '题库', title: '快速建卡', decision: 'd' },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(getTreeSpy).not.toHaveBeenCalled();
+    getTreeSpy.mockRestore();
+
+    const body = JSON.parse(res.body);
+    const card = JSON.parse((await app.inject({
+      method: 'GET', url: `/api/conclusions/${body.id}`,
+    })).body);
+    expect(card.projectId).toBe(projectId);
+  });
+
   it('should keep the name snapshot when the main project is unknown', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -199,6 +259,20 @@ describe('conclusionRoutes', () => {
     const body = JSON.parse(res.body);
     expect(body.conclusions).toHaveLength(1);
     expect(body.conclusions[0].matchedRev).toBe(1);
+  });
+
+  it('should filter list by relatedProject query param', async () => {
+    // 关联项目名称必须能在 worklog 里解析到,否则建卡时会被丢弃
+    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await createCard({ title: '关联卡', relatedProjects: ['题库'] });
+    await createCard({ title: '普通卡' });
+
+    const hit = await app.inject({ method: 'GET', url: '/api/conclusions?relatedProject=题库' });
+    expect(hit.statusCode).toBe(200);
+    expect(JSON.parse(hit.body).conclusions.map((c: { title: string }) => c.title)).toEqual(['关联卡']);
+
+    const miss = await app.inject({ method: 'GET', url: '/api/conclusions?relatedProject=不存在' });
+    expect(JSON.parse(miss.body).conclusions).toHaveLength(0);
   });
 
   it('should return 404 for unknown card', async () => {

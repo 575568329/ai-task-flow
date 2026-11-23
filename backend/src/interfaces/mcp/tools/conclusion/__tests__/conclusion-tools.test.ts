@@ -7,7 +7,7 @@ import { JsonConclusionRepository } from '../../../../../infrastructure/persiste
 import { WorklogService } from '../../../../../application/worklog/WorklogService.js';
 import { JsonWorklogRepository } from '../../../../../infrastructure/persistence/JsonWorklogRepository.js';
 import { handle as record } from '../record-conclusion.js';
-import { handle as query } from '../query-conclusions.js';
+import { handle as query, toolDef as queryToolDef } from '../query-conclusions.js';
 import type { ToolDeps } from '../../types.js';
 
 describe('conclusion MCP tools', () => {
@@ -137,6 +137,26 @@ describe('conclusion MCP tools', () => {
     expect(card.projectId).toBe(projectId);
     expect(card.relatedProjects).toEqual(['题库']);
     expect(card.relatedProjectIds).toEqual([projectId]);
+  });
+
+  it('should expose and pass through relatedProject filter', async () => {
+    expect(queryToolDef.inputSchema.properties).toHaveProperty('relatedProject');
+    await deps.worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await record({
+      scope: 'project', project: '题库', title: '跨项目卡', decision: 'd',
+      relatedProjects: ['题库'],
+    }, deps);
+    await record({
+      scope: 'personal', title: '个人卡', decision: 'd2',
+    }, { ...deps, mcpSource: { ...deps.mcpSource, conversationId: 'sess-2' } });
+
+    const hit = await query({ relatedProject: '题库' }, deps);
+    expect(hit.isError).toBeFalsy();
+    expect(hit.content[0].text).toContain('跨项目卡');
+    expect(hit.content[0].text).not.toContain('个人卡');
+
+    const miss = await query({ relatedProject: '未关联' }, deps);
+    expect(miss.content[0].text).toContain('未找到');
   });
 
   it('should search and return matchedRev for history hits', async () => {

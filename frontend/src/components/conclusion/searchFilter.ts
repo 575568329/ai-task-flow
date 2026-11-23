@@ -14,6 +14,16 @@ export function filterConclusionsByStage(
   return cards.filter((card) => matchStageFilter(card.stage, stage));
 }
 
+/** 按关联项目名称快照过滤;空值=不过滤(与后端 query 的 relatedProject 口径一致) */
+export function filterConclusionsByRelatedProject(
+  cards: ConclusionSummary[],
+  relatedProject: string,
+): ConclusionSummary[] {
+  const name = relatedProject.trim();
+  if (!name) return cards;
+  return cards.filter((card) => card.relatedProjects?.includes(name));
+}
+
 function newestFirst(a: ConclusionSummary, b: ConclusionSummary): number {
   return b.latestDate.localeCompare(a.latestDate) || b.updatedAt - a.updatedAt;
 }

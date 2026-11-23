@@ -1,6 +1,12 @@
-// 结论卡项目解析:接口层(MCP/HTTP)在写入前查 worklog 项目树,把名称解析为稳定 id。
+// 结论卡项目解析:接口层(MCP/HTTP)在写入前查 worklog 项目引用,把名称解析为稳定 id。
 // 结论卡锚点是会话,路径不参与归属;这里只做「名称 → id」映射,不做 cwd 反查。
-import type { WorklogData } from '@ai-task-flow/shared';
+// 入参只要求 {id,name} 列表(WorklogService.getProjectRefs()),不触发路径探测。
+
+/** 解析所需的最小项目引用(WorklogService.getProjectRefs() 的返回形状) */
+export interface ConclusionProjectRef {
+  id: string;
+  name: string;
+}
 
 export interface ResolvedConclusionProjects {
   /** 主项目 id;主项目名称未命中任何项目时为空串(表示清除旧引用) */
@@ -26,11 +32,11 @@ export interface ConclusionProjectInput {
  * - 关联项目未命中:丢弃并收集到 ignored,由调用方在返回文案/响应中提示。
  */
 export function resolveConclusionProjects(
-  tree: WorklogData,
+  projects: readonly ConclusionProjectRef[],
   input: ConclusionProjectInput,
 ): ResolvedConclusionProjects {
   const projectName = input.project?.trim();
-  const owner = projectName ? tree.projects.find((p) => p.name === projectName) : undefined;
+  const owner = projectName ? projects.find((p) => p.name === projectName) : undefined;
 
   const ids: string[] = [];
   const labels: string[] = [];
@@ -38,7 +44,7 @@ export function resolveConclusionProjects(
   for (const raw of input.relatedProjects ?? []) {
     const name = typeof raw === 'string' ? raw.trim() : '';
     if (!name) continue;
-    const found = tree.projects.find((p) => p.name === name);
+    const found = projects.find((p) => p.name === name);
     if (!found) {
       if (!ignored.includes(name)) ignored.push(name);
       continue;

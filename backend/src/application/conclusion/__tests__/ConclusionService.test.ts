@@ -206,6 +206,19 @@ describe('ConclusionService', () => {
     expect(await service.query({ dateTo: '2026-11-05' })).toHaveLength(1);
   });
 
+  it('should filter by related project name snapshot', async () => {
+    await service.create(createInput({
+      title: '跨项目卡', relatedProjects: ['题库'], relatedProjectIds: ['p_b'],
+    }), source);
+    await service.create(createInput({ title: '无关联卡', decision: 'd2' }), source);
+
+    const hit = await service.query({ relatedProject: '题库' });
+    expect(hit.map((card) => card.title)).toEqual(['跨项目卡']);
+    expect(await service.query({ relatedProject: '未关联的项目' })).toHaveLength(0);
+    // 空串/未传 = 不过滤
+    expect(await service.query({})).toHaveLength(2);
+  });
+
   it('should return full latest and revision summaries in detail', async () => {
     const { id } = await service.create(createInput(), source);
     await service.append(id, { data: '新数据', changeNote: '补充' }, source);

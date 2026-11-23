@@ -285,6 +285,8 @@ export function appendRevision(
     if (relatedProjectIds) conclusion.relatedProjectIds = relatedProjectIds;
     else delete conclusion.relatedProjectIds;
   }
+  // 切到个人域后不允许残留项目引用(与 patchConclusionMeta 语义一致,避免悬空 id)
+  if (conclusion.scope === 'personal') delete conclusion.projectId;
 
   const afterMeta = JSON.stringify({
     scope: conclusion.scope,

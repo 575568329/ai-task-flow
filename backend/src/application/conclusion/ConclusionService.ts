@@ -248,6 +248,8 @@ export class ConclusionService {
       if (input.scope && card.scope !== input.scope) continue;
       if (input.project && card.project !== input.project) continue;
       if (input.version && card.version !== input.version) continue;
+      // 关联项目按名称快照过滤(与写入时保存的 relatedProjects 同口径)
+      if (input.relatedProject && !card.relatedProjects?.includes(input.relatedProject)) continue;
       if (input.tags?.length && !card.tags?.some((tag) => input.tags!.includes(tag))) continue;
 
       const latest = latestOf(card);

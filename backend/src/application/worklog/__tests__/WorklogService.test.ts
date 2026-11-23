@@ -346,6 +346,21 @@ describe('WorklogService', () => {
       await expect(service.bindProjectPaths('no-such-project', [pathA1]))
         .rejects.toThrow(/不存在/);
     });
+
+    it('getProjectRefs should mirror getTree project refs without probing paths', async () => {
+      const { nanoid } = await import('nanoid');
+      const missing = path.join(os.tmpdir(), `no-such-dir-${nanoid()}`);
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [pathA1, missing]);
+
+      const refs = await service.getProjectRefs();
+      const tree = await service.getTree();
+      expect(refs.map(({ id, name }) => ({ id, name })))
+        .toEqual(tree.projects.map(({ id, name }) => ({ id, name })));
+      // 只透传字段:失效路径也原样返回,但不做 access、不产生 missingPaths
+      expect(refs[0].paths).toEqual([pathA1, missing]);
+      expect('missingPaths' in refs[0]).toBe(false);
+    });
   });
 
   // ---------------------------------------------------------------

@@ -91,8 +91,12 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       : undefined;
 
     // 结论卡不按路径归属:仅当显式传了项目信息时查 worklog 做「名称 → id」解析
+    // (getProjectRefs 不 probe 路径,建卡不会因路径失效而变慢或报错)
     const resolved = project !== undefined || relatedProjects !== undefined
-      ? resolveConclusionProjects(await deps.worklogService.getTree(), { project, relatedProjects })
+      ? resolveConclusionProjects(
+          await deps.worklogService.getProjectRefs(),
+          { project, relatedProjects },
+        )
       : undefined;
     const projectRefs = resolved
       ? {

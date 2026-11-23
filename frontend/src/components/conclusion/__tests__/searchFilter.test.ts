@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { ConclusionSummary } from '@ai-task-flow/shared';
-import { filterConclusions, filterConclusionsByStage, groupConclusions } from '../searchFilter';
+import {
+  filterConclusions,
+  filterConclusionsByRelatedProject,
+  filterConclusionsByStage,
+  groupConclusions,
+} from '../searchFilter';
 
 function card(over: Partial<ConclusionSummary>): ConclusionSummary {
   return {
@@ -23,6 +28,21 @@ describe('groupConclusions', () => {
     expect(grouped.projects.map((p) => p.name)).toEqual(['ai-task-flow', 'rpp']);
     expect(grouped.projects[0].cards.map((c) => c.id)).toEqual(['c_a', 'c_b']);
     expect(grouped.personal.map((c) => c.id)).toEqual(['c_d']);
+  });
+});
+
+describe('filterConclusionsByRelatedProject', () => {
+  const related = [
+    card({ id: 'r1', relatedProjects: ['题库', '组卷'] }),
+    card({ id: 'r2', relatedProjects: ['题库'] }),
+    card({ id: 'r3' }),
+  ];
+
+  it('should filter by related project name snapshot and keep all when empty', () => {
+    expect(filterConclusionsByRelatedProject(related, '题库').map((c) => c.id)).toEqual(['r1', 'r2']);
+    expect(filterConclusionsByRelatedProject(related, '组卷').map((c) => c.id)).toEqual(['r1']);
+    expect(filterConclusionsByRelatedProject(related, '未关联')).toHaveLength(0);
+    expect(filterConclusionsByRelatedProject(related, '')).toHaveLength(3);
   });
 });
 

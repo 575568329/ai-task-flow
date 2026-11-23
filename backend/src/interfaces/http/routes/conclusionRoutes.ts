@@ -61,6 +61,7 @@ function queryFrom(raw: Record<string, unknown>): ConclusionQueryRequest {
       ? raw.scope as ProblemScope : undefined,
     project: typeof raw.project === 'string' ? raw.project : undefined,
     version: typeof raw.version === 'string' ? raw.version : undefined,
+    relatedProject: typeof raw.relatedProject === 'string' ? raw.relatedProject : undefined,
     keyword: typeof raw.keyword === 'string' ? raw.keyword : undefined,
     tags: parseTags(raw.tags),
     stage: parseStage(raw.stage),
@@ -190,7 +191,10 @@ async function resolveProjectFields(
   if (project === undefined && relatedProjects === undefined) {
     return { fields: {}, warnings: [] };
   }
-  const resolved = resolveConclusionProjects(await worklogService.getTree(), { project, relatedProjects });
+  const resolved = resolveConclusionProjects(
+    await worklogService.getProjectRefs(),
+    { project, relatedProjects },
+  );
   const warnings: string[] = [];
   if (resolved.projectMissing) {
     warnings.push(`项目「${project}」尚未建立，projectId 暂时留空（保留名称快照）`);

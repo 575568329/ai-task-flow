@@ -119,6 +119,19 @@ export class WorklogService {
     return data;
   }
 
+  /**
+   * 轻量项目引用(名称 → 稳定 id):只读 worklog 字段,不 probe 路径、不做 fs.access。
+   * 结论卡解析等「只需要项目名/id」的场景用它,避免为了建卡支付全树路径探测成本。
+   */
+  async getProjectRefs(): Promise<Array<{ id: string; name: string; paths?: string[] }>> {
+    const data = await this.repo.load();
+    return data.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      paths: project.paths,
+    }));
+  }
+
   /** 绑定项目路径(整体替换);路径须绝对,同一路径不得被两个项目占用 */
   async bindProjectPaths(projectName: string, paths: string[]): Promise<void> {
     const name = validateName(projectName, '项目名');

@@ -143,6 +143,30 @@ describe('ConclusionView project mapping', () => {
     expect(within(card).getByText(/关联.*遗留关联/)).toBeTruthy();
   });
 
+  it('should filter cards by related project dropdown', async () => {
+    vi.mocked(conclusionApi.list).mockResolvedValue({
+      conclusions: [
+        summary({ id: 'c_1', title: '关联卡', relatedProjects: ['题库'], relatedProjectIds: ['p_2'] }),
+        summary({ id: 'c_2', title: '普通卡' }),
+      ],
+    });
+    vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith());
+
+    render(<ConclusionView />);
+    fireEvent.click(await screen.findByText('全部'));
+    await screen.findByText('关联卡');
+    expect(screen.getByText('普通卡')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('按关联项目筛选结论卡'), { target: { value: '题库' } });
+
+    expect(screen.getByText('关联卡')).toBeTruthy();
+    expect(screen.queryByText('普通卡')).toBeNull();
+
+    // 切回「全部关联项目」恢复不过滤
+    fireEvent.change(screen.getByLabelText('按关联项目筛选结论卡'), { target: { value: '' } });
+    expect(screen.getByText('普通卡')).toBeTruthy();
+  });
+
   it('should explain archive semantics in empty state', async () => {
     vi.mocked(conclusionApi.list).mockResolvedValue({ conclusions: [] });
     vi.mocked(worklogApi.getTree).mockResolvedValue(treeWith());
