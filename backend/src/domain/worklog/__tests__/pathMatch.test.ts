@@ -24,6 +24,12 @@ describe('isPathWithin', () => {
   it('大小写与斜杠不敏感', () => {
     expect(isPathWithin('d:/A', 'D:\\a\\x')).toBe(true);
   });
+  it('空父路径不匹配任何路径', () => {
+    expect(isPathWithin('', '/home/x')).toBe(false);
+  });
+  it('纯空白父路径不匹配任何路径', () => {
+    expect(isPathWithin('   ', '/mnt/d/x')).toBe(false);
+  });
 });
 
 describe('findOwningProject', () => {
@@ -41,5 +47,8 @@ describe('findOwningProject', () => {
   });
   it('未命中返回 undefined', () => {
     expect(findOwningProject(refs, 'D:\\Study\\ai-task-flow')).toBeUndefined();
+  });
+  it('空路径的项目不吞掉任何候选路径', () => {
+    expect(findOwningProject([{ projectId: 'p', path: '' }], '/home/x')).toBeUndefined();
   });
 });

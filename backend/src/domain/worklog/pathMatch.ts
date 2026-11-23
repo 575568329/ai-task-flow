@@ -16,6 +16,8 @@ export function normalizePath(input: string): string {
 export function isPathWithin(parent: string, candidate: string): boolean {
   const p = normalizePath(parent);
   const c = normalizePath(candidate);
+  // 空父路径(含纯空白)归一化后为空串,不得被当作根 '/' 而匹配所有绝对路径
+  if (!p) return false;
   if (p === c) return true;
   return c.startsWith(p.endsWith('/') ? p : `${p}/`);
 }
