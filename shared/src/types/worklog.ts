@@ -42,16 +42,12 @@ export interface WorklogEntry {
   relatedProjectIds?: string[];
   /** 记录时路径未命中任何项目 */
   pathUnmatched?: boolean;
+  /** 本条实际改动的项目(路径归属或显式传入) */
+  project?: string;
+  projectId?: string;
 }
 
-/** 版本:自由文本名(v1.2.0 / 11月迭代),项目内唯一 */
-export interface WorklogVersion {
-  name: string;
-  createdAt: number;
-  entries: WorklogEntry[];
-}
-
-/** 项目:唯一键,精确匹配 */
+/** 项目:唯一键,精确匹配;仅作字典用于路径归属与项目筛选,不再是树根 */
 export interface WorklogProject {
   /** 稳定身份(p_xxx);迁移前旧数据可能缺失 */
   id: string;
@@ -59,14 +55,38 @@ export interface WorklogProject {
   paths?: string[];
   name: string;
   createdAt: number;
-  versions: WorklogVersion[];
   /** 仅由 getTree 计算,不持久化 */
   missingPaths?: string[];
 }
 
+/** 版本:自由文本名(如 V8.0.8),全局唯一 */
+export interface WorklogVersion {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  requirements: WorklogRequirement[];
+}
+
+/** 需求:版本内唯一标题,承载一组功能点条目 */
+export interface WorklogRequirement {
+  id: string;
+  /** 版本内唯一 */
+  title: string;
+  description?: string;
+  /** 需求计划关联的项目(名称快照) */
+  projects?: string[];
+  projectIds?: string[];
+  createdAt: number;
+  entries: WorklogEntry[];
+}
+
 /** worklog.json 的整体结构 */
 export interface WorklogData {
+  /** 项目字典:路径归属与项目筛选用 */
   projects: WorklogProject[];
+  /** 顶层组织:版本 → 需求 → 条目 */
+  versions: WorklogVersion[];
 }
 
 // ---------------------------------------------------------------------------
@@ -75,18 +95,36 @@ export interface WorklogData {
 
 /** record_work / POST /api/worklog/entries 入参 */
 export interface WorklogRecordRequest {
-  project: string;
-  version: string;
+  /** 所属版本(必填) */
+  versionId: string;
+  /** 所属需求(必填,版本内) */
+  requirementId: string;
   title: string;
   detail: string;
+  /** 本条实际改动的项目名(可选) */
+  project?: string;
+  /** 关联项目名称;解析失败的项会被忽略并在 warnings 中返回 */
+  relatedProjects?: string[];
   files?: WorklogEntryFile[];
   diff?: string;
   tags?: string[];
-  stage?: WorkStage;
+  stage: WorkStage;
   /** 记录端所在路径(MCP handler 自动填 process.cwd());不传则不做路径归属 */
   sourcePath?: string;
-  /** 关联项目名称;解析失败的项会被忽略并在 warnings 中返回 */
-  relatedProjects?: string[];
+}
+
+/** 版本创建入参 */
+export interface WorklogVersionCreateRequest {
+  name: string;
+  description?: string;
+}
+
+/** 需求创建入参 */
+export interface WorklogRequirementCreateRequest {
+  versionId: string;
+  title: string;
+  description?: string;
+  projects?: string[];
 }
 
 /** record 响应:createdXxx 告知调用方是否新建了层(防拼写错误的版本名裂树) */
@@ -106,6 +144,10 @@ export interface WorklogQueryRequest {
   entryId?: string;
   project?: string;
   version?: string;
+  /** 按版本 id 过滤 */
+  versionId?: string;
+  /** 按需求 id 过滤 */
+  requirementId?: string;
   /** 对 title/detail/files.path 不区分大小写模糊匹配 */
   keyword?: string;
   /** 命中任一 tag 即可 */
@@ -141,10 +183,21 @@ export interface WorklogQueryResultEntry {
 
 /** list_projects 结果:项目/版本树 + 每版本条目数与首末日期 */
 export interface WorklogVersionSummary {
+  id: string;
   name: string;
+  requirementCount: number;
   entryCount: number;
   firstDate?: string;
   lastDate?: string;
+}
+
+/** 需求摘要(列表视图用,不含条目全文) */
+export interface WorklogRequirementSummary {
+  id: string;
+  versionId: string;
+  title: string;
+  projects?: string[];
+  entryCount: number;
 }
 
 export interface WorklogProjectSummary {
