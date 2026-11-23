@@ -281,8 +281,13 @@ export class WorklogService {
       const versionId = typeof input.versionId === 'string' ? input.versionId.trim() : '';
       const version = findVersion(data, versionId);
       if (!version) {
+        // versions 为空通常意味着旧数据尚未迁移(新模型下至少有一个用户创建的版本才可能有合法 id);
+        // 追加迁移提示,与「id 写错」区分——后者会列出候选,不会出现该提示。
+        const migrationHint = data.versions.length === 0
+          ? '如从旧版本升级，请先启动 Web 服务（`npm start`）完成数据迁移。'
+          : '';
         throw new WorklogNotFoundError(
-          `版本 ${versionId} 不存在；现有版本：${candidateText(versionCandidates(data))}。请让用户在页面创建并复制 id`,
+          `版本 ${versionId} 不存在；现有版本：${candidateText(versionCandidates(data))}。请让用户在页面创建并复制 id${migrationHint ? `。${migrationHint}` : ''}`,
         );
       }
       assertRequirementTitleFree(version, title);
@@ -433,8 +438,13 @@ export class WorklogService {
       const requirementId = typeof input.requirementId === 'string' ? input.requirementId.trim() : '';
       const version = findVersion(data, versionId);
       if (!version) {
+        // versions 为空通常意味着旧数据尚未迁移(新模型下至少有一个用户创建的版本才可能有合法 id);
+        // 追加迁移提示,与「id 写错」区分——后者会列出候选,不会出现该提示。
+        const migrationHint = data.versions.length === 0
+          ? '如从旧版本升级，请先启动 Web 服务（`npm start`）完成数据迁移。'
+          : '';
         throw new WorklogNotFoundError(
-          `版本 ${versionId} 不存在；现有版本：${candidateText(versionCandidates(data))}。请让用户在页面创建并复制 id`,
+          `版本 ${versionId} 不存在；现有版本：${candidateText(versionCandidates(data))}。请让用户在页面创建并复制 id${migrationHint ? `。${migrationHint}` : ''}`,
         );
       }
       const requirement = findRequirement(version, requirementId);

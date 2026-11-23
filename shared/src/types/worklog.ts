@@ -108,7 +108,8 @@ export interface WorklogRecordRequest {
   files?: WorklogEntryFile[];
   diff?: string;
   tags?: string[];
-  stage: WorkStage;
+  /** 唯一阶段标签;不传=未标注(MCP record_work 仍强制要求,页面手动补录可留空) */
+  stage?: WorkStage;
   /** 记录端所在路径(MCP handler 自动填 process.cwd());不传则不做路径归属 */
   sourcePath?: string;
 }

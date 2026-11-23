@@ -108,6 +108,30 @@ describe('WorklogService', () => {
       })).rejects.toThrow(/请让用户在页面创建并复制 id/);
     });
 
+    it('should append migration hint when no versions exist yet', async () => {
+      // 旧库未迁移时 versions 为空:提示先启动 Web 服务完成迁移,而不是只让用户创建版本
+      await expect(service.record({
+        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+      })).rejects.toThrow(/如从旧版本升级.*npm start.*完成数据迁移/);
+    });
+
+    it('should not append migration hint when versions already exist', async () => {
+      // 已有版本时 id 写错属于普通输入错误,不应误导用户去「迁移数据」
+      await service.createVersion({ name: 'V1' });
+      await expect(service.record({
+        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+      })).rejects.not.toThrow(/如从旧版本升级/);
+    });
+
+    it('should record without stage as unlabelled', async () => {
+      const { versionId, requirementId } = await seedVersionRequirement();
+      const res = await service.record({ versionId, requirementId, title: '未标注', detail: 'd' });
+
+      const [entry] = await service.query({ entryId: res.entryId });
+      expect(entry.title).toBe('未标注');
+      expect(entry.stage).toBeUndefined();
+    });
+
     it('should reject unknown requirement id with actionable message', async () => {
       const version = await service.createVersion({ name: 'V1' });
       await expect(service.record({

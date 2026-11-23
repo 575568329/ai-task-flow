@@ -205,9 +205,8 @@ export function WorklogView() {
     stage?: WorkStage;
   }) => {
     try {
-      // 后端把空/缺失 stage 视为「未标注」;shared 里 stage 必填,用窄化类型承载可选 stage,
-      // 只放宽 stage 一项,其余字段仍受 WorklogRecordRequest 约束(避免整体断言掩盖拼写错误)。
-      const payload: Omit<WorklogRecordRequest, 'stage'> & { stage?: WorkStage } = {
+      // 后端把空/缺失 stage 视为「未标注」;shared 的 stage 已可选,直接用请求类型,无需窄化断言
+      const payload: WorklogRecordRequest = {
         versionId: input.versionId,
         requirementId: input.requirementId,
         title: input.title,
@@ -215,7 +214,7 @@ export function WorklogView() {
         ...(input.tags ? { tags: input.tags } : {}),
         ...(input.stage ? { stage: input.stage } : {}),
       };
-      const result = await worklogApi.record(payload as WorklogRecordRequest);
+      const result = await worklogApi.record(payload);
       setCreating(false);
       setMode('entries');
       setSelection({ versionId: input.versionId, requirementId: input.requirementId });
