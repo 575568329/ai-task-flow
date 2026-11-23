@@ -178,3 +178,13 @@ export function projectIdMigrationMarkerPath(dataDir?: string): string {
 export function projectIdMigrationLockTarget(dataDir?: string): string {
   return resolveDataDir(dataDir);
 }
+
+/** 版本树(版本→需求→条目)一次性迁移的版本标记文件,保证幂等 */
+export function versionTreeMigrationMarkerPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), '.migration-version-tree.json');
+}
+
+/** 版本树迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移 */
+export function versionTreeMigrationLockTarget(dataDir?: string): string {
+  return resolveDataDir(dataDir);
+}
