@@ -4,6 +4,27 @@ import type { KnowledgeManifest, KnowledgeDocResponse, KnowledgeCreateRequest } 
 
 const BASE = '/api';
 
+/** 导入报告(与后端 ImportReport 对齐) */
+export interface KnowledgeImportReport {
+  copied: number;
+  conflicts: Array<{ from: string; to: string }>;
+  errors: Array<{ path: string; message: string }>;
+}
+
+/** 一次性导入旧知识库(sourceDir 缺省时由服务端定位仓库内 knowledge-base) */
+export async function importKnowledge(sourceDir?: string): Promise<KnowledgeImportReport> {
+  const res = await fetch(`${BASE}/knowledge/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sourceDir ? { sourceDir } : {}),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `导入失败 (${res.status})`);
+  }
+  return res.json();
+}
+
 /** 获取 manifest(目录树 + 索引) */
 export async function fetchManifest(): Promise<KnowledgeManifest> {
   const res = await fetch(`${BASE}/knowledge/manifest`);

@@ -36,6 +36,11 @@ export class KnowledgeService {
     this.root = knowledgeRoot;
   }
 
+  /** 知识库根目录(供导入等跨模块流程定位目标目录) */
+  getRoot(): string {
+    return this.root;
+  }
+
   /**
    * 获取 manifest(有缓存则返回缓存,无则扫描)
    */

@@ -4,6 +4,8 @@ import { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { KnowledgeService } from '../../../application/knowledge/KnowledgeService.js';
+import { importKnowledge } from '../../../application/knowledge/KnowledgeImportService.js';
+import { isLocalAccess } from '../../../utils/localAccess.js';
 import type { KnowledgeCreateRequest, KnowledgeSaveRequest } from '@ai-task-flow/shared';
 
 export async function registerKnowledgeRoutes(
@@ -123,6 +125,30 @@ export async function registerKnowledgeRoutes(
         return reply.status(403).send({ error: err.message });
       }
       return reply.status(400).send({ error: `创建失败: ${err.message}` });
+    }
+  });
+
+  // POST /api/knowledge/import - 一次性导入旧知识库(body 可选 { sourceDir })
+  // 默认源目录由服务层解析为仓库内 knowledge-base;仅允许本机调用。
+  fastify.post<{
+    Body: { sourceDir?: string } | undefined;
+  }>('/api/knowledge/import', async (request, reply) => {
+    if (!isLocalAccess(request.ip)) {
+      return reply.status(403).send({ error: '仅允许本机调用导入' });
+    }
+
+    const sourceDir = request.body?.sourceDir?.trim() || undefined;
+
+    try {
+      const report = await importKnowledge({
+        sourceDir,
+        targetDir: knowledgeService.getRoot(),
+      });
+      // 导入后刷新 manifest,前端随后拉取即可看到新文档
+      await knowledgeService.refreshManifest();
+      return report;
+    } catch (err: any) {
+      return reply.status(400).send({ error: `导入失败: ${err.message}` });
     }
   });
 
