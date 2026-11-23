@@ -349,6 +349,68 @@ describe('WorklogService', () => {
   });
 
   // ---------------------------------------------------------------
+  // record 按项目路径归属(最长前缀)
+  // ---------------------------------------------------------------
+  describe('path ownership', () => {
+    // 平台无关:基于 os.tmpdir 构造嵌套绝对路径;目录不存在 → resolveMatchPath 降级 path.resolve,
+    // 与绑定值完全一致,不受 realpath 大小写/符号链接影响
+    const base = path.resolve(os.tmpdir(), 'worklog-path-owner');
+    const parentPath = path.join(base, '资源加工平台');
+    const childPath = path.join(parentPath, '搜题平台');
+
+    it('should assign owner project by longest path prefix', async () => {
+      await service.record({ project: '资源加工平台', version: 'V1', title: 'a', detail: 'd' });
+      await service.record({ project: '搜题平台', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('资源加工平台', [parentPath]);
+      await service.bindProjectPaths('搜题平台', [childPath]);
+
+      const sourcePath = path.join(childPath, '前端', 'x');
+      const r = await service.record({
+        project: '随便写的名字',
+        version: 'V1',
+        title: 't',
+        detail: 'd',
+        sourcePath,
+      });
+
+      expect(r.projectId).toBeDefined();
+      const tree = await service.getTree();
+      const owner = tree.projects.find((p) => p.id === r.projectId)!;
+      expect(owner.name).toBe('搜题平台'); // 长前缀优先于父项目
+      const entry = owner.versions[0].entries.find((e) => e.id === r.entryId)!;
+      expect(entry.sourcePath).toBe(sourcePath); // 保留用户原始写法
+      expect(entry.pathUnmatched).toBeUndefined();
+      // 未归属的 AI 项目名不得被创建成新项目
+      expect(tree.projects.some((p) => p.name === '随便写的名字')).toBe(false);
+    });
+
+    it('should fall back to given project name when path matches nothing', async () => {
+      const unmatchedPath = path.join(base, 'nowhere', 'x');
+      const r = await service.record({
+        project: 'Demo', version: 'V1', title: 't', detail: 'd',
+        sourcePath: unmatchedPath,
+      });
+
+      const tree = await service.getTree();
+      const demo = tree.projects.find((p) => p.name === 'Demo')!;
+      const entry = demo.versions[0].entries[0];
+      expect(entry.pathUnmatched).toBe(true);
+      expect(entry.sourcePath).toBe(unmatchedPath); // 未命中也要留痕,便于后续重新归属
+      expect(r.projectId).toBe(demo.id);
+      expect(r.warnings?.some((w) => w.includes('未归属'))).toBe(true);
+    });
+
+    it('should keep legacy behavior when sourcePath is absent', async () => {
+      const r = await service.record({ project: 'Legacy', version: 'V1', title: 't', detail: 'd' });
+      expect(r.warnings).toBeUndefined();
+      const tree = await service.getTree();
+      const entry = tree.projects.find((p) => p.name === 'Legacy')!.versions[0].entries[0];
+      expect(entry.sourcePath).toBeUndefined();
+      expect(entry.pathUnmatched).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------
   // 双实例(模拟 HTTP 进程与 MCP 进程)并发
   // ---------------------------------------------------------------
   it('should persist and filter by stage', async () => {

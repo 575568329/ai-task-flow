@@ -24,7 +24,7 @@ import type { WorklogRepository } from '../../domain/worklog/repositories/Worklo
 import {
   WorklogNotFoundError, WorklogConflictError, WorklogValidationError,
 } from '../../domain/worklog/errors.js';
-import { normalizePath } from '../../domain/worklog/pathMatch.js';
+import { findOwningProject, normalizePath, resolveMatchPath } from '../../domain/worklog/pathMatch.js';
 
 /** 项目/版本名约束:trim 后非空、不含路径分隔符(防路由参数歧义)、长度上限 */
 const NAME_MAX_LEN = 60;
@@ -134,8 +134,23 @@ export class WorklogService {
     if (!input.title?.trim()) throw new WorklogValidationError('标题不能为空');
     if (input.detail == null || !String(input.detail).trim()) throw new WorklogValidationError('详细说明不能为空');
 
-    return this.repo.mutate((data) => {
-      let proj = data.projects.find((p) => p.name === project);
+    return this.repo.mutate(async (data) => {
+      const warnings: string[] = [];
+      // 路径归属:realpath 归一化后按「最长前缀」找主项目;realpath 失败降级 path.resolve
+      const normalizedSource = input.sourcePath?.trim()
+        ? await resolveMatchPath(input.sourcePath.trim())
+        : undefined;
+      let ownerId: string | undefined;
+      if (normalizedSource) {
+        const refs = data.projects.flatMap((p) =>
+          (p.paths ?? []).map((pth) => ({ projectId: p.id, path: pth })),
+        );
+        ownerId = findOwningProject(refs, normalizedSource);
+      }
+      const ownerProject = ownerId ? data.projects.find((p) => p.id === ownerId) : undefined;
+
+      // 命中归属项目则以它为准(忽略 AI 传入的名字);未命中沿用传入项目名
+      let proj = ownerProject ?? data.projects.find((p) => p.name === project);
       let createdProject = false;
       let createdVersion = false;
       if (!proj) {
@@ -169,13 +184,21 @@ export class WorklogService {
       if (input.diff) entry.diff = input.diff;
       if (input.tags?.length) entry.tags = input.tags.map((t) => t.trim()).filter(Boolean);
       if (input.stage !== undefined) entry.stage = validateStage(input.stage);
+      // 留痕用户原始写法(不写归一化值),便于展示与后续重新归属
+      if (normalizedSource) entry.sourcePath = input.sourcePath!.trim();
+      if (normalizedSource && !ownerProject) entry.pathUnmatched = true;
       ver.entries.push(entry);
 
+      if (normalizedSource && !ownerProject) {
+        warnings.push('当前路径未归属任何项目，可在页面绑定路径');
+      }
       return {
         entryId: entry.id,
-        path: `${project}/${version}/${entry.id}`,
+        path: `${proj.name}/${version}/${entry.id}`,
+        projectId: proj.id,
         createdProject,
         createdVersion,
+        ...(warnings.length ? { warnings } : {}),
       };
     });
   }
