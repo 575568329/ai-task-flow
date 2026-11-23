@@ -142,7 +142,16 @@ export async function registerWorklogRoutes(
   fastify.put<{ Params: { name: string }; Body: { paths?: string[] } }>(
     '/api/worklog/projects/:name/paths',
     async (request, reply) => {
-      const paths = Array.isArray(request.body?.paths) ? request.body.paths : [];
+      // 整体替换语义:body 缺 paths 时静默当 [] 会清空全部绑定,必须显式 400;
+      // 只有显式传空数组才表示「解绑全部」。
+      const raw = request.body;
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        return reply.status(400).send({ error: '请求体必须为 JSON 对象' });
+      }
+      const paths = (raw as { paths?: unknown }).paths;
+      if (!Array.isArray(paths) || paths.some((item) => typeof item !== 'string')) {
+        return reply.status(400).send({ error: 'paths 必须为字符串数组（清空绑定请显式传 []）' });
+      }
       try {
         await worklogService.bindProjectPaths(request.params.name, paths);
         return { ok: true };

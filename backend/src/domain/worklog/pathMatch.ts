@@ -1,10 +1,19 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/** 归一化为比较键:反斜杠转正斜杠、折叠重复分隔符、去尾分隔符、Windows 转小写 */
+/** WSL 挂载路径 → Windows 盘符:仅识别 /mnt/<单个字母>(/mnt/data、/mnt/wsl 等不动) */
+const WSL_DRIVE_PATH = /^\/mnt\/([a-zA-Z])(?:\/(.*))?$/;
+
+/**
+ * 归一化为比较键:反斜杠转正斜杠、折叠重复分隔符、WSL↔Windows 盘符互认、去尾分隔符、Windows 转小写。
+ * WSL 侧 cwd(/mnt/d/xunfei/...)与页面绑定的 D:\xunfei\... 归一化后必须相等,
+ * 否则同一条记录在两种宿主下归属判定结果不同。
+ */
 export function normalizePath(input: string): string {
   let value = input.trim().replace(/\\/g, '/');
   value = value.replace(/\/{2,}/g, '/');
+  const wsl = WSL_DRIVE_PATH.exec(value);
+  if (wsl) value = `${wsl[1].toLowerCase()}:/${wsl[2] ?? ''}`;
   if (value.length > 1 && !/^[a-zA-Z]:\/$/.test(value)) {
     value = value.replace(/\/+$/, '');
   }

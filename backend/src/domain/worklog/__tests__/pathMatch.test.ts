@@ -9,6 +9,17 @@ describe('normalizePath', () => {
   it('保留盘符根', () => {
     expect(normalizePath('D:\\')).toBe('d:/');
   });
+  it('WSL 挂载路径转换为 Windows 盘符(双向互认)', () => {
+    expect(normalizePath('/mnt/d/xunfei/a')).toBe('d:/xunfei/a');
+    expect(normalizePath('/mnt/d')).toBe('d:/');
+    expect(normalizePath('/mnt/c/Users/me/')).toBe('c:/users/me');
+    // Windows 写法保持不变(只做既有的大小写/斜杠归一)
+    expect(normalizePath('D:\\xunfei\\a')).toBe('d:/xunfei/a');
+  });
+  it('多字母挂载目录不被误转换', () => {
+    expect(normalizePath('/mnt/data/x')).toBe('/mnt/data/x');
+    expect(normalizePath('/mnt/wsl/distro')).toBe('/mnt/wsl/distro');
+  });
 });
 
 describe('isPathWithin', () => {
@@ -30,6 +41,12 @@ describe('isPathWithin', () => {
   it('纯空白父路径不匹配任何路径', () => {
     expect(isPathWithin('   ', '/mnt/d/x')).toBe(false);
   });
+  it('WSL 与 Windows 表示互认', () => {
+    expect(isPathWithin('D:\\xunfei\\a', '/mnt/d/xunfei/a/b')).toBe(true);
+    expect(isPathWithin('/mnt/d/xunfei/a', 'D:\\xunfei\\a\\b')).toBe(true);
+    // 前缀边界仍然生效
+    expect(isPathWithin('D:\\xunfei\\a', '/mnt/d/xunfei/ab')).toBe(false);
+  });
 });
 
 describe('findOwningProject', () => {
@@ -50,5 +67,13 @@ describe('findOwningProject', () => {
   });
   it('空路径的项目不吞掉任何候选路径', () => {
     expect(findOwningProject([{ projectId: 'p', path: '' }], '/home/x')).toBeUndefined();
+  });
+  it('WSL cwd 命中 Windows 绑定的项目(双向)', () => {
+    expect(findOwningProject(refs, '/mnt/d/xunfei/资源加工平台/前端/rpp-web')).toBe('p_parent');
+    expect(findOwningProject(refs, '/mnt/d/xunfei/资源加工平台/搜题平台/前端')).toBe('p_child');
+    expect(findOwningProject(
+      [{ projectId: 'p_wsl', path: '/mnt/d/xunfei/题库' }],
+      'D:\\xunfei\\题库\\web',
+    )).toBe('p_wsl');
   });
 });

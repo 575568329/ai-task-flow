@@ -47,6 +47,14 @@ export function ProjectPathDialog({
 
   const save = async () => {
     const list = draft.split('\n').map((line) => line.trim()).filter(Boolean);
+    // 空文本域 + 已有绑定 = 清空全部绑定:破坏性操作必须二次确认(整体保存语义下不能静默清空)
+    if (
+      list.length === 0
+      && paths.length > 0
+      && !window.confirm('路径已清空，保存会解除该项目的全部路径绑定，确定继续？')
+    ) {
+      return;
+    }
     setSaving(true);
     try {
       await worklogApi.bindPaths(project, list);

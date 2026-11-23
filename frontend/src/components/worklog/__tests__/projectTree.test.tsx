@@ -98,6 +98,21 @@ describe('ProjectVersionTree 路径三态', () => {
     expect(node.className).toContain('text-destructive');
   });
 
+  it('should only red-mark the actually missing path, not the first valid one', () => {
+    const valid = 'D:\\xunfei\\a';
+    const missing = 'D:\\gone\\b';
+    renderTree([project({ paths: [valid, missing], missingPaths: [missing] })]);
+
+    // 首条仍有效:不得标红,title 保留完整路径
+    const first = screen.getByText(/xunfei\\a/);
+    expect(first).toHaveAttribute('title', valid);
+    expect(first.className).not.toContain('text-destructive');
+    expect(screen.queryByText('路径不存在')).not.toBeInTheDocument();
+    // 失效路径通过 +N 旁的「N 条失效」暴露
+    const missingHint = screen.getByText('1 条失效');
+    expect(missingHint.className).toContain('text-destructive');
+  });
+
   it('should keep full path as title when path exists', () => {
     renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
 
@@ -145,6 +160,24 @@ describe('ProjectPathDialog 路径绑定', () => {
     ));
     expect(toast.success).toHaveBeenCalledWith('路径已绑定');
     expect(props.onPathsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('should confirm before clearing all bindings with an empty textarea', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { props } = renderTree([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+
+    fireEvent.click(screen.getByText('绑定路径…'));
+    fireEvent.change(screen.getByLabelText('项目路径'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('保存'));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockedBind).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(screen.getByText('保存'));
+    await waitFor(() => expect(mockedBind).toHaveBeenCalledWith('资源加工平台', []));
+    expect(props.onPathsChanged).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
   });
 
   it('should unbind a single existing path', async () => {

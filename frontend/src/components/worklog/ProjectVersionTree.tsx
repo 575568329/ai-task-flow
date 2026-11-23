@@ -111,7 +111,10 @@ export function ProjectVersionTree({
         const isProjectActive = selection.project === project.name && !selection.version;
         const totalEntries = project.versions.reduce((sum, v) => sum + v.entries.length, 0);
         const boundPaths = project.paths ?? [];
-        const isPathMissing = (project.missingPaths?.length ?? 0) > 0;
+        // 逐路径判断失效:首条有效、后续失效时不能把首条也标红
+        const missingSet = new Set(project.missingPaths ?? []);
+        const missingCount = boundPaths.filter((p) => missingSet.has(p)).length;
+        const firstPathMissing = boundPaths.length > 0 && missingSet.has(boundPaths[0]);
         const relatedCount = relatedCounts?.[project.id] ?? 0;
         return (
           <div key={project.name}>
@@ -141,14 +144,20 @@ export function ProjectVersionTree({
                         <span
                           className={cn(
                             'truncate',
-                            isPathMissing ? 'text-destructive' : 'text-muted-foreground',
+                            firstPathMissing ? 'text-destructive' : 'text-muted-foreground',
                           )}
-                          title={isPathMissing ? '路径不存在' : boundPaths[0]}
+                          title={firstPathMissing ? '路径不存在' : boundPaths[0]}
                         >
                           {formatPathTail(boundPaths[0])}
                         </span>
                         {boundPaths.length > 1 && (
                           <span className="text-muted-foreground shrink-0">+{boundPaths.length - 1}</span>
+                        )}
+                        {/* 多路径时明确失效条数,避免 +N 里藏着坏路径却看不出来 */}
+                        {boundPaths.length > 1 && missingCount > 0 && (
+                          <span className="text-destructive shrink-0" title="其中部分路径不存在">
+                            {missingCount} 条失效
+                          </span>
                         )}
                       </>
                     ) : (

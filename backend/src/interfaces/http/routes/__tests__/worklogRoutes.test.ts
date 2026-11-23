@@ -119,6 +119,43 @@ describe('worklogRoutes', () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it('PUT project paths should reject missing/malformed paths and only clear on explicit []', async () => {
+    await app.inject({ method: 'POST', url: '/api/worklog/entries', payload: { project: 'p', version: 'v1', title: 't', detail: 'd' } });
+    const bind = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/p/paths',
+      payload: { paths: ['D:\\xunfei\\p'] },
+    });
+    expect(bind.statusCode).toBe(200);
+
+    // body 存在但缺 paths:整体替换语义下静默清空是数据事故,必须 400
+    const missing = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/p/paths', payload: {},
+    });
+    expect(missing.statusCode).toBe(400);
+
+    const notArray = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/p/paths', payload: { paths: 'D:\\xunfei\\p' },
+    });
+    expect(notArray.statusCode).toBe(400);
+
+    const badItem = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/p/paths', payload: { paths: ['D:\\ok', 1] },
+    });
+    expect(badItem.statusCode).toBe(400);
+
+    // 以上 400 均不得改动既有绑定
+    const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
+    expect(tree.json().projects[0].paths).toEqual(['D:\\xunfei\\p']);
+
+    // 显式 [] 才允许清空
+    const clear = await app.inject({
+      method: 'PUT', url: '/api/worklog/projects/p/paths', payload: { paths: [] },
+    });
+    expect(clear.statusCode).toBe(200);
+    const cleared = await app.inject({ method: 'GET', url: '/api/worklog' });
+    expect(cleared.json().projects[0].paths).toEqual([]);
+  });
+
   it('rename endpoints should map conflict to 409', async () => {
     await app.inject({ method: 'POST', url: '/api/worklog/entries', payload: { project: 'p', version: 'v1', title: 't', detail: 'd' } });
     await app.inject({ method: 'POST', url: '/api/worklog/entries', payload: { project: 'p', version: 'v2', title: 't', detail: 'd' } });
