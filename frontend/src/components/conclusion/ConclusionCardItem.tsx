@@ -24,6 +24,12 @@ interface Props {
   summary: ConclusionSummary;
   expanded: boolean;
   detail?: Conclusion;
+  /** 主项目展示名(已按 id 映射 + 快照兜底解析);缺省用 summary.project */
+  projectLabel?: string;
+  /** 主项目引用已失效(项目已删除) */
+  projectDeleted?: boolean;
+  /** 关联项目展示名(已按 id 映射 + 快照兜底解析);缺省用 summary.relatedProjects 快照 */
+  relatedProjectLabels?: string[];
   onToggle: () => void;
   onEdit: () => void;
   onPatch: () => void;
@@ -53,10 +59,15 @@ function LongMarkdown({ content }: { content: string }) {
   );
 }
 
-export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit, onPatch, onDelete }: Props) {
+export function ConclusionCardItem({
+  summary, expanded, detail,
+  projectLabel, projectDeleted, relatedProjectLabels,
+  onToggle, onEdit, onPatch, onDelete,
+}: Props) {
   const latest = detail?.revisions[detail.revisions.length - 1];
   const conversationId = summary.source.conversationId?.trim();
   const conversation = conversationDisplay(summary.source);
+  const relatedLabels = relatedProjectLabels ?? summary.relatedProjects ?? [];
 
   const copyCodePath = async (path: string) => {
     if (!navigator.clipboard) {
@@ -99,8 +110,14 @@ export function ConclusionCardItem({ summary, expanded, detail, onToggle, onEdit
             )}
           </div>
           <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-            <span>{summary.project ?? '个人'}</span>
+            <span>{projectLabel ?? summary.project ?? '个人'}</span>
+            {projectDeleted && (
+              <span className="opacity-70" title="关联的项目已不存在，仅展示名称快照">项目已删除</span>
+            )}
             {summary.version && <span>{summary.version}</span>}
+            {relatedLabels.length > 0 && (
+              <Badge variant="outline" className="text-[10px]">关联: {relatedLabels.join('、')}</Badge>
+            )}
             <span>{summary.latestDate}</span>
             <WorkStageBadge stage={summary.stage} />
             <span>{summary.source.tool}</span>

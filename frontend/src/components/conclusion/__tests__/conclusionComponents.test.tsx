@@ -75,4 +75,39 @@ describe('ConclusionCardItem', () => {
     // changeNote 与「变更：」同处一个 <p>，RTL 按元素整体文本精确匹配，故与上一行一致用正则
     expect(screen.getByText(/初始/)).toBeTruthy();
   });
+
+  it('should render mapped project name and related project badges', () => {
+    render(
+      <ConclusionCardItem
+        summary={summary({ project: '旧快照名' })}
+        expanded={false}
+        projectLabel="映射后的项目名"
+        relatedProjectLabels={['题库', '资源加工']}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onPatch={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('映射后的项目名')).toBeTruthy();
+    expect(screen.queryByText('旧快照名')).toBeNull();
+    expect(screen.getByText(/关联.*题库.*资源加工/)).toBeTruthy();
+  });
+
+  it('should show deleted hint when project reference is gone', () => {
+    render(
+      <ConclusionCardItem
+        summary={summary()}
+        expanded={false}
+        projectLabel="旧快照名"
+        projectDeleted
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onPatch={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('旧快照名')).toBeTruthy();
+    expect(screen.getByText(/项目已删除/)).toBeTruthy();
+  });
 });

@@ -15,6 +15,8 @@ export interface ConclusionFormValue {
   data?: string;
   openItems?: string;
   codeRefs?: ConclusionCodeRef[];
+  /** 关联项目名称(逗号分隔文本在表单内解析为数组) */
+  relatedProjects?: string[];
   changeNote?: string;
   stage?: WorkStage;
   expectedRev?: number;
@@ -56,6 +58,7 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
   const [version, setVersion] = useState(initial?.version ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '));
+  const [relatedProjects, setRelatedProjects] = useState((initial?.relatedProjects ?? []).join(', '));
   const [decision, setDecision] = useState(latest?.decision ?? '');
   const [data, setData] = useState(latest?.data ?? '');
   const [openItems, setOpenItems] = useState(latest?.openItems ?? '');
@@ -77,6 +80,7 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
         data,
         openItems,
         codeRefs: parseCodeRefs(codeRefs),
+        relatedProjects: relatedProjects.split(',').map((name) => name.trim()).filter(Boolean),
         changeNote: changeNote.trim() || undefined,
         stage: stage || undefined,
         expectedRev: latest?.rev,
@@ -113,6 +117,15 @@ export function ConclusionForm({ mode, initial, projects, onSubmit, onCancel }: 
 
       <Input placeholder="标题" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Input placeholder="标签（逗号分隔）" value={tags} onChange={(e) => setTags(e.target.value)} />
+      <Input
+        list="conclusion-related-projects"
+        placeholder="关联项目（逗号分隔）"
+        value={relatedProjects}
+        onChange={(e) => setRelatedProjects(e.target.value)}
+      />
+      <datalist id="conclusion-related-projects">
+        {projects.map((name) => <option key={name} value={name} />)}
+      </datalist>
 
       <div className="space-y-1">
         <label className="block text-xs font-semibold">阶段（唯一标签；缺陷修改用 fix 标签）</label>

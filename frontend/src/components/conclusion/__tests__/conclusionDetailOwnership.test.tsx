@@ -40,6 +40,10 @@ vi.mock('@/api/conclusion', () => ({
   },
 }));
 
+vi.mock('@/api/worklog', () => ({
+  worklogApi: { getTree: vi.fn().mockResolvedValue({ projects: [] }) },
+}));
+
 vi.mock('@/components/ui/toaster', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { useUIStore } from '@/stores/uiStore';
 import { conclusionApi } from '@/api/conclusion';
+import { worklogApi } from '@/api/worklog';
 import { ConclusionProjectList } from './ConclusionProjectList';
 import { ConclusionCardItem } from './ConclusionCardItem';
 import { ConclusionForm, type ConclusionFormValue } from './ConclusionForm';
@@ -21,6 +22,12 @@ import {
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** 项目 id → 最新名称映射;ready 区分「树已成功加载」与「尚未加载/加载失败」 */
+interface ProjectIndex {
+  names: Map<string, string>;
+  ready: boolean;
+}
+
 export function ConclusionView() {
   const [cards, setCards] = useState<ConclusionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,16 +42,32 @@ export function ConclusionView() {
   const [detail, setDetail] = useState<Conclusion | null>(null);
   const [form, setForm] = useState<{ mode: 'create' | 'append'; initial?: Conclusion } | null>(null);
   const [metaForm, setMetaForm] = useState<Conclusion | null>(null);
+  /** 项目 id → 名称映射,仅用于展示;加载失败静默,退回卡上名称快照 */
+  const [projectIndex, setProjectIndex] = useState<ProjectIndex>({ names: new Map(), ready: false });
   const seq = useRef(0);
   /** 搜索请求归属序号:慢的旧关键词响应不得覆盖新关键词的结果 */
   const searchSeq = useRef(0);
   /** 详情请求归属序号:只允许最新一次展开/收起的响应落盘(否则 A 的慢响应会盖掉 B 的详情) */
   const detailSeq = useRef(0);
 
+  /** 拉项目树重建 id → 名称映射:项目重命名/删除后卡片展示随之刷新;失败静默保留旧映射 */
+  const loadProjectNames = useCallback(async () => {
+    try {
+      const tree = await worklogApi.getTree();
+      const names = new Map<string, string>();
+      for (const project of tree.projects) names.set(project.id, project.name);
+      setProjectIndex({ names, ready: true });
+    } catch {
+      // 映射只是展示增强:失败时保持原状,卡片退回名称快照
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     const current = ++seq.current;
     // 列表重拉成功与否都让在途搜索失效并重查:删除/追加后旧搜索结果会残留(已删卡点击 404)
     setSearchTick((tick) => tick + 1);
+    // 每次刷新顺带重建项目名映射(挂载时 refresh 会执行一次)
+    void loadProjectNames();
     try {
       const res = await conclusionApi.list();
       if (current !== seq.current) return;
@@ -54,7 +77,7 @@ export function ConclusionView() {
     } finally {
       if (current === seq.current) setLoading(false);
     }
-  }, []);
+  }, [loadProjectNames]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -94,6 +117,29 @@ export function ConclusionView() {
     [cards],
   );
 
+  /** 主项目展示名:有 id 且映射命中用最新名,否则退回快照;树已加载却查不到 = 项目已删除 */
+  const resolveMainProject = (summary: ConclusionSummary): { label?: string; deleted: boolean } => {
+    if (!summary.projectId) return { label: summary.project, deleted: false };
+    const mapped = projectIndex.names.get(summary.projectId);
+    if (mapped) return { label: mapped, deleted: false };
+    return { label: summary.project, deleted: projectIndex.ready };
+  };
+
+  /** 关联项目展示名:按 id 映射最新名称,映射不到退回名称快照;两者都无则跳过 */
+  const resolveRelatedProjects = (
+    card: { relatedProjects?: string[]; relatedProjectIds?: string[] },
+  ): string[] => {
+    const ids = card.relatedProjectIds ?? [];
+    const snapshots = card.relatedProjects ?? [];
+    const labels: string[] = [];
+    for (let index = 0; index < Math.max(ids.length, snapshots.length); index += 1) {
+      const id = ids[index];
+      const label = (id ? projectIndex.names.get(id) : undefined) ?? snapshots[index];
+      if (label) labels.push(label);
+    }
+    return labels;
+  };
+
   const toggle = async (summary: ConclusionSummary) => {
     const current = ++detailSeq.current;
     if (expandedId === summary.id) {
@@ -126,6 +172,7 @@ export function ConclusionView() {
           data: value.data,
           openItems: value.openItems,
           codeRefs: value.codeRefs,
+          relatedProjects: value.relatedProjects,
           changeNote: value.changeNote ?? '人工修订',
           stage: value.stage,
         });
@@ -141,6 +188,7 @@ export function ConclusionView() {
           data: value.data,
           openItems: value.openItems,
           codeRefs: value.codeRefs,
+          relatedProjects: value.relatedProjects,
           stage: value.stage,
         });
         toast.success('已创建结论卡');
@@ -272,9 +320,12 @@ export function ConclusionView() {
 
         {visible.length === 0 && !form && (
           !selection && !searchResults ? (
-            <p className="text-muted-foreground py-12 text-center text-sm">
-              数据量较大，默认不加载全部。请在左侧选择项目，或搜索标题/结论。
-            </p>
+            <div className="text-muted-foreground py-12 text-center text-sm">
+              <p>数据量较大，默认不加载全部。请在左侧选择项目，或搜索标题/结论。</p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                结论卡按会话归档，路径只用于展示；按项目路径归属的是工作记录。
+              </p>
+            </div>
           ) : (
             <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm leading-relaxed">
               <p className="font-medium">还没有结论卡。</p>
@@ -283,6 +334,9 @@ export function ConclusionView() {
                 {`把刚才的结论记到 ai-task-flow，项目 ${projects[0] ?? '<项目名>'}：
 结论、关键数据、待办、涉及文件`}
               </pre>
+              <p className="text-muted-foreground mt-2 text-xs">
+                结论卡按会话归档，路径只用于展示；按项目路径归属的是工作记录。
+              </p>
             </div>
           )
         )}
@@ -291,16 +345,24 @@ export function ConclusionView() {
           // 纵深防御:详情必须同时"属于当前展开卡"且 id 对齐,陈旧对象绝不驱动编辑/改信息
           const activeDetail =
             expandedId === summary.id && detail?.id === summary.id ? detail : undefined;
+          const mainProject = resolveMainProject(summary);
           return (
             <ConclusionCardItem
               key={summary.id}
               summary={summary}
               expanded={expandedId === summary.id}
+              projectLabel={mainProject.label}
+              projectDeleted={mainProject.deleted}
+              relatedProjectLabels={resolveRelatedProjects(summary)}
               detail={activeDetail}
               onToggle={() => void toggle(summary)}
               onEdit={() => {
                 if (activeDetail) {
-                  setForm({ mode: 'append', initial: activeDetail });
+                  // 预填映射后的最新关联项目名,避免项目重命名后按旧快照名提交被后端丢弃
+                  setForm({
+                    mode: 'append',
+                    initial: { ...activeDetail, relatedProjects: resolveRelatedProjects(activeDetail) },
+                  });
                 }
               }}
               onPatch={() => {
