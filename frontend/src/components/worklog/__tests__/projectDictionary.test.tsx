@@ -293,6 +293,21 @@ describe('项目字典 CRUD(新建 / 重命名 / 删除)', () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('should reset pending create/delete state when the dialog is reopened', () => {
+    const view = renderDialog([project()]);
+
+    fireEvent.click(screen.getByText('新建项目'));
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(screen.getByLabelText('项目名')).toBeInTheDocument();
+    expect(screen.getByText('确认删除')).toBeInTheDocument();
+
+    view.rerender(<ProjectDictionaryDialog projects={[project()]} {...view.props} open={false} />);
+    view.rerender(<ProjectDictionaryDialog projects={[project()]} {...view.props} open />);
+
+    expect(screen.queryByLabelText('项目名')).toBeNull();
+    expect(screen.queryByText('确认删除')).toBeNull();
+  });
+
   it('should toast error and not refresh when delete fails', async () => {
     mockedDelete.mockRejectedValueOnce(new Error('项目 "资源加工平台" 不存在'));
     const onChanged = vi.fn();

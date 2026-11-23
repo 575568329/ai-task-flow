@@ -339,6 +339,26 @@ describe('worklog MCP tools', () => {
     expect(text).toContain('files 不是数组,已忽略');
   });
 
+  it('delete_project should only remove the dictionary entry and say entries are kept', async () => {
+    await deps.worklogService.createProject({ name: 'A' });
+    const { versionId, requirementId } = await seedVersionRequirement();
+    await deps.worklogService.record({
+      versionId, requirementId, project: 'A', title: 't', detail: 'd', stage: 'dev',
+    });
+
+    const result = await HANDLERS.delete_project({ project: 'A' }, deps);
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain('已从项目字典移除「A」');
+    expect(text).toContain('历史条目不删除');
+    expect(text).not.toContain('全部版本与条目');
+
+    // 实现与文案一致:字典清空,历史条目与项目名快照仍在
+    const tree = await deps.worklogService.getTree();
+    expect(tree.projects).toHaveLength(0);
+    expect(tree.versions[0].requirements[0].entries[0].project).toBe('A');
+  });
+
   it('record_work should list existing projects when explicit project is unknown', async () => {
     await deps.worklogService.createProject({ name: '资源加工平台' });
     const { versionId, requirementId } = await seedVersionRequirement();

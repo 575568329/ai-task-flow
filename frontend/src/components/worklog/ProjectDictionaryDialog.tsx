@@ -2,7 +2,7 @@
 // 项目字典(从旧树移出的项目设置):项目用于路径归属与筛选,不再是树根。
 // 支持新建(名称 + 可选路径)、重命名、删除(强确认:只移除字典,历史条目不动)与路径绑定。
 // 每个项目展示路径三态:已绑定尾段(+N)/未绑定/路径不存在标红;可就地打开路径绑定弹窗。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Link2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -62,6 +62,21 @@ export function ProjectDictionaryDialog({
   // 删除(强确认弹窗)
   const [deletingProject, setDeletingProject] = useState<string | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
+
+  // 关闭即视为一次会话结束:重开时不得残留新建表单/重命名输入/删除确认框
+  useEffect(() => {
+    if (open) return;
+    setBindingProject(null);
+    setCreating(false);
+    setNewName('');
+    setNewPathsText('');
+    setCreatingBusy(false);
+    setRenamingProject(null);
+    setRenameValue('');
+    setRenamingBusy(false);
+    setDeletingProject(null);
+    setDeletingBusy(false);
+  }, [open]);
 
   const resetCreate = () => {
     setCreating(false);

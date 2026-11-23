@@ -17,8 +17,10 @@ export const toolDef = {
 export async function handle(args: Record<string, unknown> | undefined, deps: ToolDeps) {
   args ??= {};
   try {
-    await deps.worklogService.deleteProject(String(args.project ?? ''));
-    return ok('✅ 已删除该项目及其全部版本与条目(删除前已自动快照备份)。');
+    const project = String(args.project ?? '').trim();
+    await deps.worklogService.deleteProject(project);
+    // 与实现/catalog 一致:只移除字典项,历史条目保留(名称快照仍在),路径归属失效
+    return ok(`✅ 已从项目字典移除「${project}」；历史条目不删除，其路径归属将失效。(删除前已自动快照备份)`);
   } catch (err) {
     return fail(err);
   }
