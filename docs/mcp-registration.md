@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `e21825e`(fix(knowledge): 修正 meta 路由入参类型断言，恢复 npm run build；MCP 工具定义沿用 `fa1cb1e` 的 14 工具) |
-| 构建时间 | 2026-11-23 20:23 |
+| dist 构建来源 commit | `e3cd719`(fix(mcp): delete_project 成功文案与实际语义对齐；14 工具) |
+| 构建时间 | 2026-11-23 21:09 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
