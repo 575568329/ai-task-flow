@@ -111,7 +111,8 @@ function forbiddenBindReason(input: string): string | undefined {
 
 function findProject(data: WorklogData, name: string): WorklogProject {
   const project = data.projects.find((p) => p.name === name);
-  if (!project) throw new Error(`项目 "${name}" 不存在`);
+  // 用领域错误而非裸 Error:路由层据此映射 404,而不是把「不存在」误报成 500
+  if (!project) throw new WorklogNotFoundError(`项目 "${name}" 不存在`);
   return project;
 }
 

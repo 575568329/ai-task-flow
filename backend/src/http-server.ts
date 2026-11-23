@@ -16,6 +16,7 @@ import { WorklogService } from './application/worklog/WorklogService.js';
 import { JsonConclusionRepository } from './infrastructure/persistence/JsonConclusionRepository.js';
 import { ConclusionService } from './application/conclusion/ConclusionService.js';
 import { runProjectIdMigration, shouldSuggestPathBinding } from './application/migration/ProjectIdMigration.js';
+import { runVersionTreeMigration } from './application/migration/VersionTreeMigration.js';
 import {
   knowledgeDirPath,
   worklogFilePath,
@@ -108,6 +109,18 @@ export async function startApp(options: StartAppOptions = {}) {
   } catch (error: unknown) {
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
     console.error(`[migration] 项目 id 迁移失败,已跳过(不影响启动): ${detail}`);
+  }
+
+  // 一次性数据迁移:旧结构「项目 → 版本 → 条目」归并为「版本 → 需求 → 条目」。
+  // 放在项目 id 迁移之后(条目要带 projectId)、HTTP 启动之前;幂等,失败不阻塞启动。
+  try {
+    const vReport = await runVersionTreeMigration({ dataDir, worklogRepo: worklogRepository });
+    if (!vReport.skipped && (vReport.versionsCreated || vReport.entriesMoved)) {
+      console.log(`[migration] 版本归并 ${vReport.versionsCreated} 个、条目 ${vReport.entriesMoved} 条`);
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`[migration] 版本归并失败,已跳过(不影响启动): ${detail}`);
   }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);

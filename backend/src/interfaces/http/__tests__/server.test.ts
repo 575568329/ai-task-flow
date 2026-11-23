@@ -178,11 +178,13 @@ describe('HTTP Server', () => {
     const boundPath = path.join(os.tmpdir(), `path-bind-${nanoid()}`);
 
     async function createProject(name: string): Promise<void> {
-      await server.inject({
+      // 新模型:项目由字典端点显式创建(条目 record 不再自动建项目/版本)
+      const resp = await server.inject({
         method: 'POST',
-        url: '/api/worklog/entries',
-        payload: { project: name, version: 'v1', title: `t-${name}`, detail: 'd' },
+        url: '/api/worklog/projects',
+        payload: { name },
       });
+      expect(resp.statusCode).toBe(201);
     }
 
     it('should bind, report missing paths, reject conflicts and unbind', async () => {

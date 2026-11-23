@@ -1,10 +1,12 @@
 // backend/src/interfaces/http/routes/worklogRoutes.ts
 // worklog REST API(与 MCP 工具共享同一 WorklogService,业务规则单点;写协议见 JsonWorklogRepository)。
+// 新模型:「版本 → 需求 → 条目」,项目降为字典(路径归属/筛选);版本/需求只能由页面显式创建。
 import { FastifyInstance } from 'fastify';
 import type {
   WorklogRecordRequest,
   WorklogUpdateRequest,
-  WorklogRenameRequest,
+  WorklogVersionCreateRequest,
+  WorklogRequirementCreateRequest,
 } from '@ai-task-flow/shared';
 import type { WorklogService } from '../../../application/worklog/WorklogService.js';
 import { DomainError } from '../../../domain/_shared/DomainError.js';
@@ -18,6 +20,11 @@ function statusForError(err: unknown): number {
   return 500;
 }
 
+/** body 必须是 JSON 对象(数组/null/标量一律拒绝),避免后续按字段读取时抛 TypeError → 500 */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function registerWorklogRoutes(
   fastify: FastifyInstance,
   worklogService: WorklogService,
@@ -27,7 +34,119 @@ export async function registerWorklogRoutes(
     return worklogService.getTree();
   });
 
-  // POST /api/worklog/entries - 新增条目(项目/版本自动建层,同 record_work)
+  // ------------------------------------------------------------------
+  // 版本:创建 / 重命名 / 删除(名称全局唯一)
+  // ------------------------------------------------------------------
+
+  // POST /api/worklog/versions - 新建版本
+  fastify.post<{ Body: WorklogVersionCreateRequest }>(
+    '/api/worklog/versions',
+    async (request, reply) => {
+      try {
+        const result = await worklogService.createVersion(request.body ?? { name: '' });
+        return reply.status(201).send(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // POST /api/worklog/versions/:id/rename - 重命名版本(页面右键)
+  fastify.post<{ Params: { id: string }; Body: { newName?: string } }>(
+    '/api/worklog/versions/:id/rename',
+    async (request, reply) => {
+      const newName = request.body?.newName;
+      if (!newName) {
+        return reply.status(400).send({ error: 'newName 必填' });
+      }
+      try {
+        await worklogService.renameVersion(request.params.id, newName);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // DELETE /api/worklog/versions/:id - 删整个版本(级联需求与条目,自动备份)
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/worklog/versions/:id',
+    async (request, reply) => {
+      try {
+        await worklogService.deleteVersion(request.params.id);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // 需求:创建 / 重命名 / 删除(标题版本内唯一)
+  // ------------------------------------------------------------------
+
+  // POST /api/worklog/requirements - 新建需求(body 含 versionId)
+  fastify.post<{ Body: WorklogRequirementCreateRequest }>(
+    '/api/worklog/requirements',
+    async (request, reply) => {
+      try {
+        const result = await worklogService.createRequirement(
+          request.body ?? ({ versionId: '', title: '' } as WorklogRequirementCreateRequest),
+        );
+        return reply.status(201).send(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // POST /api/worklog/requirements/:id/rename - 重命名需求(body 含 versionId)
+  fastify.post<{ Params: { id: string }; Body: { versionId?: string; newName?: string } }>(
+    '/api/worklog/requirements/:id/rename',
+    async (request, reply) => {
+      const { versionId, newName } = request.body ?? {};
+      if (!versionId || !newName) {
+        return reply.status(400).send({ error: 'versionId 与 newName 必填' });
+      }
+      try {
+        await worklogService.renameRequirement(versionId, request.params.id, newName);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // DELETE /api/worklog/requirements/:id?versionId=... - 删单个需求(级联条目,自动备份)
+  // DELETE 请求体兼容性参差,版本优先取 query,其次 body。
+  fastify.delete<{ Params: { id: string }; Querystring: { versionId?: string } }>(
+    '/api/worklog/requirements/:id',
+    async (request, reply) => {
+      const body = isPlainObject(request.body) ? request.body : {};
+      const versionId = request.query.versionId ?? (body.versionId as string | undefined);
+      if (!versionId) {
+        return reply.status(400).send({ error: 'versionId 必填(query 或 body)' });
+      }
+      try {
+        await worklogService.deleteRequirement(versionId, request.params.id);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // 条目:记录 / 更新 / 删除
+  // ------------------------------------------------------------------
+
+  // POST /api/worklog/entries - 记录条目到已存在的「版本 + 需求」(同 record_work)
   fastify.post<{ Body: WorklogRecordRequest }>(
     '/api/worklog/entries',
     async (request, reply) => {
@@ -70,17 +189,35 @@ export async function registerWorklogRoutes(
     },
   );
 
-  // DELETE /api/worklog/versions?project=&version= - 删版本(可删非空,自动备份)
-  fastify.delete<{ Querystring: { project?: string; version?: string } }>(
-    '/api/worklog/versions',
+  // ------------------------------------------------------------------
+  // 项目字典:创建 / 改名 / 删除 / 路径绑定
+  // ------------------------------------------------------------------
+
+  // POST /api/worklog/projects - 新建项目(全新环境的第一入口;paths 可选,与绑定同一套校验)
+  fastify.post<{ Body: { name?: string; paths?: unknown } }>(
+    '/api/worklog/projects',
     async (request, reply) => {
-      const { project, version } = request.query;
-      if (!project || !version) {
-        return reply.status(400).send({ error: 'project 与 version 必填' });
+      const raw = request.body;
+      if (!isPlainObject(raw)) {
+        return reply.status(400).send({ error: '请求体必须为 JSON 对象' });
+      }
+      const name = typeof raw.name === 'string' ? raw.name : '';
+      if (!name.trim()) {
+        return reply.status(400).send({ error: 'name 必填' });
+      }
+      // paths 可缺省;一旦提供必须是字符串数组,否则 Service 内 paths.map 会抛 TypeError → 500
+      if (raw.paths !== undefined) {
+        const paths = raw.paths;
+        if (!Array.isArray(paths) || paths.some((item) => typeof item !== 'string')) {
+          return reply.status(400).send({ error: 'paths 必须为字符串数组' });
+        }
       }
       try {
-        await worklogService.deleteVersion(project, version);
-        return { ok: true };
+        const result = await worklogService.createProject({
+          name,
+          paths: raw.paths as string[] | undefined,
+        });
+        return reply.status(201).send(result);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return reply.status(statusForError(err)).send({ error: message });
@@ -88,25 +225,7 @@ export async function registerWorklogRoutes(
     },
   );
 
-  // POST /api/worklog/versions/rename - 重命名版本(页面右键)
-  fastify.post<{ Body: WorklogRenameRequest }>(
-    '/api/worklog/versions/rename',
-    async (request, reply) => {
-      const { project, version, newName } = request.body ?? {};
-      if (!project || !version || !newName) {
-        return reply.status(400).send({ error: 'project/version/newName 必填' });
-      }
-      try {
-        await worklogService.renameVersion(project, version, newName);
-        return { ok: true };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return reply.status(statusForError(err)).send({ error: message });
-      }
-    },
-  );
-
-  // DELETE /api/worklog/projects/:name - 删项目(自动备份)
+  // DELETE /api/worklog/projects/:name - 删项目(只移除字典项,自动备份)
   fastify.delete<{ Params: { name: string } }>(
     '/api/worklog/projects/:name',
     async (request, reply) => {

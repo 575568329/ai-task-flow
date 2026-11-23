@@ -37,6 +37,19 @@ describe('conclusionRoutes', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  /** 造项目字典项(新模型 record 不再自动建项目;结论夹具只需项目名/id 可解析) */
+  async function seedProjects(...names: string[]): Promise<void> {
+    const version = await worklogService.createVersion({ name: 'v1' });
+    const requirement = await worklogService.createRequirement({ versionId: version.id, title: 'R' });
+    for (const name of names) {
+      await worklogService.createProject({ name });
+      await worklogService.record({
+        versionId: version.id, requirementId: requirement.id,
+        title: 't', detail: 'd', stage: 'dev', project: name,
+      });
+    }
+  }
+
   async function createCard(over: Record<string, unknown> = {}) {
     const res = await app.inject({
       method: 'POST',
@@ -88,7 +101,7 @@ describe('conclusionRoutes', () => {
   });
 
   it('should resolve projectId/related ids and warn on unknown related names', async () => {
-    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await seedProjects('题库');
     const projectId = (await worklogService.getTree()).projects[0].id;
 
     const res = await app.inject({
@@ -111,7 +124,7 @@ describe('conclusionRoutes', () => {
   });
 
   it('should never trust a client-supplied projectId', async () => {
-    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await seedProjects('题库');
     const realId = (await worklogService.getTree()).projects[0].id;
 
     // 项目存在:服务端解析结果覆盖客户端伪造值
@@ -148,7 +161,7 @@ describe('conclusionRoutes', () => {
   });
 
   it('should resolve project refs without probing project paths', async () => {
-    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await seedProjects('题库');
     const projectId = (await worklogService.getProjectRefs())[0].id;
     // 绑一个不存在的路径:若建卡走 getTree 就会触发 fs.access(可能拖慢/报错)
     await worklogService.bindProjectPaths('题库', [path.resolve('definitely-missing-repo')]);
@@ -187,8 +200,7 @@ describe('conclusionRoutes', () => {
   });
 
   it('should re-resolve projectId on PATCH rename/scope changes', async () => {
-    await worklogService.record({ project: 'A', version: 'v1', title: 't', detail: 'd' });
-    await worklogService.record({ project: 'B', version: 'v1', title: 't', detail: 'd' });
+    await seedProjects('A', 'B');
     const tree = await worklogService.getTree();
     const idA = tree.projects.find((p) => p.name === 'A')!.id;
     const idB = tree.projects.find((p) => p.name === 'B')!.id;
@@ -263,7 +275,7 @@ describe('conclusionRoutes', () => {
 
   it('should filter list by relatedProject query param', async () => {
     // 关联项目名称必须能在 worklog 里解析到,否则建卡时会被丢弃
-    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    await seedProjects('题库');
     await createCard({ title: '关联卡', relatedProjects: ['题库'] });
     await createCard({ title: '普通卡' });
 
