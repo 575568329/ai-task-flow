@@ -433,6 +433,54 @@ describe('WorklogService', () => {
   });
 
   // ---------------------------------------------------------------
+  // createProject(全新环境的第一个项目入口)
+  // ---------------------------------------------------------------
+  describe('createProject', () => {
+    const projectPath = path.resolve('x-create-project');
+
+    it('creates a project, exposes it via getProjectRefs and allows recording against it', async () => {
+      const { id } = await service.createProject({ name: '新项目', paths: [projectPath] });
+      expect(id).toMatch(/^p_/);
+
+      const refs = await service.getProjectRefs();
+      expect(refs).toContainEqual({ id, name: '新项目', paths: [projectPath] });
+
+      // 建出的项目可直接用于 record 的显式 project(不再依赖迁移)
+      const v = await service.createVersion({ name: 'V1' });
+      const r = await service.createRequirement({ versionId: v.id, title: 'R' });
+      const res = await service.record({
+        versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev', project: '新项目',
+      });
+      expect((await service.query({ entryId: res.entryId }))[0].project).toBe('新项目');
+    });
+
+    it('rejects a duplicate project name', async () => {
+      await service.createProject({ name: 'A' });
+      await expect(service.createProject({ name: 'A' })).rejects.toThrow(/已存在/);
+    });
+
+    it('rejects forbidden paths without creating a half project', async () => {
+      await expect(service.createProject({ name: 'A', paths: [os.homedir()] }))
+        .rejects.toThrow(/用户主目录/);
+      await expect(service.createProject({ name: 'A', paths: [path.parse(tmpDir).root] }))
+        .rejects.toThrow(/文件系统根目录/);
+      expect((await service.getProjectRefs()).some((p) => p.name === 'A')).toBe(false);
+    });
+
+    it('rejects a path already occupied by another project, atomically', async () => {
+      await service.createProject({ name: 'A', paths: [projectPath] });
+      await expect(service.createProject({ name: 'B', paths: [projectPath] }))
+        .rejects.toThrow(/已被项目/);
+      expect((await service.getProjectRefs()).some((p) => p.name === 'B')).toBe(false);
+    });
+
+    it('backs up before creating (dictionary change)', async () => {
+      await service.createProject({ name: 'A' });
+      expect(await listBackups()).toHaveLength(1);
+    });
+  });
+
+  // ---------------------------------------------------------------
   // 项目路径绑定/解绑
   // ---------------------------------------------------------------
   describe('project paths', () => {

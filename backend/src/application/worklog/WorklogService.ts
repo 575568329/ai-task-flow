@@ -149,6 +149,32 @@ function validateFiles(files: unknown): WorklogEntryFile[] {
   return files as WorklogEntryFile[];
 }
 
+/** 路径入参清洗与本地校验(绝对路径/公共目录黑名单);不依赖现有数据,可在事务前失败 */
+function cleanPaths(paths: string[]): string[] {
+  const cleaned = [...new Set(paths.map((p) => p.trim()).filter(Boolean))];
+  for (const p of cleaned) {
+    if (!path.isAbsolute(p)) throw new WorklogValidationError(`路径必须是绝对路径:${p}`);
+  }
+  // 公共目录本身不允许绑定(主目录/盘符根/临时目录/Windows 系统目录),子目录放行
+  for (const p of cleaned) {
+    const reason = forbiddenBindReason(p);
+    if (reason) throw new WorklogValidationError(`不能绑定${reason}`);
+  }
+  return cleaned;
+}
+
+/** 跨项目占用校验(按归一化比较:尾分隔符/Windows 大小写也算同一目录) */
+function assertPathsFree(data: WorklogData, cleaned: string[], exceptProjectName?: string): void {
+  for (const other of data.projects) {
+    if (exceptProjectName && other.name === exceptProjectName) continue;
+    for (const p of cleaned) {
+      if ((other.paths ?? []).some((op) => normalizePath(op) === normalizePath(p))) {
+        throw new WorklogConflictError(`路径 ${p} 已被项目 "${other.name}" 占用`);
+      }
+    }
+  }
+}
+
 export class WorklogService {
   constructor(private readonly repo: WorklogRepository) {}
 
@@ -320,32 +346,39 @@ export class WorklogService {
   }
 
   // ------------------------------------------------------------------
-  // 项目路径绑定/解绑(项目字典与路径归属)
+  // 项目字典:创建 + 路径绑定/解绑(项目是路径归属与 related 引用的基础)
   // ------------------------------------------------------------------
+
+  /**
+   * 新建项目(全新环境的第一入口;路径归属/显式 project 都要求项目已存在)。
+   * 可选 paths 与绑定同一套校验;任一不合法则整体拒绝,不写入半成品。
+   */
+  async createProject(input: { name: string; paths?: string[] }): Promise<{ id: string }> {
+    const name = validateName(input.name, '项目名');
+    const cleaned = cleanPaths(input.paths ?? []);
+    return this.repo.mutate((data) => {
+      if (data.projects.some((p) => p.name === name)) {
+        throw new WorklogConflictError(`项目名 "${name}" 已存在`);
+      }
+      assertPathsFree(data, cleaned);
+      const id = `p_${nanoid(8)}`;
+      data.projects.push({
+        id,
+        name,
+        createdAt: Date.now(),
+        ...(cleaned.length ? { paths: cleaned } : {}),
+      });
+      return { id };
+    }, { backup: true });
+  }
 
   /** 绑定项目路径(整体替换);路径须绝对,同一路径不得被两个项目占用 */
   async bindProjectPaths(projectName: string, paths: string[]): Promise<void> {
     const name = validateName(projectName, '项目名');
-    const cleaned = [...new Set(paths.map((p) => p.trim()).filter(Boolean))];
-    for (const p of cleaned) {
-      if (!path.isAbsolute(p)) throw new WorklogValidationError(`路径必须是绝对路径:${p}`);
-    }
-    // 公共目录本身不允许绑定(主目录/盘符根/临时目录/Windows 系统目录),子目录放行
-    for (const p of cleaned) {
-      const reason = forbiddenBindReason(p);
-      if (reason) throw new WorklogValidationError(`不能绑定${reason}`);
-    }
+    const cleaned = cleanPaths(paths);
     await this.repo.mutate((data) => {
       const proj = findProject(data, name);
-      // 按归一化比较:同一目录写成不同形式(尾分隔符/Windows 大小写)也算占用
-      for (const other of data.projects) {
-        if (other.name === name) continue;
-        for (const p of cleaned) {
-          if ((other.paths ?? []).some((op) => normalizePath(op) === normalizePath(p))) {
-            throw new WorklogConflictError(`路径 ${p} 已被项目 "${other.name}" 占用`);
-          }
-        }
-      }
+      assertPathsFree(data, cleaned, name);
       proj.paths = cleaned;
     }, { backup: true });
   }
