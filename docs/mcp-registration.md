@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `e3cd719`(fix(mcp): delete_project 成功文案与实际语义对齐；14 工具) |
-| 构建时间 | 2026-11-23 21:09 |
+| dist 构建来源 commit | `417ae10`(feat(knowledge): 导入引导、内容级幂等导入与未关联空态提示；14 工具) |
+| 构建时间 | 2026-11-23 21:53 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
