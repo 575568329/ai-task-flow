@@ -78,6 +78,60 @@ describe('runProjectIdMigration', () => {
     expect(r2.boundConclusions).toBe(0);
   });
 
+  it('标记已存在时仍自愈补齐新项目的 id(补 id 不受标记 gate)', async () => {
+    await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+    const idBefore = (await worklogRepo.load()).projects.map((p) => p.id);
+
+    // 模拟旧版本进程新写出一个无 id 项目
+    await worklogRepo.mutate((d) => {
+      d.projects.push({ name: '新项目', createdAt: 9, versions: [] } as never);
+    });
+
+    const r = await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+    expect(r.skipped).toBe(true); // 结论绑定已迁移过
+    expect(r.assignedIds).toBe(1); // 但 id 仍然自愈
+
+    const tree = await worklogRepo.load();
+    const added = tree.projects.find((p) => p.name === '新项目')!;
+    expect(added.id).toMatch(/^p_/);
+    // 既有 id 不被重写
+    expect(tree.projects.filter((p) => p.name !== '新项目').map((p) => p.id)).toEqual(idBefore);
+  });
+
+  it('标记已存在时跳过结论卡名称绑定', async () => {
+    await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+    // 迁移后再出现一张只有项目名的卡:标记已到版本,不再自动绑定
+    await conclusionRepo.mutate((d) => {
+      d.conclusions.push(
+        { id: 'c_new', scope: 'project', project: '题库', title: 't5', revisions: [] } as never,
+      );
+    });
+
+    const r = await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+    expect(r.skipped).toBe(true);
+    expect(r.boundConclusions).toBe(0);
+    const card = (await conclusionRepo.load()).conclusions.find((c) => c.id === 'c_new')!;
+    expect(card.projectId).toBeUndefined();
+  });
+
+  it('连续执行两次数据完全一致(含标记文件为原子写产物)', async () => {
+    await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+    const worklogFile = path.join(dir, 'worklog.json');
+    const conclusionFile = path.join(dir, 'conclusions.json');
+    const w1 = await fs.readFile(worklogFile, 'utf8');
+    const c1 = await fs.readFile(conclusionFile, 'utf8');
+
+    const marker = JSON.parse(
+      await fs.readFile(path.join(dir, '.migration-project-id.json'), 'utf8'),
+    ) as { version: number };
+    expect(marker.version).toBe(1);
+
+    await runProjectIdMigration({ dataDir: dir, worklogRepo, conclusionRepo });
+
+    expect(await fs.readFile(worklogFile, 'utf8')).toBe(w1);
+    expect(await fs.readFile(conclusionFile, 'utf8')).toBe(c1);
+  });
+
   it('重名项目各自分配 id,只报告不自动合并', async () => {
     await worklogRepo.mutate((d) => {
       d.projects.push({ name: '题库', createdAt: 3, versions: [] } as never);

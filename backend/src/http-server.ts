@@ -93,10 +93,12 @@ export async function startApp(options: StartAppOptions = {}) {
       worklogRepo: worklogRepository,
       conclusionRepo: conclusionRepository,
     });
-    if (!migration.skipped) {
+    // 标记已到版本时通常无事可做;但只要本次自愈补了 id 也要留痕(便于排查)
+    if (!migration.skipped || migration.assignedIds > 0) {
       console.log(
         `[migration] 补项目 id ${migration.assignedIds} 个；绑定结论卡 ${migration.boundConclusions} 张；` +
-          `重名项目: ${migration.duplicateNames.join(', ') || '无'}；歧义跳过 ${migration.skippedAmbiguous} 张`,
+          `重名项目: ${migration.duplicateNames.join(', ') || '无'}；歧义跳过 ${migration.skippedAmbiguous} 张` +
+          (migration.skipped ? '（结论卡绑定已迁移过，本次仅自愈补 id）' : ''),
       );
     }
   } catch (error: unknown) {

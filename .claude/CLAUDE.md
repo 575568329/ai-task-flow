@@ -71,6 +71,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
 - 主要数据文件：`worklog.json`、`conclusions.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
+- `.migration-project-id.json` 是项目 id 迁移标记（记录迁移版本）；**删除该文件可重跑「结论卡按项目名绑定」**，而项目补 id 每次启动都会自愈，不依赖该标记。
 - **项目路径身份字段**：项目有稳定 `id` 与 `paths`（本地绝对路径，可多个，页面绑定）；工作记录条目有 `sourcePath`（MCP 取 `process.cwd()`，按最长前缀归属项目）；工作记录与结论卡用 `relatedProjectIds` 存关联项目稳定引用、`relatedProjects` 存名称快照（改名后靠 id 映射显示新名称）。旧数据由 HTTP 启动时一次性迁移补 `id` 并按名称绑定结论卡（幂等）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。

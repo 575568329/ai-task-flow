@@ -2,13 +2,16 @@
 // 一次性数据迁移:给缺 id 的旧项目补稳定身份(p_xxx),并把结论卡按项目名绑定到项目 id。
 //
 // 为什么需要:项目 id 是「项目路径身份」新增的稳定主键,旧 worklog.json / conclusions.json
-// 里没有。迁移只在 HTTP 启动时调用一次:
-//   1) 标记文件记录迁移版本,已到当前版本直接跳过(幂等);
-//   2) 迁移过程对数据目录取 proper-lockfile,双进程同时启动也只有一个真正执行;
-//   3) 两边都是破坏性写入,统一走 mutate(..., { backup: true }) 留快照。
+// 里没有。迁移只在 HTTP 启动时调用:
+//   1) 补项目 id 每次启动都执行(缺就补,天然幂等),不受标记文件 gate——
+//      否则旧版本进程新写出的无 id 项目会永远补不上;
+//   2) 标记文件只 gate「结论卡名称绑定」与路径建议(一次性动作);
+//   3) 首次迁移对数据目录取 proper-lockfile,双进程同时启动也只有一个真正执行;
+//   4) 两边都是破坏性写入,统一走 mutate(..., { backup: true }) 留快照。
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import lockfile from 'proper-lockfile';
+import writeFileAtomic from 'write-file-atomic';
 import { nanoid } from 'nanoid';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
 import type { ConclusionRepository } from '../../domain/conclusion/repositories/ConclusionRepository.js';
@@ -33,7 +36,8 @@ export interface MigrationReport {
   boundConclusions: number;
   /** 重名项目名(只报告,不自动合并) */
   duplicateNames: string[];
-  /** 项目名 → 存在的同名候选目录(仅 D:\xunfei、D:\Study 两个根;建议值,不自动写入) */
+  /** 项目名 → 存在的同名候选目录(仅 D:\xunfei、D:\Study 两个根;建议值,不自动写入)。
+   *  暂未消费,供后续页面展示「建议绑定」。 */
   suggestedPaths: Record<string, string>;
   /** 因项目重名无法判定归属而跳过的结论卡数(留给人工处理) */
   skippedAmbiguous: number;
@@ -89,7 +93,21 @@ export async function runProjectIdMigration(deps: MigrationDeps): Promise<Migrat
   };
   await fs.mkdir(deps.dataDir, { recursive: true });
 
-  // 快路径:已迁移过则不加锁
+  // 自愈:每次启动都扫全部项目,缺 id 就补(幂等)。不放进标记 gate,
+  // 否则标记写入后新出现的无 id 项目永远补不上。
+  // 先 load 判断再 mutate,避免每次启动都无条件写盘并产生一份备份快照。
+  const before = await deps.worklogRepo.load();
+  if (before.projects.some((project) => !project.id)) {
+    await deps.worklogRepo.mutate((data) => {
+      for (const project of data.projects) {
+        if (project.id) continue;
+        project.id = `p_${nanoid(8)}`;
+        report.assignedIds += 1;
+      }
+    }, { backup: true });
+  }
+
+  // 标记已到版本:结论卡绑定与路径建议是一次性动作,不重复执行
   if ((await readMarker(deps.dataDir)) >= MIGRATION_VERSION) {
     report.skipped = true;
     return report;
@@ -107,25 +125,19 @@ export async function runProjectIdMigration(deps: MigrationDeps): Promise<Migrat
     }
 
     // 项目名 → 项目 id;重名时保留第一个,后续同名项目只报告不合并
+    const tree = await deps.worklogRepo.load();
     const nameToId = new Map<string, string>();
-    await deps.worklogRepo.mutate((data) => {
-      for (const project of data.projects) {
-        if (!project.id) {
-          project.id = `p_${nanoid(8)}`;
-          report.assignedIds += 1;
+    for (const project of tree.projects) {
+      if (nameToId.has(project.name)) {
+        if (!report.duplicateNames.includes(project.name)) {
+          report.duplicateNames.push(project.name);
         }
-        if (nameToId.has(project.name)) {
-          if (!report.duplicateNames.includes(project.name)) {
-            report.duplicateNames.push(project.name);
-          }
-          continue;
-        }
-        nameToId.set(project.name, project.id);
+        continue;
       }
-    }, { backup: true });
+      nameToId.set(project.name, project.id);
+    }
 
     // 路径建议在业务锁之外做(文件系统探测较慢,不拖长 worklog 临界区)
-    const tree = await deps.worklogRepo.load();
     await collectSuggestedPaths(tree.projects, report);
 
     // 结论卡绑定:已有 projectId 的不覆盖;名称匹配不上的保持为空。
@@ -148,11 +160,10 @@ export async function runProjectIdMigration(deps: MigrationDeps): Promise<Migrat
       }
     }, { backup: true });
 
-    // 最后落标记:中途失败不会留标记,下次启动会重跑(补 id 与绑定本身幂等)
-    await fs.writeFile(
+    // 最后落标记(原子写):中途失败不会留半截标记,下次启动会重做绑定(绑定本身幂等)
+    await writeFileAtomic(
       projectIdMigrationMarkerPath(deps.dataDir),
       JSON.stringify({ version: MIGRATION_VERSION, at: new Date().toISOString() }, null, 2),
-      'utf8',
     );
     return report;
   } finally {
