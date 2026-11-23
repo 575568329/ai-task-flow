@@ -33,6 +33,8 @@ describe('runProjectIdMigration', () => {
         { id: 'c2', scope: 'project', project: '不存在', title: 't2', tags: [], revisions: [] } as never,
         // 已绑定过的卡片不能被覆盖
         { id: 'c3', scope: 'project', project: '题库', projectId: 'p_existing', title: 't3', tags: [], revisions: [] } as never,
+        // 个人域卡片:即使误填了能匹配的项目名,也不绑定 projectId
+        { id: 'c4', scope: 'personal', project: '题库', title: 't4', tags: [], revisions: [] } as never,
       );
     });
   });
@@ -42,6 +44,7 @@ describe('runProjectIdMigration', () => {
     expect(r1.skipped).toBe(false);
     expect(r1.assignedIds).toBe(2);
     expect(r1.boundConclusions).toBe(1);
+    expect(r1.skippedAmbiguous).toBe(0);
     // 路径建议只给"真实存在"的目录,且仅作为建议(worklog 里不自动绑定)
     for (const candidate of Object.values(r1.suggestedPaths)) {
       await expect(fs.access(candidate)).resolves.toBeUndefined();
@@ -57,9 +60,12 @@ describe('runProjectIdMigration', () => {
     const c1 = cards.conclusions.find((c) => c.id === 'c1')!;
     const c2 = cards.conclusions.find((c) => c.id === 'c2')!;
     const c3 = cards.conclusions.find((c) => c.id === 'c3')!;
+    const c4 = cards.conclusions.find((c) => c.id === 'c4')!;
     expect(c1.projectId).toBe(tree.projects.find((p) => p.name === '题库')!.id);
     expect(c2.projectId).toBeUndefined();
     expect(c3.projectId).toBe('p_existing');
+    // 个人域卡片不绑定稳定项目引用
+    expect(c4.projectId).toBeUndefined();
 
     // 破坏性写入必须留快照
     expect((await fs.readdir(path.join(dir, 'wb'))).length).toBeGreaterThan(0);
@@ -83,5 +89,11 @@ describe('runProjectIdMigration', () => {
     const sameName = tree.projects.filter((p) => p.name === '题库');
     expect(sameName).toHaveLength(2);
     expect(new Set(sameName.map((p) => p.id)).size).toBe(2);
+
+    // 重名歧义下不猜测归属:c1(project=题库)保持未绑定并计数
+    const cards = await conclusionRepo.load();
+    expect(cards.conclusions.find((c) => c.id === 'c1')!.projectId).toBeUndefined();
+    expect(r.boundConclusions).toBe(0);
+    expect(r.skippedAmbiguous).toBe(1);
   });
 });

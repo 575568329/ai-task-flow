@@ -35,6 +35,8 @@ export interface MigrationReport {
   duplicateNames: string[];
   /** 项目名 → 存在的同名候选目录(仅 D:\xunfei、D:\Study 两个根;建议值,不自动写入) */
   suggestedPaths: Record<string, string>;
+  /** 因项目重名无法判定归属而跳过的结论卡数(留给人工处理) */
+  skippedAmbiguous: number;
   /** 标记文件已是当前版本,本次直接跳过 */
   skipped: boolean;
 }
@@ -82,6 +84,7 @@ export async function runProjectIdMigration(deps: MigrationDeps): Promise<Migrat
     boundConclusions: 0,
     duplicateNames: [],
     suggestedPaths: {},
+    skippedAmbiguous: 0,
     skipped: false,
   };
   await fs.mkdir(deps.dataDir, { recursive: true });
@@ -125,10 +128,18 @@ export async function runProjectIdMigration(deps: MigrationDeps): Promise<Migrat
     const tree = await deps.worklogRepo.load();
     await collectSuggestedPaths(tree.projects, report);
 
-    // 结论卡绑定:已有 projectId 的不覆盖;名称匹配不上的保持为空
+    // 结论卡绑定:已有 projectId 的不覆盖;名称匹配不上的保持为空。
+    // 守卫:非项目域不绑定(个人卡可能误填 project 名);
+    //       重名项目无法判定归属,跳过并计数——迁移是一次性的,不能靠"第一个同名项目"猜。
+    const ambiguousNames = new Set(report.duplicateNames);
     await deps.conclusionRepo.mutate((data) => {
       for (const card of data.conclusions) {
         if (card.projectId || !card.project) continue;
+        if (card.scope !== 'project') continue;
+        if (ambiguousNames.has(card.project)) {
+          report.skippedAmbiguous += 1;
+          continue;
+        }
         const id = nameToId.get(card.project);
         if (id) {
           card.projectId = id;
