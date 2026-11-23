@@ -290,7 +290,19 @@ export async function registerConclusionRoutes(
   fastify.patch<{ Params: { id: string } }>('/api/conclusions/:id', async (request, reply) => {
     try {
       const input = validatePatchBody(request.body);
-      return await conclusionService.patch(request.params.id, input);
+      // 客户端直传的 projectId 一律覆盖:只有改 project/scope 时才由服务端解析
+      const patch: ConclusionPatchRequest = { ...input, projectId: undefined };
+      let warnings: string[] = [];
+      if (input.scope === 'personal') {
+        // 个人问题没有项目归属:显式清除,避免 scope 改了 id 还悬空
+        patch.projectId = '';
+      } else if (input.project !== undefined) {
+        const resolved = await resolveProjectFields(worklogService, input.project, undefined);
+        patch.projectId = resolved.fields.projectId ?? '';
+        warnings = resolved.warnings;
+      }
+      const card = await conclusionService.patch(request.params.id, patch);
+      return { ...card, ...(warnings.length ? { warnings } : {}) };
     } catch (err) {
       return sendError(reply, err);
     }

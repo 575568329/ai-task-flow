@@ -92,6 +92,30 @@ describe('ConclusionService', () => {
     expect(card.relatedProjectIds).toBeUndefined();
   });
 
+  it('should update or clear projectId through patch', async () => {
+    const { id } = await service.create(createInput({
+      projectId: 'p_a', relatedProjects: ['B'], relatedProjectIds: ['p_b'],
+    }), source);
+
+    // 改名并传入新解析结果:只改 id,名称快照同步
+    const renamed = await service.patch(id, { project: 'B', projectId: 'p_b' });
+    expect(renamed.project).toBe('B');
+    expect(renamed.projectId).toBe('p_b');
+    expect(renamed.relatedProjects).toEqual(['B']);
+
+    // 改名为未登记项目:id 清空,名称快照保留
+    const unmatched = await service.patch(id, { project: '未登记', projectId: '' });
+    expect(unmatched.project).toBe('未登记');
+    expect(unmatched.projectId).toBeUndefined();
+
+    // 改个人域:强制清空项目引用
+    await service.patch(id, { scope: 'personal' });
+    const personal = await service.get(id);
+    expect(personal.scope).toBe('personal');
+    expect(personal.project).toBeUndefined();
+    expect(personal.projectId).toBeUndefined();
+  });
+
   it('should auto-append subsequent records from the same conversation', async () => {
     const first = await service.record(
       { scope: 'project', project: 'p', title: 't', decision: 'd1' },

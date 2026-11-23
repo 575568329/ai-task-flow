@@ -126,6 +126,46 @@ describe('conclusionRoutes', () => {
     expect(card.projectId).toBeUndefined();
   });
 
+  it('should re-resolve projectId on PATCH rename/scope changes', async () => {
+    await worklogService.record({ project: 'A', version: 'v1', title: 't', detail: 'd' });
+    await worklogService.record({ project: 'B', version: 'v1', title: 't', detail: 'd' });
+    const tree = await worklogService.getTree();
+    const idA = tree.projects.find((p) => p.name === 'A')!.id;
+    const idB = tree.projects.find((p) => p.name === 'B')!.id;
+
+    const created = await createCard({ project: 'A' });
+    const initial = JSON.parse((await app.inject({
+      method: 'GET', url: `/api/conclusions/${created.id}`,
+    })).body);
+    expect(initial.projectId).toBe(idA);
+
+    // A→B:id 跟随名称重新解析
+    const renamed = await app.inject({
+      method: 'PATCH', url: `/api/conclusions/${created.id}`, payload: { project: 'B' },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(JSON.parse(renamed.body).projectId).toBe(idB);
+
+    // 改为不存在的项目:id 清空,名称快照保留,并带 warning
+    const unmatched = await app.inject({
+      method: 'PATCH', url: `/api/conclusions/${created.id}`, payload: { project: '不存在' },
+    });
+    expect(unmatched.statusCode).toBe(200);
+    const unmatchedBody = JSON.parse(unmatched.body);
+    expect(unmatchedBody.project).toBe('不存在');
+    expect(unmatchedBody.projectId).toBeUndefined();
+    expect(unmatchedBody.warnings?.[0]).toContain('不存在');
+
+    // 改为个人域:projectId 被清空
+    const personal = await app.inject({
+      method: 'PATCH', url: `/api/conclusions/${created.id}`, payload: { scope: 'personal' },
+    });
+    expect(personal.statusCode).toBe(200);
+    const personalBody = JSON.parse(personal.body);
+    expect(personalBody.scope).toBe('personal');
+    expect(personalBody.projectId).toBeUndefined();
+  });
+
   it('should return 400 when append has no changeNote', async () => {
     const created = await createCard();
     const res = await app.inject({

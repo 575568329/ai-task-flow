@@ -141,6 +141,8 @@ export interface ConclusionPatchRequest {
   version?: string;
   title?: string;
   tags?: string[];
+  /** 由接口层在改 project/scope 时解析后填入;空串=清除,undefined=不改 */
+  projectId?: string;
 }
 
 export interface ConclusionQueryRequest {

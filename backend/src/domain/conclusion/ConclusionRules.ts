@@ -347,5 +347,12 @@ export function patchConclusionMeta(conclusion: Conclusion, patch: ConclusionPat
   conclusion.version = meta.version;
   if (patch.title !== undefined) conclusion.title = normalizeTitle(patch.title);
   if (patch.tags !== undefined) conclusion.tags = validateTags(patch.tags);
+  // 项目引用:显式传入才改,空串=清除(与 append 语义一致);改个人域时强制清空,避免悬空 id
+  if (patch.projectId !== undefined) {
+    const projectId = validateProjectId(patch.projectId);
+    if (projectId) conclusion.projectId = projectId;
+    else delete conclusion.projectId;
+  }
+  if (conclusion.scope === 'personal') delete conclusion.projectId;
   conclusion.updatedAt = Date.now();
 }
