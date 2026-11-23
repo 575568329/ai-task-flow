@@ -193,7 +193,7 @@ export async function registerKnowledgeRoutes(
     Body: KnowledgeDocMetaUpdateRequest;
   }>('/api/knowledge/doc/meta', async (request, reply) => {
     // 运行时校验:类型错误直接 400,避免把内部 TypeError 文案透给前端
-    const body = (request.body ?? {}) as Record<string, unknown>;
+    const body = (request.body ?? {}) as unknown as Record<string, unknown>;
     const relPath = body.path;
     if (typeof relPath !== 'string' || relPath.trim() === '') {
       return reply.status(400).send({ error: '缺少 path 参数或 path 不是字符串' });
