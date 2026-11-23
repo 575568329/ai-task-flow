@@ -11,6 +11,7 @@ import type {
 } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { STAGE_SCHEMA } from '../stageSchema.js';
+import { resolveConclusionProjects } from '../../../conclusionProjectResolve.js';
 import { CATALOG, ok, fail } from './_shared.js';
 
 export const toolDef = {
@@ -30,6 +31,11 @@ export const toolDef = {
       },
       scope: { type: 'string' as const, enum: ['project', 'personal'], description: '项目问题还是个人问题' },
       project: { type: 'string' as const, description: '项目名（scope=project 必填）' },
+      relatedProjects: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
+        description: '关联项目名称（本项目还涉及的其他工程）；不存在的名称会被忽略并在返回中提示',
+      },
       version: { type: 'string' as const, description: '版本名（可选，仅项目问题）' },
       title: { type: 'string' as const, description: '结论卡主题（新建必填；自动续写时可省略或更新）' },
       tags: { type: 'array' as const, items: { type: 'string' as const }, description: '标签，可选' },
@@ -79,6 +85,30 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     const scope: ProblemScope | undefined = args.scope === 'personal' || args.scope === 'project'
       ? args.scope
       : undefined;
+    const project = text(args.project);
+    const relatedProjects = Array.isArray(args.relatedProjects)
+      ? args.relatedProjects.map(String)
+      : undefined;
+
+    // 结论卡不按路径归属:仅当显式传了项目信息时查 worklog 做「名称 → id」解析
+    const resolved = project !== undefined || relatedProjects !== undefined
+      ? resolveConclusionProjects(await deps.worklogService.getTree(), { project, relatedProjects })
+      : undefined;
+    const projectRefs = resolved
+      ? {
+          ...(resolved.projectId !== undefined ? { projectId: resolved.projectId } : {}),
+          ...(resolved.relatedProjects !== undefined
+            ? { relatedProjects: resolved.relatedProjects, relatedProjectIds: resolved.relatedProjectIds }
+            : {}),
+        }
+      : {};
+    const notices: string[] = [];
+    if (resolved?.ignored.length) {
+      notices.push(`⚠ 以下关联项目不存在，已忽略：${resolved.ignored.join(', ')}`);
+    }
+    if (resolved?.projectMissing) {
+      notices.push(`⚠ 项目「${project}」尚未建立，projectId 暂时留空（保留名称快照）`);
+    }
 
     if (typeof args.cardId === 'string' && args.cardId) {
       // 追加:注意对象里不含 cardId 字段(它在 append 的入参位置,不属于请求体)
@@ -86,7 +116,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
         expectedRev: num(args.expectedRev),
         allowCrossConversation: args.allowCrossConversation === true,
         scope,
-        project: text(args.project),
+        project,
         version: text(args.version),
         title: text(args.title),
         tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
@@ -98,18 +128,20 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
         changeNote: text(args.changeNote) ?? '',
         conversationName: text(args.conversationName),
         stage: args.stage as WorkStage | undefined,
+        ...projectRefs,
       };
       const result = await deps.conclusionService.append(args.cardId, append, source);
       return ok([
         `✅ 已追加到 ${result.id} → rev ${result.rev}`,
         ...(append.changeNote ? [`变更说明：${append.changeNote}`] : []),
+        ...notices,
       ].join('\n'));
     }
 
     // 自动 upsert：按当前会话找卡；有则续写，无则新建。
     const record: ConclusionRecordRequest = {
       scope,
-      project: text(args.project),
+      project,
       version: text(args.version),
       title: text(args.title),
       tags: Array.isArray(args.tags) ? args.tags.map(String) : undefined,
@@ -123,17 +155,20 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       stage: args.stage as WorkStage | undefined,
       expectedRev: num(args.expectedRev),
       allowCrossConversation: args.allowCrossConversation === true,
+      ...projectRefs,
     };
     const result = await deps.conclusionService.record(record, source);
     if (result.created) {
       return ok([
         `✅ 已创建结论卡 ${result.id}（${record.project ?? '个人'} · rev ${result.rev}）`,
         '本会话后续记录会自动续写到这张卡，无需先查询或再传 cardId。',
+        ...notices,
       ].join('\n'));
     }
     return ok([
       `✅ 已续写同一会话结论卡 ${result.id} → rev ${result.rev}`,
       ...(record.changeNote ? [`变更说明：${record.changeNote}`] : []),
+      ...notices,
     ].join('\n'));
   } catch (err) {
     return fail(err);

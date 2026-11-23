@@ -15,9 +15,11 @@ import type {
   WorkStage,
 } from '@ai-task-flow/shared';
 import type { ConclusionService } from '../../../application/conclusion/ConclusionService.js';
+import type { WorklogService } from '../../../application/worklog/WorklogService.js';
 import { DomainError } from '../../../domain/_shared/DomainError.js';
 import { ConclusionValidationError } from '../../../domain/conclusion/errors.js';
 import { resolveManualSource } from '../../source.js';
+import { resolveConclusionProjects } from '../../conclusionProjectResolve.js';
 
 /** Service 抛的业务错映射:DomainError 带精准 httpStatus;锁竞争 ELOCKED → 503;未知 → 500。 */
 function statusForError(err: unknown): number {
@@ -93,6 +95,14 @@ function assertTags(body: Record<string, unknown>): void {
   }
 }
 
+function assertRelatedProjects(body: Record<string, unknown>): void {
+  const related = body.relatedProjects;
+  if (related === undefined) return;
+  if (!Array.isArray(related) || related.some((name) => typeof name !== 'string')) {
+    throw new ConclusionValidationError('relatedProjects 必须为字符串数组');
+  }
+}
+
 function assertCodeRefs(body: Record<string, unknown>): void {
   const refs = body.codeRefs;
   if (refs === undefined) return;
@@ -138,6 +148,7 @@ function validateCreateBody(body: unknown): ConclusionCreateRequest {
   const obj = asBodyObject(body);
   assertStringFields(obj, CREATE_STRING_FIELDS);
   assertTags(obj);
+  assertRelatedProjects(obj);
   assertCodeRefs(obj);
   return obj as unknown as ConclusionCreateRequest;
 }
@@ -146,6 +157,7 @@ function validateAppendBody(body: unknown): ConclusionAppendRequest {
   const obj = asBodyObject(body);
   assertStringFields(obj, APPEND_STRING_FIELDS);
   assertTags(obj);
+  assertRelatedProjects(obj);
   assertCodeRefs(obj);
   assertExpectedRev(obj);
   assertAllowCrossConversation(obj);
@@ -160,9 +172,50 @@ function validatePatchBody(body: unknown): ConclusionPatchRequest {
   return obj as unknown as ConclusionPatchRequest;
 }
 
+interface ResolvedProjectFields {
+  projectId?: string;
+  relatedProjects?: string[];
+  relatedProjectIds?: string[];
+}
+
+/**
+ * 解析结论卡的项目引用(仅名称 → id,不按 cwd 反查)。
+ * 未命中不阻塞:主项目 projectId 留空,关联项目丢弃;warnings 供响应/文案提示。
+ */
+async function resolveProjectFields(
+  worklogService: WorklogService,
+  project: string | undefined,
+  relatedProjects: string[] | undefined,
+): Promise<{ fields: ResolvedProjectFields; warnings: string[] }> {
+  if (project === undefined && relatedProjects === undefined) {
+    return { fields: {}, warnings: [] };
+  }
+  const resolved = resolveConclusionProjects(await worklogService.getTree(), { project, relatedProjects });
+  const warnings: string[] = [];
+  if (resolved.projectMissing) {
+    warnings.push(`项目「${project}」尚未建立，projectId 暂时留空（保留名称快照）`);
+  }
+  if (resolved.ignored.length) {
+    warnings.push(`以下关联项目不存在，已忽略：${resolved.ignored.join(', ')}`);
+  }
+  return {
+    fields: {
+      ...(resolved.projectId !== undefined ? { projectId: resolved.projectId } : {}),
+      ...(resolved.relatedProjects !== undefined
+        ? {
+            relatedProjects: resolved.relatedProjects,
+            relatedProjectIds: resolved.relatedProjectIds,
+          }
+        : {}),
+    },
+    warnings,
+  };
+}
+
 export async function registerConclusionRoutes(
   fastify: FastifyInstance,
   conclusionService: ConclusionService,
+  worklogService: WorklogService,
 ) {
   // GET /api/conclusions - 列表(关键词可跨历史版本命中,matchedRev 提示命中版本)
   fastify.get('/api/conclusions', async (request, reply) => {
@@ -187,8 +240,19 @@ export async function registerConclusionRoutes(
   fastify.post('/api/conclusions', async (request, reply) => {
     try {
       const input = validateCreateBody(request.body);
-      const result = await conclusionService.create(input, resolveManualSource());
-      return reply.status(201).send(result);
+      const { fields, warnings } = await resolveProjectFields(
+        worklogService,
+        input.project,
+        input.relatedProjects,
+      );
+      // 显式覆盖三个项目引用字段,防止客户端伪造 projectId
+      const result = await conclusionService.create({
+        ...input,
+        projectId: fields.projectId,
+        relatedProjects: fields.relatedProjects,
+        relatedProjectIds: fields.relatedProjectIds,
+      }, resolveManualSource());
+      return reply.status(201).send({ ...result, ...(warnings.length ? { warnings } : {}) });
     } catch (err) {
       return sendError(reply, err);
     }
@@ -200,11 +264,22 @@ export async function registerConclusionRoutes(
     async (request, reply) => {
       try {
         const input = validateAppendBody(request.body);
-        return await conclusionService.append(
+        const { fields, warnings } = await resolveProjectFields(
+          worklogService,
+          input.project,
+          input.relatedProjects,
+        );
+        const result = await conclusionService.append(
           request.params.id,
-          input,
+          {
+            ...input,
+            projectId: fields.projectId,
+            relatedProjects: fields.relatedProjects,
+            relatedProjectIds: fields.relatedProjectIds,
+          },
           resolveManualSource(),
         );
+        return { ...result, ...(warnings.length ? { warnings } : {}) };
       } catch (err) {
         return sendError(reply, err);
       }

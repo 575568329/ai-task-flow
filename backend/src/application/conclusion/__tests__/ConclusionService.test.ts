@@ -47,6 +47,51 @@ describe('ConclusionService', () => {
     expect(card.revisions[0].source.conversationId).toBe('sess-1');
   });
 
+  it('should store projectId and related projects', async () => {
+    const res = await service.create(createInput({
+      projectId: 'p_a',
+      relatedProjects: ['B'],
+      relatedProjectIds: ['p_b'],
+    }), source);
+
+    const card = await service.get(res.id);
+    expect(card.projectId).toBe('p_a');
+    expect(card.relatedProjects).toEqual(['B']);
+    expect(card.relatedProjectIds).toEqual(['p_b']);
+
+    const detail = await service.getDetail(res.id);
+    expect(detail.projectId).toBe('p_a');
+    expect(detail.relatedProjects).toEqual(['B']);
+    expect(detail.relatedProjectIds).toEqual(['p_b']);
+
+    const [summary] = await service.query({});
+    expect(summary.projectId).toBe('p_a');
+    expect(summary.relatedProjects).toEqual(['B']);
+    expect(summary.relatedProjectIds).toEqual(['p_b']);
+  });
+
+  it('should update project refs on append and clear them with empty values', async () => {
+    const { id } = await service.create(createInput({
+      projectId: 'p_a', relatedProjects: ['B'], relatedProjectIds: ['p_b'],
+    }), source);
+
+    await service.append(id, {
+      relatedProjects: ['C'], relatedProjectIds: ['p_c'], changeNote: '换关联',
+    }, source);
+    let card = await service.get(id);
+    expect(card.relatedProjects).toEqual(['C']);
+    expect(card.relatedProjectIds).toEqual(['p_c']);
+
+    // 主项目名称变了但项目未建立:接口层传空 projectId 清除旧引用(名称快照保留)
+    await service.append(id, {
+      projectId: '', relatedProjects: [], relatedProjectIds: [], changeNote: '清理引用',
+    }, source);
+    card = await service.get(id);
+    expect(card.projectId).toBeUndefined();
+    expect(card.relatedProjects).toBeUndefined();
+    expect(card.relatedProjectIds).toBeUndefined();
+  });
+
   it('should auto-append subsequent records from the same conversation', async () => {
     const first = await service.record(
       { scope: 'project', project: 'p', title: 't', decision: 'd1' },

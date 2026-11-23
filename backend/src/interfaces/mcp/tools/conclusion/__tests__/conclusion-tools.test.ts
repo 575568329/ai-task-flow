@@ -4,6 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { ConclusionService } from '../../../../../application/conclusion/ConclusionService.js';
 import { JsonConclusionRepository } from '../../../../../infrastructure/persistence/JsonConclusionRepository.js';
+import { WorklogService } from '../../../../../application/worklog/WorklogService.js';
+import { JsonWorklogRepository } from '../../../../../infrastructure/persistence/JsonWorklogRepository.js';
 import { handle as record } from '../record-conclusion.js';
 import { handle as query } from '../query-conclusions.js';
 import type { ToolDeps } from '../../types.js';
@@ -18,9 +20,15 @@ describe('conclusion MCP tools', () => {
     const service = new ConclusionService(
       new JsonConclusionRepository(path.join(tmpDir, 'conclusions.json'), path.join(tmpDir, 'backups')),
     );
+    const worklogService = new WorklogService(
+      new JsonWorklogRepository(
+        path.join(tmpDir, 'worklog.json'),
+        path.join(tmpDir, 'worklog-backups'),
+      ),
+    );
     deps = {
       knowledgeService: undefined as never,
-      worklogService: undefined as never,
+      worklogService,
       conclusionService: service,
       mcpSource: {
         tool: 'claude-code',
@@ -107,6 +115,28 @@ describe('conclusion MCP tools', () => {
     }, otherDeps);
     expect(allowed.isError).toBeFalsy();
     expect(allowed.content[0].text).toContain('rev 2');
+  });
+
+  it('should resolve project id and warn on unknown related projects', async () => {
+    await deps.worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    const projectId = (await deps.worklogService.getTree()).projects[0].id;
+
+    const created = await record({
+      scope: 'project', project: '题库', title: '联调', decision: 'd',
+      relatedProjects: ['不存在', '题库'],
+    }, deps);
+    expect(created.isError).toBeFalsy();
+    expect(created.content[0].text).toContain('不存在');
+    const id = (created.content[0].text.match(/c_[a-z0-9]+/) ?? [])[0];
+    expect(id).toBeTruthy();
+
+    const detail = await query({ cardId: id! }, deps);
+    expect(detail.isError).toBeFalsy();
+    // 存储层字段可直接从 service 读回验证
+    const card = await deps.conclusionService.get(id!);
+    expect(card.projectId).toBe(projectId);
+    expect(card.relatedProjects).toEqual(['题库']);
+    expect(card.relatedProjectIds).toEqual([projectId]);
   });
 
   it('should search and return matchedRev for history hits', async () => {

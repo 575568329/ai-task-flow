@@ -146,7 +146,7 @@ export async function createHttpServer(
   await registerKnowledgeRoutes(fastify, knowledgeService);
   await registerMindmapRoutes(fastify, mindmapService);
   await registerWorklogRoutes(fastify, worklogService);
-  await registerConclusionRoutes(fastify, conclusionService);
+  await registerConclusionRoutes(fastify, conclusionService, worklogService);
   await registerSystemRoutes(fastify);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
 

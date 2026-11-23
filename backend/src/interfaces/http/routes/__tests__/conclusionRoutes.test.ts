@@ -8,10 +8,13 @@ import os from 'node:os';
 import { registerConclusionRoutes } from '../conclusionRoutes.js';
 import { ConclusionService } from '../../../../application/conclusion/ConclusionService.js';
 import { JsonConclusionRepository } from '../../../../infrastructure/persistence/JsonConclusionRepository.js';
+import { WorklogService } from '../../../../application/worklog/WorklogService.js';
+import { JsonWorklogRepository } from '../../../../infrastructure/persistence/JsonWorklogRepository.js';
 
 describe('conclusionRoutes', () => {
   let app: ReturnType<typeof Fastify>;
   let tmpDir: string;
+  let worklogService: WorklogService;
 
   beforeEach(async () => {
     const { nanoid } = await import('nanoid');
@@ -19,8 +22,14 @@ describe('conclusionRoutes', () => {
     const service = new ConclusionService(
       new JsonConclusionRepository(path.join(tmpDir, 'conclusions.json'), path.join(tmpDir, 'backups')),
     );
+    worklogService = new WorklogService(
+      new JsonWorklogRepository(
+        path.join(tmpDir, 'worklog.json'),
+        path.join(tmpDir, 'worklog-backups'),
+      ),
+    );
     app = Fastify();
-    await registerConclusionRoutes(app, service);
+    await registerConclusionRoutes(app, service, worklogService);
   });
 
   afterEach(async () => {
@@ -76,6 +85,45 @@ describe('conclusionRoutes', () => {
     const del = await app.inject({ method: 'DELETE', url: `/api/conclusions/${created.id}` });
     expect(del.statusCode).toBe(200);
     expect(JSON.parse(del.body)).toEqual({ deleted: true });
+  });
+
+  it('should resolve projectId/related ids and warn on unknown related names', async () => {
+    await worklogService.record({ project: '题库', version: 'v1', title: 't', detail: 'd' });
+    const projectId = (await worklogService.getTree()).projects[0].id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conclusions',
+      payload: {
+        scope: 'project', project: '题库', title: '联调', decision: 'd',
+        relatedProjects: ['拼错的项目', '题库'],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.warnings?.[0]).toContain('拼错的项目');
+
+    const detail = await app.inject({ method: 'GET', url: `/api/conclusions/${body.id}` });
+    const card = JSON.parse(detail.body);
+    expect(card.projectId).toBe(projectId);
+    expect(card.relatedProjects).toEqual(['题库']);
+    expect(card.relatedProjectIds).toEqual([projectId]);
+  });
+
+  it('should keep the name snapshot when the main project is unknown', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conclusions',
+      payload: { scope: 'project', project: '未登记项目', title: 't', decision: 'd' },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.warnings?.[0]).toContain('未登记项目');
+
+    const detail = await app.inject({ method: 'GET', url: `/api/conclusions/${body.id}` });
+    const card = JSON.parse(detail.body);
+    expect(card.project).toBe('未登记项目');
+    expect(card.projectId).toBeUndefined();
   });
 
   it('should return 400 when append has no changeNote', async () => {

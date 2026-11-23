@@ -79,6 +79,20 @@ function validateTags(tags?: string[]): string[] | undefined {
   return normalized.length ? normalized : undefined;
 }
 
+/** 项目稳定 id 只由接口层解析后填入;Service 只做去空白与空值归一。 */
+function validateProjectId(value: string | undefined): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || undefined;
+}
+
+/** 关联项目名称/id 数组:去空白、去重、空数组归一为 undefined(避免落空数组)。 */
+function validateProjectRefs(values: string[] | undefined, label: string): string[] | undefined {
+  if (values === undefined) return undefined;
+  if (!Array.isArray(values)) throw new ConclusionValidationError(`${label}必须为字符串数组`);
+  const normalized = [...new Set(values.map((v) => String(v).trim()).filter(Boolean))];
+  return normalized.length ? normalized : undefined;
+}
+
 function validateCodeRefs(refs?: ConclusionCodeRef[]): ConclusionCodeRef[] | undefined {
   if (refs === undefined) return undefined;
   if (!Array.isArray(refs)) throw new ConclusionValidationError('codeRefs 必须为数组');
@@ -157,6 +171,10 @@ export function createConclusion(
     date: validateDate(input.date),
     createdAt: now,
   };
+  // 主项目/关联项目由接口层查 worklog 后填入;Service 只存储,不读取 worklog
+  const projectId = validateProjectId(input.projectId);
+  const relatedProjects = validateProjectRefs(input.relatedProjects, '关联项目');
+  const relatedProjectIds = validateProjectRefs(input.relatedProjectIds, '关联项目 id');
   return {
     id: newConclusionId(),
     scope: input.scope,
@@ -166,6 +184,9 @@ export function createConclusion(
     conversationName,
     title: normalizeTitle(input.title),
     tags: validateTags(input.tags),
+    ...(projectId ? { projectId } : {}),
+    ...(relatedProjects ? { relatedProjects } : {}),
+    ...(relatedProjectIds ? { relatedProjectIds } : {}),
     revisions: [revision],
     createdAt: now,
     updatedAt: now,
@@ -237,6 +258,9 @@ export function appendRevision(
     version: conclusion.version,
     title: conclusion.title,
     tags: conclusion.tags,
+    projectId: conclusion.projectId,
+    relatedProjects: conclusion.relatedProjects,
+    relatedProjectIds: conclusion.relatedProjectIds,
   });
 
   const meta = resolveMeta(conclusion, input);
@@ -245,6 +269,22 @@ export function appendRevision(
   conclusion.version = meta.version;
   if (input.title !== undefined) conclusion.title = normalizeTitle(input.title);
   if (input.tags !== undefined) conclusion.tags = validateTags(input.tags);
+  // 项目引用只在本次显式传入时更新;传空串/空数组表示清除(名称改了但项目不存在的场景)
+  if (input.projectId !== undefined) {
+    const projectId = validateProjectId(input.projectId);
+    if (projectId) conclusion.projectId = projectId;
+    else delete conclusion.projectId;
+  }
+  if (input.relatedProjects !== undefined) {
+    const relatedProjects = validateProjectRefs(input.relatedProjects, '关联项目');
+    if (relatedProjects) conclusion.relatedProjects = relatedProjects;
+    else delete conclusion.relatedProjects;
+  }
+  if (input.relatedProjectIds !== undefined) {
+    const relatedProjectIds = validateProjectRefs(input.relatedProjectIds, '关联项目 id');
+    if (relatedProjectIds) conclusion.relatedProjectIds = relatedProjectIds;
+    else delete conclusion.relatedProjectIds;
+  }
 
   const afterMeta = JSON.stringify({
     scope: conclusion.scope,
@@ -252,6 +292,9 @@ export function appendRevision(
     version: conclusion.version,
     title: conclusion.title,
     tags: conclusion.tags,
+    projectId: conclusion.projectId,
+    relatedProjects: conclusion.relatedProjects,
+    relatedProjectIds: conclusion.relatedProjectIds,
   });
   const metaChanged = beforeMeta !== afterMeta;
 

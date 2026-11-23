@@ -172,7 +172,12 @@ export interface ConclusionSummary {
   matchedRev?: number;
   createdAt: number;
   updatedAt: number;
+  /** 主项目稳定引用;项目已被删除时为空,展示用 project 名称快照兜底 */
+  projectId?: string;
+  /** 关联项目名称快照 */
   relatedProjects?: string[];
+  /** 关联项目稳定引用(前端按 id 映射最新项目名) */
+  relatedProjectIds?: string[];
 }
 
 export interface ConclusionRevisionSummary {
@@ -202,7 +207,12 @@ export interface ConclusionDetail {
   history?: ConclusionRevision[];
   createdAt: number;
   updatedAt: number;
+  /** 主项目稳定引用;项目已被删除时为空,展示用 project 名称快照兜底 */
+  projectId?: string;
+  /** 关联项目名称快照 */
   relatedProjects?: string[];
+  /** 关联项目稳定引用(前端按 id 映射最新项目名) */
+  relatedProjectIds?: string[];
 }
 
 export interface ConclusionCreateResponse {

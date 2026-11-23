@@ -113,6 +113,9 @@ export class ConclusionService {
           changeNote: input.changeNote,
           conversationName: input.conversationName,
           stage: input.stage,
+          projectId: input.projectId,
+          relatedProjectIds: input.relatedProjectIds,
+          relatedProjects: input.relatedProjects,
         }, source);
         data.conclusions.push(card);
         return {
@@ -139,6 +142,9 @@ export class ConclusionService {
         changeNote: input.changeNote ?? '',
         conversationName: input.conversationName,
         stage: input.stage,
+        projectId: input.projectId,
+        relatedProjectIds: input.relatedProjectIds,
+        relatedProjects: input.relatedProjects,
       }, source);
       return {
         id: existing.id,
@@ -205,6 +211,9 @@ export class ConclusionService {
       tags: card.tags,
       rev: latest.rev,
       stage: latest.stage,
+      projectId: card.projectId,
+      relatedProjects: card.relatedProjects,
+      relatedProjectIds: card.relatedProjectIds,
       latest,
       revisions: card.revisions.map((revision) => ({
         rev: revision.rev,
@@ -271,6 +280,9 @@ export class ConclusionService {
         title: card.title,
         tags: card.tags,
         rev: latest.rev,
+        projectId: card.projectId,
+        relatedProjects: card.relatedProjects,
+        relatedProjectIds: card.relatedProjectIds,
         latestDate: latest.date,
         latestDecisionExcerpt: excerpt(latest.decision),
         stage: latest.stage,
