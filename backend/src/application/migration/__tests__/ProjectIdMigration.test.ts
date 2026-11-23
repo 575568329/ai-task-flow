@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import { nanoid } from 'nanoid';
 import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
 import { JsonConclusionRepository } from '../../../infrastructure/persistence/JsonConclusionRepository.js';
-import { runProjectIdMigration } from '../ProjectIdMigration.js';
+import { runProjectIdMigration, shouldSuggestPathBinding } from '../ProjectIdMigration.js';
 
 describe('runProjectIdMigration', () => {
   let worklogRepo: JsonWorklogRepository;
@@ -149,5 +149,31 @@ describe('runProjectIdMigration', () => {
     expect(cards.conclusions.find((c) => c.id === 'c1')!.projectId).toBeUndefined();
     expect(r.boundConclusions).toBe(0);
     expect(r.skippedAmbiguous).toBe(1);
+  });
+});
+
+describe('shouldSuggestPathBinding', () => {
+  it('should only suggest binding when migration actually changed something', () => {
+    expect(shouldSuggestPathBinding({ assignedIds: 0, boundConclusions: 0 })).toBe(false);
+    expect(shouldSuggestPathBinding({ assignedIds: 2, boundConclusions: 0 })).toBe(true);
+    expect(shouldSuggestPathBinding({ assignedIds: 0, boundConclusions: 1 })).toBe(true);
+  });
+
+  it('should stop suggesting on subsequent startups with nothing to migrate', async () => {
+    const dir = path.join(os.tmpdir(), `mig-hint-${nanoid()}`);
+    await fs.mkdir(dir, { recursive: true });
+    const logRepo = new JsonWorklogRepository(path.join(dir, 'worklog.json'), path.join(dir, 'wb'));
+    const cardRepo = new JsonConclusionRepository(path.join(dir, 'conclusions.json'), path.join(dir, 'cb'));
+    await logRepo.mutate((d) => {
+      d.projects.push({ name: '题库', createdAt: 1, versions: [] } as never);
+    });
+
+    const first = await runProjectIdMigration({ dataDir: dir, worklogRepo: logRepo, conclusionRepo: cardRepo });
+    expect(shouldSuggestPathBinding(first)).toBe(true); // 本次补了项目 id
+
+    const second = await runProjectIdMigration({ dataDir: dir, worklogRepo: logRepo, conclusionRepo: cardRepo });
+    expect(second.assignedIds).toBe(0);
+    expect(second.boundConclusions).toBe(0);
+    expect(shouldSuggestPathBinding(second)).toBe(false); // 无迁移内容 → 不刷日志
   });
 });

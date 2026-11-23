@@ -37,12 +37,22 @@ export interface MigrationReport {
   /** 重名项目名(只报告,不自动合并) */
   duplicateNames: string[];
   /** 项目名 → 存在的同名候选目录(仅 D:\xunfei、D:\Study 两个根;建议值,不自动写入)。
-   *  暂未消费,供后续页面展示「建议绑定」。 */
+   *  暂未消费,供后续页面展示建议路径(设计 §8.3/8.5),不要因为当前没人读就删。 */
   suggestedPaths: Record<string, string>;
   /** 因项目重名无法判定归属而跳过的结论卡数(留给人工处理) */
   skippedAmbiguous: number;
   /** 标记文件已是当前版本,本次直接跳过 */
   skipped: boolean;
+}
+
+/**
+ * 迁移后是否提示用户绑定路径:只有本次确实迁移了内容(补项目 id / 绑定结论卡)才提示,
+ * 否则每次启动都刷一条「建议绑定路径」会变成噪音。
+ */
+export function shouldSuggestPathBinding(
+  report: Pick<MigrationReport, 'assignedIds' | 'boundConclusions'>,
+): boolean {
+  return report.assignedIds > 0 || report.boundConclusions > 0;
 }
 
 export interface MigrationDeps {

@@ -15,7 +15,7 @@ import { JsonWorklogRepository } from './infrastructure/persistence/JsonWorklogR
 import { WorklogService } from './application/worklog/WorklogService.js';
 import { JsonConclusionRepository } from './infrastructure/persistence/JsonConclusionRepository.js';
 import { ConclusionService } from './application/conclusion/ConclusionService.js';
-import { runProjectIdMigration } from './application/migration/ProjectIdMigration.js';
+import { runProjectIdMigration, shouldSuggestPathBinding } from './application/migration/ProjectIdMigration.js';
 import {
   knowledgeDirPath,
   worklogFilePath,
@@ -100,6 +100,10 @@ export async function startApp(options: StartAppOptions = {}) {
           `重名项目: ${migration.duplicateNames.join(', ') || '无'}；歧义跳过 ${migration.skippedAmbiguous} 张` +
           (migration.skipped ? '（结论卡绑定已迁移过，本次仅自愈补 id）' : ''),
       );
+    }
+    // 只在本次确实迁移了内容时提示,避免每次启动刷屏
+    if (shouldSuggestPathBinding(migration)) {
+      console.log('[migration] 建议在页面为项目绑定本地路径（工作记录 › 项目右键 › 绑定路径）');
     }
   } catch (error: unknown) {
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
