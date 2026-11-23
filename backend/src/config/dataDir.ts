@@ -168,3 +168,13 @@ export function conclusionFilePath(dataDir?: string): string {
 export function conclusionBackupsDirPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), 'conclusion-backups');
 }
+
+/** 项目 id 一次性迁移的版本标记文件(记录已执行的迁移版本,保证幂等) */
+export function projectIdMigrationMarkerPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), '.migration-project-id.json');
+}
+
+/** 项目 id 迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移 */
+export function projectIdMigrationLockTarget(dataDir?: string): string {
+  return resolveDataDir(dataDir);
+}
