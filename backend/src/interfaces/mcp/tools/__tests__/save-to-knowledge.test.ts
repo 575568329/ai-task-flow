@@ -115,6 +115,35 @@ describe('save_to_knowledge MCP tool', () => {
     expect(doc.content).toBe('正文');
   });
 
+  it('should degrade to unassociated when worklog tree is corrupted', async () => {
+    const corruptDeps: ToolDeps = {
+      ...deps,
+      worklogService: {
+        getTree: async () => ({ projects: [], versions: undefined }),
+      } as unknown as ToolDeps['worklogService'],
+    };
+
+    const result = await HANDLERS.save_to_knowledge(
+      {
+        title: '损坏数据',
+        content: '正文',
+        versionId: 'v_1',
+        requirementId: 'r_1',
+        projectId: 'p_1',
+      },
+      corruptDeps,
+    );
+
+    const text = result.content[0].text;
+    expect(text).toContain('已写入知识库');
+    expect(text).toContain('版本 id "v_1" 不存在');
+    expect(text).toContain('需求 id "r_1" 不存在');
+    expect(text).toContain('项目 id "p_1" 不存在');
+
+    const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
+    expect(doc.frontmatter).toBeUndefined();
+  });
+
   it('should degrade invalid stage to unassociated and still save the document', async () => {
     const result = await HANDLERS.save_to_knowledge(
       { title: '非法阶段', content: '正文', stage: 'not-a-stage' },

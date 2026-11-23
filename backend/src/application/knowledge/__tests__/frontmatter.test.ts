@@ -1,7 +1,7 @@
 // backend/src/application/knowledge/__tests__/frontmatter.test.ts
 // 最小 frontmatter 解析/序列化:往返、固定顺序、空值、非法格式降级
 import { describe, it, expect } from 'vitest';
-import { parseFrontmatter, serializeFrontmatter } from '../frontmatter.js';
+import { extractFrontmatterBlock, parseFrontmatter, serializeFrontmatter } from '../frontmatter.js';
 import type { KnowledgeFrontmatter } from '@ai-task-flow/shared';
 
 describe('serializeFrontmatter', () => {
@@ -29,6 +29,20 @@ describe('serializeFrontmatter', () => {
     const block = serializeFrontmatter({ tags: ['a,b'], versionId: 'v\n1' });
     expect(block).toContain('tags: [a b]');
     expect(block).toContain('versionId: v 1');
+  });
+});
+
+describe('extractFrontmatterBlock', () => {
+  it('should detect a block by syntax even when it has no recognized keys', () => {
+    const raw = '---\ntitle: X\ndate: 2026-01-01\n---\n正文';
+    expect(extractFrontmatterBlock(raw)).toEqual({
+      hasBlock: true,
+      raw: '---\ntitle: X\ndate: 2026-01-01\n---\n',
+    });
+  });
+
+  it('should report no block for plain markdown', () => {
+    expect(extractFrontmatterBlock('# 标题\n正文')).toEqual({ hasBlock: false, raw: '' });
   });
 });
 

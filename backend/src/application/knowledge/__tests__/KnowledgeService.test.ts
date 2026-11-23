@@ -1,6 +1,6 @@
 // backend/src/application/knowledge/__tests__/KnowledgeService.test.ts
 // KnowledgeService 写入能力单测:命名规则、sanitize、越界、tags frontmatter、原子写、覆盖更新
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
@@ -113,6 +113,20 @@ describe('KnowledgeService 写入', () => {
       expect(doc.frontmatter).toEqual({ tags: ['调研'], versionId: 'v_1', stage: 'req' });
     });
 
+    it('should not prepend a second block when content already has a frontmatter block', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { path: relPath } = await service.createDoc({
+        title: '自带块',
+        content: '---\ntitle: 外部\n---\n正文',
+        versionId: 'v_1',
+      });
+      warn.mockRestore();
+
+      const raw = await fs.readFile(path.join(root, relPath), 'utf-8');
+      expect(raw).toBe('---\ntitle: 外部\n---\n正文');
+      expect(raw.match(/^---$/gm)).toHaveLength(2);
+    });
+
     it('should write to subdir and create it if missing', async () => {
       const { path: relPath } = await service.createDoc({
         title: '子目录笔记',
@@ -191,6 +205,19 @@ describe('KnowledgeService 写入', () => {
       const doc = await service.getDoc('no-newline.md');
       expect(doc.frontmatter).toEqual({ tags: ['a'] });
       expect(doc.content).toBe('新正文');
+    });
+
+    it('should keep old frontmatter block that only has unknown keys', async () => {
+      const abs = path.join(root, 'external-only.md');
+      await fs.writeFile(abs, '---\ntitle: 外部标题\ndate: 2026-01-01\n---\n旧正文', 'utf-8');
+      await service.saveDoc('external-only.md', '新正文');
+
+      const raw = await fs.readFile(abs, 'utf-8');
+      expect(raw).toBe('---\ntitle: 外部标题\ndate: 2026-01-01\n---\n新正文');
+      const doc = await service.getDoc('external-only.md');
+      // 无可识别键:块不算本项目 frontmatter,整段按正文返回(与 getDoc 既有规则一致)
+      expect(doc.frontmatter).toBeUndefined();
+      expect(doc.content).toBe('---\ntitle: 外部标题\ndate: 2026-01-01\n---\n新正文');
     });
 
     it('should recognize frontmatter in files prefixed with BOM', async () => {

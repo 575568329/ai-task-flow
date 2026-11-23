@@ -3,7 +3,7 @@
 // 关联 id 不存在时降级为不写该字段并提示,不阻断文档保存(设计 §8)。
 import { WORK_STAGE_IDS, isWorkStage } from '@ai-task-flow/shared';
 import type { WorklogData } from '@ai-task-flow/shared';
-import { parseFrontmatter } from '../../../application/knowledge/frontmatter.js';
+import { extractFrontmatterBlock } from '../../../application/knowledge/frontmatter.js';
 import type { ToolDeps } from './types.js';
 import { STAGE_SCHEMA } from './stageSchema.js';
 
@@ -164,8 +164,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     stage: optionalString(args.stage),
   };
   const { meta, warnings } = await resolveRefs(deps, requested);
-  // 正文自带 frontmatter 时 createDoc 会原样写入、不覆盖元数据,成功文案不能谎称已关联
-  const contentHasFrontmatter = parseFrontmatter(content).hasFrontmatter;
+  // 正文自带任意前导块时 createDoc 会原样写入、不覆盖元数据,成功文案不能谎称已关联
+  const contentHasFrontmatter = extractFrontmatterBlock(content).hasBlock;
 
   try {
     const result = await deps.knowledgeService.createDoc({ title, content, tags, dir, ...meta });

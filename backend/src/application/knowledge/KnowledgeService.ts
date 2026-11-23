@@ -12,7 +12,12 @@ import type {
 } from '@ai-task-flow/shared';
 import { scanKnowledge } from '../../infrastructure/knowledge/KnowledgeScanner.js';
 import { safeResolve, toRelativePosix } from '../../infrastructure/utils/safePath.js';
-import { parseFrontmatter, serializeFrontmatter } from './frontmatter.js';
+import {
+  extractFrontmatterBlock,
+  hasFrontmatterData,
+  parseFrontmatter,
+  serializeFrontmatter,
+} from './frontmatter.js';
 
 /** 文件名非法字符(跨 Windows/Linux) */
 const ILLEGAL_FILENAME_CHARS = /[\/\\:\*\?"<>\|]/g;
@@ -184,13 +189,14 @@ export class KnowledgeService {
     }
 
     let body = content;
-    if (!parseFrontmatter(content).hasFrontmatter) {
+    // 按语法判断新内容是否自带前导块(与块内是否含可识别键无关)
+    if (!extractFrontmatterBlock(content).hasBlock) {
       const oldRaw = await fs.readFile(abs, 'utf-8');
-      const oldParsed = parseFrontmatter(oldRaw);
-      // 原样沿用旧 frontmatter 块,保留本项目不识别的外部键;
+      const oldBlock = extractFrontmatterBlock(oldRaw);
+      // 原样沿用旧 frontmatter 块,保留含 title/date 等本项目不识别的外部键;
       // 旧文件以 --- 结尾且无换行时补一个 \n,否则会和正文粘连导致块不再被识别
-      if (oldParsed.hasFrontmatter) {
-        const header = oldParsed.raw.endsWith('\n') ? oldParsed.raw : `${oldParsed.raw}\n`;
+      if (oldBlock.hasBlock) {
+        const header = oldBlock.raw.endsWith('\n') ? oldBlock.raw : `${oldBlock.raw}\n`;
         body = `${header}${content}`;
       }
     }
@@ -218,11 +224,16 @@ export class KnowledgeService {
   }
 
   /**
-   * 拼接 frontmatter:有可写元数据且正文自身不带 frontmatter 时前置。
-   * 正文已带 frontmatter 时保持原样,避免出现两个 --- 块。
+   * 拼接 frontmatter:正文语法上没有前导块时前置。
+   * 正文已带任意前导块时保持原样(避免出现两个 --- 块),此时元数据不写入并打印告警。
    */
   private withFrontmatter(content: string, meta: KnowledgeFrontmatter): string {
-    if (parseFrontmatter(content).hasFrontmatter) return content;
+    if (extractFrontmatterBlock(content).hasBlock) {
+      if (hasFrontmatterData(meta)) {
+        console.warn('[KnowledgeService] 文档自带 frontmatter,本次元数据未写入(tags/版本/需求/项目/阶段)');
+      }
+      return content;
+    }
     return serializeFrontmatter(meta) + content;
   }
 

@@ -16,9 +16,31 @@ export interface ParsedKnowledgeFrontmatter {
   data: KnowledgeFrontmatter;
   /** 去掉 frontmatter 后的正文 */
   body: string;
+  /** 块内是否含本项目可识别的键(仅语法有块时为 false) */
   hasFrontmatter: boolean;
   /** 原始 frontmatter 块(含首尾 --- 与块尾换行);无则为空串 */
   raw: string;
+}
+
+/** 语法层面的前导块识别结果(不关心块内键是否可识别) */
+export interface FrontmatterBlock {
+  hasBlock: boolean;
+  /** 原始块(含首尾 --- 与块尾换行);无则为空串 */
+  raw: string;
+}
+
+/** 剥离 UTF-8 BOM(Windows 工具可能写入,不剥离会导致 ^--- 不匹配) */
+function stripBom(raw: string): string {
+  return raw.startsWith(BOM) ? raw.slice(BOM.length) : raw;
+}
+
+/**
+ * 按语法判断文档是否有前导 frontmatter 块(是否以 --- 开头且存在闭合 ---)。
+ * 与「块内是否含可识别键」解耦:外部文档的 title/date 块也算有块。
+ */
+export function extractFrontmatterBlock(raw: string): FrontmatterBlock {
+  const match = FRONTMATTER_BLOCK.exec(stripBom(raw));
+  return match ? { hasBlock: true, raw: match[0] } : { hasBlock: false, raw: '' };
 }
 
 /** 去掉成对的首尾引号(兼容外部工具写入的 "v_1" / 'v_1') */
@@ -47,7 +69,7 @@ function parseTags(value: string): string[] {
  */
 export function parseFrontmatter(raw: string): ParsedKnowledgeFrontmatter {
   // 先剥离 BOM,否则 ^--- 不匹配,块会被当作正文
-  const normalized = raw.startsWith(BOM) ? raw.slice(BOM.length) : raw;
+  const normalized = stripBom(raw);
   const match = FRONTMATTER_BLOCK.exec(normalized);
   if (!match) {
     return { data: {}, body: normalized, hasFrontmatter: false, raw: '' };
