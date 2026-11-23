@@ -63,8 +63,8 @@ function treeWith(...projects: Array<{ id: string; name: string }>): WorklogData
       id: project.id,
       name: project.name,
       createdAt: 1,
-      versions: [],
     })),
+    versions: [],
   };
 }
 

@@ -1,11 +1,14 @@
 // frontend/src/api/worklog.ts
 // 工作记录 API 客户端(端点契约见 backend worklogRoutes)。
+// 模型:版本 → 需求 → 条目;项目降为字典(路径归属/筛选)。
 // 全部 silent:http 层不弹 toast,由 WorklogView 各 handler 统一提示(避免双重 toast)。
 import type {
   WorklogData,
   WorklogRecordRequest,
   WorklogRecordResponse,
   WorklogUpdateRequest,
+  WorklogVersionCreateRequest,
+  WorklogRequirementCreateRequest,
 } from '@ai-task-flow/shared';
 import { http } from './http';
 
@@ -13,21 +16,52 @@ export const worklogApi = {
   /** 全树(读不缓存,每次操作后重拉) */
   getTree: () => http.get<WorklogData>('/worklog', true),
 
-  /** 新增条目(项目/版本自动建层) */
-  create: (data: WorklogRecordRequest) =>
+  /** 新增条目到已存在的「版本 + 需求」(同 record_work) */
+  record: (data: WorklogRecordRequest) =>
     http.post<WorklogRecordResponse>('/worklog/entries', data, true),
 
   /** partial 更新(表单外字段不传即保留——diff/files 不会被抹掉) */
   update: (id: string, patch: WorklogUpdateRequest) =>
-    http.put<{ id: string; path: string }>(`/worklog/entries/${id}`, patch, true),
+    http.put<{ id: string; path: string; warnings?: string[] }>(`/worklog/entries/${id}`, patch, true),
 
   deleteEntry: (id: string) => http.delete<{ ok: boolean }>(`/worklog/entries/${id}`, true),
 
-  deleteVersion: (project: string, version: string) =>
-    http.delete<{ ok: boolean }>(`/worklog/versions?project=${encodeURIComponent(project)}&version=${encodeURIComponent(version)}`, true),
+  // ------------------------------------------------------------------
+  // 版本
+  // ------------------------------------------------------------------
+  createVersion: (data: WorklogVersionCreateRequest) =>
+    http.post<{ id: string }>('/worklog/versions', data, true),
 
-  renameVersion: (project: string, version: string, newName: string) =>
-    http.post<{ ok: boolean }>('/worklog/versions/rename', { project, version, newName }, true),
+  renameVersion: (id: string, newName: string) =>
+    http.post<{ ok: boolean }>(`/worklog/versions/${encodeURIComponent(id)}/rename`, { newName }, true),
+
+  deleteVersion: (id: string) =>
+    http.delete<{ ok: boolean }>(`/worklog/versions/${encodeURIComponent(id)}`, true),
+
+  // ------------------------------------------------------------------
+  // 需求
+  // ------------------------------------------------------------------
+  createRequirement: (data: WorklogRequirementCreateRequest) =>
+    http.post<{ id: string }>('/worklog/requirements', data, true),
+
+  renameRequirement: (versionId: string, id: string, newName: string) =>
+    http.post<{ ok: boolean }>(
+      `/worklog/requirements/${encodeURIComponent(id)}/rename`,
+      { versionId, newName },
+      true,
+    ),
+
+  deleteRequirement: (versionId: string, id: string) =>
+    http.delete<{ ok: boolean }>(
+      `/worklog/requirements/${encodeURIComponent(id)}?versionId=${encodeURIComponent(versionId)}`,
+      true,
+    ),
+
+  // ------------------------------------------------------------------
+  // 项目字典(路径归属与筛选;不再是树根)
+  // ------------------------------------------------------------------
+  createProject: (data: { name: string; paths?: string[] }) =>
+    http.post<{ id: string }>('/worklog/projects', data, true),
 
   deleteProject: (project: string) =>
     http.delete<{ ok: boolean }>(`/worklog/projects/${encodeURIComponent(project)}`, true),

@@ -40,11 +40,7 @@ function makeEntry(overrides: Partial<WorklogEntry> = {}): WorklogEntry {
 }
 
 describe('EntryItem', () => {
-  const baseProps = {
-    projectVersions: ['v1.2.0', 'v1.3.0'],
-    currentProject: 'ai-task-flow',
-    currentVersion: 'v1.2.0',
-  };
+  const baseProps = {};
 
   beforeEach(() => {
     vi.restoreAllMocks();

@@ -1,16 +1,20 @@
 // frontend/src/components/worklog/WorklogView.tsx
-// 工作记录页(应用默认落地视图):左栏项目/版本树 + 右栏条目流。
+// 工作记录页(应用默认落地视图):左栏「版本 → 需求」树 + 右栏条目流。
 // 数据局部 state(单一树,能局部不全局);每次操作后重拉全树(读不缓存,与后端锁协议一致)。
-// 审阅修复:refresh 竞态序号守卫/selection 随重命名删除跟随/视图激活静默重拉/
-// 挪版本列表按条目所属项目传入/错误提示统一收口(不再双重 toast)。
+// 项目已降为字典(路径归属/筛选),路径绑定与三态展示移到「项目字典」弹窗。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RefreshCw, BookOpenText } from 'lucide-react';
+import { Plus, RefreshCw, BookOpenText, FolderGit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { useUIStore } from '@/stores/uiStore';
 import { worklogApi } from '@/api/worklog';
-import type { WorklogData, WorkStage } from '@ai-task-flow/shared';
-import { ProjectVersionTree, type TreeSelection } from './ProjectVersionTree';
+import type {
+  WorklogData,
+  WorklogRecordRequest,
+  WorkStage,
+} from '@ai-task-flow/shared';
+import { VersionRequirementTree, type RequirementSelection } from './VersionRequirementTree';
+import { ProjectDictionaryDialog } from './ProjectDictionaryDialog';
 import { EntryItem } from './EntryItem';
 import { NewEntryForm } from './NewEntryForm';
 import { AiGuideView } from './AiGuideView';
@@ -23,16 +27,17 @@ import { filterEntries } from './searchFilter';
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export function WorklogView() {
-  const [data, setData] = useState<WorklogData>({ projects: [] });
+  const [data, setData] = useState<WorklogData>({ projects: [], versions: [] });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [selection, setSelection] = useState<TreeSelection>({});
+  const [selection, setSelection] = useState<RequirementSelection>({});
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
   const [stageFilter, setStageFilter] = useState<StageFilter>([]);
   const [relatedFilter, setRelatedFilter] = useState(''); // 关联项目筛选(项目名快照,空=不过滤)
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
   const refreshSeq = useRef(0);
@@ -44,13 +49,13 @@ export function WorklogView() {
       if (seq !== refreshSeq.current) return; // 已有更新的请求在途,丢弃本次
       setData(tree);
       setLoadFailed(false);
-      // selection 跟随数据:指向的项目/版本不存在(被改名/删除)则回退
+      // selection 跟随数据:指向的版本/需求不存在(被改名/删除)则回退
       setSelection((prev) => {
-        if (!prev.project) return prev;
-        const proj = tree.projects.find((p) => p.name === prev.project);
-        if (!proj) return {};
-        if (prev.version && !proj.versions.some((v) => v.name === prev.version)) {
-          return { project: prev.project };
+        if (!prev.versionId) return prev;
+        const version = tree.versions.find((v) => v.id === prev.versionId);
+        if (!version) return {};
+        if (prev.requirementId && !version.requirements.some((r) => r.id === prev.requirementId)) {
+          return { versionId: prev.versionId };
         }
         return prev;
       });
@@ -74,21 +79,20 @@ export function WorklogView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打点变化即意图
   }, [worklogEnterTick]);
 
-  // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择过滤。新在前。
-  // 本地过滤(全树已在内存,个人量级零延迟),匹配语义与后端 query_work 一致。
+  // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择(版本/需求)过滤。新在前。
   const { entries: visibleEntries, isSearching } = useMemo(
     () => filterEntries(data, selection, keyword, stageFilter, relatedFilter),
     [data, selection, keyword, stageFilter, relatedFilter],
   );
-  // 仅关联筛选时也视为全局视图(不要求树选择),对应树节点「另有 N 条关联记录」入口
-  const noSelection = !isSearching && !selection.project && !relatedFilter;
+  // 仅关联筛选时也视为全局视图(不要求树选择)
+  const noSelection = !isSearching && !selection.versionId && !relatedFilter;
 
   // 「关联项目」下拉选项:全树条目 relatedProjects 去重(名称快照,与筛选口径一致)
   const relatedProjectOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const project of data.projects) {
-      for (const version of project.versions) {
-        for (const entry of version.entries) {
+    for (const version of data.versions) {
+      for (const requirement of version.requirements) {
+        for (const entry of requirement.entries) {
           for (const name of entry.relatedProjects ?? []) {
             if (name) names.add(name);
           }
@@ -103,28 +107,24 @@ export function WorklogView() {
     if (relatedFilter && !relatedProjectOptions.includes(relatedFilter)) setRelatedFilter('');
   }, [relatedFilter, relatedProjectOptions]);
 
-  // 项目 id → 被其他条目关联的次数(树节点「另有 N 条关联记录」;全树已在内存,本地统计)
-  const relatedCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const project of data.projects) {
-      for (const version of project.versions) {
-        for (const entry of version.entries) {
-          for (const id of entry.relatedProjectIds ?? []) {
-            if (!id) continue;
-            counts[id] = (counts[id] ?? 0) + 1;
-          }
-        }
-      }
-    }
-    return counts;
-  }, [data]);
+  // 新建条目的版本/需求下拉数据
+  const versionOptions = useMemo(
+    () => data.versions.map((v) => ({
+      id: v.id,
+      name: v.name,
+      requirements: v.requirements.map((r) => ({ id: r.id, title: r.title })),
+    })),
+    [data],
+  );
 
-  /** 点击树节点关联提示:清空树选择,切到该关联项目的全局视图 */
-  const handleRelatedFilter = (projectName: string) => {
-    setSelection({});
-    setRelatedFilter(projectName);
-    setMode('entries');
-  };
+  const selectedVersion = useMemo(
+    () => data.versions.find((v) => v.id === selection.versionId),
+    [data, selection.versionId],
+  );
+  const selectedRequirement = useMemo(
+    () => selectedVersion?.requirements.find((r) => r.id === selection.requirementId),
+    [selectedVersion, selection.requirementId],
+  );
 
   /** 点击条目上的关联项目徽标:按该项目名筛选(清空关键词,保留当前树选择) */
   const handleRelatedBadgeClick = (projectName: string) => {
@@ -132,32 +132,86 @@ export function WorklogView() {
     setRelatedFilter(projectName);
   };
 
-  // 项目名 → 版本列表(挪版本下拉按条目所属项目取,跨项目混看不错配)
-  const versionsByProject = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const p of data.projects) map.set(p.name, p.versions.map((v) => v.name));
-    return map;
-  }, [data]);
-
-  const projectOptions = useMemo(
-    () => data.projects.map((p) => ({ name: p.name, versions: p.versions.map((v) => v.name) })),
-    [data],
-  );
-
-  const handleCreate = async (input: { project: string; version: string; title: string; detail: string; tags?: string[]; stage?: WorkStage }) => {
+  /** 树操作统一包装:失败提示,成功重拉 */
+  const runTreeAction = async (fn: () => Promise<unknown>, successTitle: string) => {
     try {
-      await worklogApi.create(input);
+      await fn();
+      await refresh();
+      toast.success(successTitle);
+    } catch (err) {
+      toast.error(`操作失败:${errMessage(err)}`);
+    }
+  };
+
+  const handleCreateVersion = async (name: string) => {
+    try {
+      const { id } = await worklogApi.createVersion({ name });
+      setSelection({ versionId: id });
+      await refresh();
+      toast.success(`版本已创建:${name}`);
+    } catch (err) {
+      toast.error(`创建版本失败:${errMessage(err)}`);
+    }
+  };
+
+  const handleCreateRequirement = async (versionId: string, title: string) => {
+    try {
+      const { id } = await worklogApi.createRequirement({ versionId, title });
+      setSelection({ versionId, requirementId: id });
+      await refresh();
+      toast.success(`需求已创建:${title}`);
+    } catch (err) {
+      toast.error(`创建需求失败:${errMessage(err)}`);
+    }
+  };
+
+  const handleDeleteVersion = async (versionId: string) => {
+    await runTreeAction(async () => {
+      await worklogApi.deleteVersion(versionId);
+      if (selection.versionId === versionId) setSelection({});
+    }, '版本已删除');
+  };
+
+  const handleDeleteRequirement = async (versionId: string, requirementId: string) => {
+    await runTreeAction(async () => {
+      await worklogApi.deleteRequirement(versionId, requirementId);
+      if (selection.requirementId === requirementId) setSelection({ versionId });
+    }, '需求已删除');
+  };
+
+  const handleCreate = async (input: {
+    versionId: string;
+    requirementId: string;
+    title: string;
+    detail: string;
+    tags?: string[];
+    stage?: WorkStage;
+  }) => {
+    try {
+      // 后端把空/缺失 stage 视为「未标注」,类型上 stage 必填,这里按实际语义组装
+      const payload = {
+        versionId: input.versionId,
+        requirementId: input.requirementId,
+        title: input.title,
+        detail: input.detail,
+        ...(input.tags ? { tags: input.tags } : {}),
+        ...(input.stage ? { stage: input.stage } : {}),
+      } as WorklogRecordRequest;
+      await worklogApi.record(payload);
       setCreating(false);
       setMode('entries');
-      setSelection({ project: input.project, version: input.version });
+      setSelection({ versionId: input.versionId, requirementId: input.requirementId });
       await refresh();
-      toast.success(`已记录:${input.project} / ${input.version}`);
+      toast.success('已记录');
     } catch (err) {
       toast.error(`记录失败:${errMessage(err)}`);
     }
   };
 
-  const handleSave = async (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage; version?: string }) => {
+  const handleSave = async (
+    id: string,
+    patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage },
+  ) => {
     try {
       await worklogApi.update(id, patch);
       await refresh();
@@ -177,25 +231,9 @@ export function WorklogView() {
     }
   };
 
-  /** 树上破坏性操作的统一包装:提示 + 重拉 + selection 跟随(重命名改写选中名,删除命中则回退) */
-  const treeAction = (
-    fn: () => Promise<unknown>,
-    successTitle: string,
-    follow?: (prev: TreeSelection) => TreeSelection,
-  ) => async () => {
-    try {
-      await fn();
-      if (follow) setSelection(follow);
-      await refresh();
-      toast.success(successTitle);
-    } catch (err) {
-      toast.error(`操作失败:${errMessage(err)}`);
-    }
-  };
-
-  const handleSelect = (sel: TreeSelection) => {
+  const handleSelect = (sel: RequirementSelection) => {
     setSelection(sel);
-    setMode('entries'); // 指南模式下点树 = 返回条目列表(修复"指南无返回语义")
+    setMode('entries'); // 指南模式下点树 = 返回条目列表
   };
 
   if (loading) {
@@ -205,20 +243,20 @@ export function WorklogView() {
   const emptyHint = loadFailed
     ? '加载失败,点左上角刷新重试(后端可能未启动)。'
     : noSelection
-      ? '数据量较大,默认不加载全部。请在左侧展开项目,选择版本查看记录。'
+      ? '数据量较大,默认不加载全部。请在左侧选择版本或需求查看记录。'
       : relatedFilter
         ? `没有关联「${relatedFilter}」的记录。`
         : '还没有记录。让 AI 干完活调用 record_work,或点「+ 记一条」手动记录。';
 
   const titleText = isSearching
     ? `搜索「${keyword.trim()}」`
-    : selection.project
-      ? selection.version
-        ? `${selection.project} / ${selection.version}`
-        : `${selection.project}(全部版本)`
-      : relatedFilter
-        ? `关联「${relatedFilter}」`
-        : '工作记录';
+    : selection.requirementId
+      ? `${selectedVersion?.name ?? '版本'} / ${selectedRequirement?.title ?? '需求'}`
+      : selection.versionId
+        ? `${selectedVersion?.name ?? '版本'}(全部需求)`
+        : relatedFilter
+          ? `关联「${relatedFilter}」`
+          : '工作记录';
 
   return (
     <WorkspaceLayout
@@ -231,6 +269,13 @@ export function WorklogView() {
                 <RefreshCw className="size-3.5" />
               </Button>
               <Button
+                variant="ghost" size="sm" className="size-7 p-0"
+                title="项目字典与路径绑定"
+                onClick={() => setProjectDialogOpen(true)}
+              >
+                <FolderGit2 className="size-3.5" />
+              </Button>
+              <Button
                 variant={mode === 'guide' ? 'secondary' : 'ghost'} size="sm" className="size-7 p-0"
                 title="AI 使用指南(什么时候让 AI 调用什么工具)"
                 onClick={() => setMode((m) => (m === 'guide' ? 'entries' : 'guide'))}
@@ -240,34 +285,21 @@ export function WorklogView() {
             </>
           )}
         >
-          {data.projects.length === 0 ? (
-            <p className="text-muted-foreground p-2 text-xs leading-relaxed">{emptyHint}</p>
-          ) : (
-            <ProjectVersionTree
-              data={data}
-              selection={selection}
-              onSelect={handleSelect}
-              onRenameVersion={(p, v, n) => treeAction(
-                () => worklogApi.renameVersion(p, v, n), '版本已重命名',
-                (prev) => (prev.project === p && prev.version === v ? { project: p, version: n } : prev),
-              )()}
-              onRenameProject={(p, n) => treeAction(
-                () => worklogApi.renameProject(p, n), '项目已重命名',
-                (prev) => (prev.project === p ? { ...prev, project: n } : prev),
-              )()}
-              onDeleteVersion={(p, v) => treeAction(
-                () => worklogApi.deleteVersion(p, v), '版本已删除',
-                (prev) => (prev.project === p && prev.version === v ? { project: p } : prev),
-              )()}
-              onDeleteProject={(p) => treeAction(
-                () => worklogApi.deleteProject(p), '项目已删除',
-                (prev) => (prev.project === p ? {} : prev),
-              )()}
-              onPathsChanged={() => refresh()}
-              relatedCounts={relatedCounts}
-              onRelatedFilterChange={handleRelatedFilter}
-            />
-          )}
+          <VersionRequirementTree
+            data={data}
+            selection={selection}
+            onSelect={handleSelect}
+            onCreateVersion={(name) => handleCreateVersion(name)}
+            onRenameVersion={(versionId, newName) => runTreeAction(
+              () => worklogApi.renameVersion(versionId, newName), '版本已重命名',
+            )}
+            onDeleteVersion={(versionId) => handleDeleteVersion(versionId)}
+            onCreateRequirement={(versionId, title) => handleCreateRequirement(versionId, title)}
+            onRenameRequirement={(versionId, requirementId, newTitle) => runTreeAction(
+              () => worklogApi.renameRequirement(versionId, requirementId, newTitle), '需求已重命名',
+            )}
+            onDeleteRequirement={(versionId, requirementId) => handleDeleteRequirement(versionId, requirementId)}
+          />
         </WorkspaceSidebar>
       )}
       toolbar={mode === 'guide' ? undefined : (
@@ -276,14 +308,14 @@ export function WorklogView() {
             <SearchInput
               value={keyword}
               onChange={setKeyword}
-              placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分项目)"
+              placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分版本)"
               ariaLabel="搜索工作记录"
             />
           )}
           title={(
             <>
               {titleText}
-              {relatedFilter && (isSearching || selection.project) && (
+              {relatedFilter && (isSearching || selection.versionId) && (
                 <span className="text-muted-foreground ml-2 text-xs font-normal">· 筛选关联「{relatedFilter}」</span>
               )}
               {!noSelection && (
@@ -341,9 +373,9 @@ export function WorklogView() {
         <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
           {creating && (
             <NewEntryForm
-              projects={projectOptions}
-              defaultProject={selection.project ?? ''}
-              defaultVersion={selection.version ?? ''}
+              versions={versionOptions}
+              defaultVersionId={selection.versionId ?? ''}
+              defaultRequirementId={selection.requirementId ?? ''}
               onCreate={handleCreate}
               onCancel={() => setCreating(false)}
             />
@@ -352,13 +384,15 @@ export function WorklogView() {
           {visibleEntries.length === 0 && !creating ? (
             <p className="text-muted-foreground py-12 text-center text-sm">{emptyHint}</p>
           ) : (
-            visibleEntries.map(({ entry, project, version }) => (
+            visibleEntries.map(({ entry, version, requirement }) => (
               <EntryItem
                 key={entry.id}
                 entry={entry}
-                projectVersions={versionsByProject.get(project) ?? [version]}
-                currentVersion={version}
-                contextLabel={isSearching || relatedFilter ? `${project} / ${version}` : (!selection.version ? version : undefined)}
+                contextLabel={
+                  isSearching || relatedFilter
+                    ? `${version} / ${requirement}`
+                    : (!selection.requirementId ? requirement : undefined)
+                }
                 expandAll={expandAll}
                 onSave={handleSave}
                 onDelete={handleDeleteEntry}
@@ -368,6 +402,13 @@ export function WorklogView() {
           )}
         </div>
       )}
+
+      <ProjectDictionaryDialog
+        projects={data.projects}
+        open={projectDialogOpen}
+        onOpenChange={setProjectDialogOpen}
+        onPathsChanged={() => refresh()}
+      />
     </WorkspaceLayout>
   );
 }

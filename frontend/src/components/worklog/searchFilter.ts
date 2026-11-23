@@ -1,14 +1,16 @@
 // frontend/src/components/worklog/searchFilter.ts
-// 工作记录条目过滤纯函数:树选择 + 关键字模糊匹配(与后端 query_work 语义一致——
+// 工作记录条目过滤纯函数:树选择(版本/需求)+ 关键字模糊匹配(与后端 query_work 语义一致——
 // title/detail/files.path 不区分大小写;keyword 非空时忽略树选择做全局搜索)。
 import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
 import { matchStageFilter, type StageFilter } from '@/lib/workStage';
-import type { TreeSelection } from './ProjectVersionTree';
+import type { RequirementSelection } from './VersionRequirementTree';
 
 export interface VisibleEntry {
   entry: WorklogEntry;
-  project: string;
+  /** 所属版本名(展示上下文) */
   version: string;
+  /** 所属需求标题(展示上下文) */
+  requirement: string;
 }
 
 /** keyword 命中:title/detail/files.path 任一含关键字(不区分大小写) */
@@ -24,31 +26,37 @@ export function matchesKeyword(entry: WorklogEntry, keyword: string): boolean {
 /**
  * 计算右栏可见条目(新在前)。
  * - keyword 非空:全局搜索(忽略 selection),命中即显示——方便"想看的需求是怎么做的"直接定位;
- * - relatedProject 非空:只保留关联了该项目的条目;单独使用时视为全局视图(树节点「另有 N 条关联记录」入口);
- * - 否则:按树选择过滤(项目精确/版本精确);未选不加载全部(数据量大,避免默认渲染 60+ 条)。
+ * - relatedProject 非空:只保留关联了该项目的条目;单独使用时视为全局视图;
+ * - 否则:按树选择过滤(版本 id / 需求 id 定位子树);未选不加载全部(数据量大,避免默认渲染 60+ 条)。
+ * - project 非空:按条目实际归属项目叠加过滤(与 selection 可共存)。
  */
 export function filterEntries(
   data: WorklogData,
-  selection: TreeSelection,
+  selection: RequirementSelection,
   keyword: string,
   stage: StageFilter = [],
   relatedProject?: string,
+  project?: string,
 ): { entries: VisibleEntry[]; isSearching: boolean } {
   const isSearching = keyword.trim().length > 0;
   const related = relatedProject?.trim() || undefined;
-  if (!isSearching && !selection.project && !related) return { entries: [], isSearching };
+  const projectName = project?.trim() || undefined;
+  if (!isSearching && !selection.versionId && !related) return { entries: [], isSearching };
   const result: VisibleEntry[] = [];
 
-  for (const project of data.projects) {
-    if (!isSearching && selection.project && project.name !== selection.project) continue;
-    for (const version of project.versions) {
-      if (!isSearching && selection.version && version.name !== selection.version) continue;
-      for (const entry of version.entries) {
+  for (const version of data.versions) {
+    if (!isSearching && selection.versionId && version.id !== selection.versionId) continue;
+    for (const requirement of version.requirements) {
+      // 需求 id 只在版本内定位:选中需求时天然也限定了版本
+      if (!isSearching && selection.requirementId && requirement.id !== selection.requirementId) continue;
+      for (const entry of requirement.entries) {
         if (!matchStageFilter(entry.stage, stage)) continue;
+        // 条目实际归属项目(记录时路径归属或显式传入)
+        if (projectName && entry.project !== projectName) continue;
         // 关联项目按名称快照匹配(与后端 query_work 的 relatedProject 口径一致)
         if (related && !entry.relatedProjects?.includes(related)) continue;
         if (isSearching && !matchesKeyword(entry, keyword)) continue;
-        result.push({ entry, project: project.name, version: version.name });
+        result.push({ entry, version: version.name, requirement: requirement.title });
       }
     }
   }

@@ -1,0 +1,120 @@
+// frontend/src/components/worklog/__tests__/versionTree.test.tsx
+// 版本 → 需求树:层级渲染、复制 id、选择回调、计数/关联项目徽标、最小新建/重命名/删除入口。
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { VersionRequirementTree } from '../VersionRequirementTree';
+import type { WorklogData } from '@ai-task-flow/shared';
+
+// 右键菜单基于 radix-ui(monorepo 根 node_modules 与根 react@18 同层,双 React),
+// 交互测试只关心菜单项回调,这里 mock 为原生结构。
+vi.mock('@/components/ui/context-menu', () => ({
+  ContextMenu: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  ContextMenuTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  ContextMenuContent: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  ContextMenuItem: ({ children, onSelect }: { children?: React.ReactNode; onSelect?: () => void }) => (
+    <button type="button" onClick={() => onSelect?.()}>{children}</button>
+  ),
+}));
+
+vi.mock('@/components/ui/toaster', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
+const data: WorklogData = {
+  projects: [{ id: 'p1', name: '资源加工平台', createdAt: 1 }],
+  versions: [{
+    id: 'v_1', name: 'V8.0.8', createdAt: 1,
+    requirements: [{
+      id: 'r_1', title: '澳门底层数据建设', projects: ['资源加工平台'], createdAt: 1,
+      entries: [{
+        id: 'e1', title: 't', detail: 'd', date: '2026-11-23',
+        createdAt: 1, updatedAt: 1, project: '资源加工平台',
+      }],
+    }],
+  }, {
+    id: 'v_2', name: 'V8.0.7', createdAt: 0, requirements: [],
+  }],
+};
+
+afterEach(() => {
+  cleanup(); // vitest 未开 globals,RTL 不会自动卸载,多次 render 会累积 DOM
+});
+
+describe('VersionRequirementTree', () => {
+  it('renders version → requirement tree with copyable ids', () => {
+    render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
+    expect(screen.getByText('V8.0.8')).toBeTruthy();
+    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
+    expect(screen.getByTitle('复制 v_1')).toBeTruthy();
+    expect(screen.getByTitle('复制 r_1')).toBeTruthy();
+  });
+
+  it('shows requirement / entry counts and related project badge', () => {
+    render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
+    expect(screen.getByText(/1 需求 · 1 条/)).toBeTruthy();
+    expect(screen.getByText('资源加工平台')).toBeTruthy();
+  });
+
+  it('selects requirement with version + requirement ids', () => {
+    const onSelect = vi.fn();
+    render(<VersionRequirementTree data={data} selection={{}} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText('澳门底层数据建设'));
+    expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1', requirementId: 'r_1' });
+  });
+
+  it('selects version and collapses its requirements on row click', () => {
+    const onSelect = vi.fn();
+    render(<VersionRequirementTree data={data} selection={{}} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText('V8.0.8'));
+    expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1' });
+    expect(screen.queryByText('澳门底层数据建设')).toBeNull();
+  });
+
+  it('creates a version through the minimal inline entry', () => {
+    const onCreateVersion = vi.fn();
+    render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateVersion={onCreateVersion} />,
+    );
+    fireEvent.click(screen.getByText('新建版本'));
+    fireEvent.change(screen.getByLabelText('新版本名'), { target: { value: 'V8.0.9' } });
+    fireEvent.click(screen.getByLabelText('确认'));
+    expect(onCreateVersion).toHaveBeenCalledWith('V8.0.9');
+  });
+
+  it('creates a requirement from the version context menu', () => {
+    const onCreateRequirement = vi.fn();
+    render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateRequirement={onCreateRequirement} />,
+    );
+    // 每个版本行都有菜单项,取第一个(版本 v_1)
+    fireEvent.click(screen.getAllByText('新建需求')[0]);
+    fireEvent.change(screen.getByLabelText('新需求标题'), { target: { value: '新需求' } });
+    fireEvent.click(screen.getByLabelText('确认'));
+    expect(onCreateRequirement).toHaveBeenCalledWith('v_1', '新需求');
+  });
+
+  it('renames a version inline', () => {
+    const onRenameVersion = vi.fn();
+    render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onRenameVersion={onRenameVersion} />,
+    );
+    // 版本菜单先于需求菜单渲染,'重命名' 第一处属于版本行
+    fireEvent.click(screen.getAllByText('重命名')[0]);
+    const input = screen.getByLabelText('新版本名');
+    expect(input).toHaveValue('V8.0.8');
+    fireEvent.change(input, { target: { value: 'V8.0.10' } });
+    fireEvent.click(screen.getByLabelText('确认'));
+    expect(onRenameVersion).toHaveBeenCalledWith('v_1', 'V8.0.10');
+  });
+
+  it('requires a second click before deleting a version', () => {
+    const onDeleteVersion = vi.fn();
+    render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onDeleteVersion={onDeleteVersion} />,
+    );
+    fireEvent.click(screen.getAllByText('删除版本')[0]);
+    expect(onDeleteVersion).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('确认'));
+    expect(onDeleteVersion).toHaveBeenCalledWith('v_1');
+  });
+});

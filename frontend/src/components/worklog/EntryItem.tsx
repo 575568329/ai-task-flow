@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/EntryItem.tsx
-// 条目卡:title/tags/date/版本徽标/files 徽标 + detail markdown + diff 折叠 + 内联编辑/删除。
+// 条目卡:title/tags/date/上下文徽标/files 徽标 + detail markdown + diff 折叠 + 内联编辑/删除。
 // 编辑为 partial 提交:表单外字段(diff/files)不回传即保留,不会被抹掉。
-// 版本列表按条目所属项目传入(P1 修复:跨项目混看时挪版本不再错配)。
+// 新模型下条目由「版本 → 需求」承载,update 不支持跨版本/需求搬移,卡片不再提供挪版本入口。
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2, Check, X, FileCode2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -19,26 +19,20 @@ import { plainTextExcerpt } from '@/lib/markdownText';
 import { cn } from '@/lib/utils';
 import type { WorklogEntry, WorkStage } from '@ai-task-flow/shared';
 
-/** 下拉「挪到新版本」选项的哨兵值(不可直接提交,需在二级输入框填新名) */
-const NEW_VERSION = '__new_version__';
-
 interface EntryItemProps {
   entry: WorklogEntry;
-  /** 该条目所属项目的全部版本名(挪版本下拉用,按条目项目传) */
-  projectVersions: string[];
-  currentVersion: string;
-  /** 上下文徽标文本(如搜索结果的「项目/版本」或跨版本视图的版本名),不传则不显示 */
+  /** 上下文徽标文本(如搜索结果的「版本/需求」或跨需求视图的需求名),不传则不显示 */
   contextLabel?: string;
   /** 全局展开/收起信号：true=全部展开，false=全部收起，null/undefined=各卡自管 */
   expandAll?: boolean | null;
-  onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage; version?: string }) => Promise<void>;
+  onSave: (id: string, patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   /** 点击关联项目徽标(按该项目名筛选);不传则徽标不可交互 */
   onRelatedClick?: (name: string) => void;
 }
 
 export function EntryItem({
-  entry, projectVersions, currentVersion, contextLabel, expandAll, onSave, onDelete, onRelatedClick,
+  entry, contextLabel, expandAll, onSave, onDelete, onRelatedClick,
 }: EntryItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -46,13 +40,11 @@ export function EntryItem({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 编辑态(partial:title/detail/tags/挪版本)
+  // 编辑态(partial:title/detail/tags/stage)
   const [title, setTitle] = useState(entry.title);
   const [detail, setDetail] = useState(entry.detail);
   const [tagsText, setTagsText] = useState((entry.tags ?? []).join(', '));
   const [stage, setStage] = useState<WorkStage | ''>(entry.stage ?? '');
-  const [moveTo, setMoveTo] = useState('');                 // 既有版本名 或 NEW_VERSION 哨兵
-  const [newVersionText, setNewVersionText] = useState(''); // 哨兵激活后的新版本名输入
 
   useEffect(() => {
     if (expandAll !== null && expandAll !== undefined) setExpanded(expandAll);
@@ -64,22 +56,11 @@ export function EntryItem({
     setDetail(entry.detail);
     setTagsText((entry.tags ?? []).join(', '));
     setStage(entry.stage ?? '');
-    setMoveTo('');
-    setNewVersionText('');
     setEditing(true);
   };
 
   const save = async () => {
     if (!title.trim()) { toast.error('标题不能为空'); return; }
-    // 哨兵必须配上合法新名,否则拒绝提交(防垃圾版本裂树)
-    let targetVersion: string | undefined;
-    if (moveTo === NEW_VERSION) {
-      const name = newVersionText.trim();
-      if (!name) { toast.error('请输入新版本名,或改选既有版本'); return; }
-      targetVersion = name;
-    } else if (moveTo && moveTo !== currentVersion) {
-      targetVersion = moveTo;
-    }
     setSaving(true);
     try {
       const tags = [...new Set(tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean))];
@@ -88,7 +69,6 @@ export function EntryItem({
         detail,
         tags,
         ...(stage ? { stage } : {}),
-        ...(targetVersion ? { version: targetVersion } : {}),
       });
       setEditing(false);
     } finally {
@@ -127,35 +107,6 @@ export function EntryItem({
               className="w-56"
               ariaLabel="选择阶段"
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor={`et-version-${entry.id}`} className="text-xs">移动到版本(不改动则留在当前版本)</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                id={`et-version-${entry.id}`}
-                value={moveTo || currentVersion}
-                onChange={(e) => {
-                  setMoveTo(e.target.value === currentVersion ? '' : e.target.value);
-                  setNewVersionText('');
-                }}
-                className="border-input bg-background h-8 rounded-md border px-2 text-sm"
-              >
-                {projectVersions.map((v) => (
-                  <option key={v} value={v}>{v}{v === currentVersion ? '(当前)' : ''}</option>
-                ))}
-                <option value={NEW_VERSION}>＋ 新建版本…</option>
-              </select>
-              {moveTo === NEW_VERSION && (
-                <Input
-                  value={newVersionText}
-                  onChange={(e) => setNewVersionText(e.target.value)}
-                  placeholder="新版本名,如 v1.3.0"
-                  className="w-44 text-sm"
-                  autoFocus
-                />
-              )}
-            </div>
           </div>
 
           <div className="space-y-1.5">
