@@ -2,7 +2,7 @@
 
 > 个人 AI 工作记录中枢 + 个人工具集合 —— AI 干完活先记录再汇报,成果不留在对话里
 
-在终端用 Claude Code / ZCode 干活 → AI 通过 MCP 调 `record_work` 把改动记录为「**项目 → 版本 → 功能点**」(含 git diff 与文件行号) → 你在工作记录页按项目/版本/关键字回溯,页面直接看 diff、人工增删改。
+在终端用 Claude Code / ZCode 干活 → AI 通过 MCP 调 `record_work` 把改动记录为「**版本 → 需求 → 条目**」(项目是条目属性,含 git diff 与文件行号) → 你在工作记录页按版本/需求/项目/关键字回溯,页面直接看 diff、人工增删改。**版本与需求由你在页面创建;AI 用 `list_versions` / `list_requirements` 拿到 id 后写入**,不猜名称、不自动建层。
 
 [![CI](https://github.com/575568329/ai-task-flow/actions/workflows/ci.yml/badge.svg)](https://github.com/575568329/ai-task-flow/actions/workflows/ci.yml)
 
@@ -13,14 +13,15 @@
 ```
 ① 你在终端让 AI 改代码
         ↓
-② AI 调 record_work 记录(项目/版本/标题/详情/diff/文件行号)   ← detail 按固定模板分条:
+② AI 先 list_versions / list_requirements 拿 id,再 record_work(versionId/requirementId/项目/标题/详情/diff/文件行号)   ← detail 按固定模板分条:
         ↓                                                       Bug→问题/原因/解决/验证
 ③ 工作记录页(默认视图)随时回溯                                  任务→需求/方案/实现/验证
-   · 左栏项目/版本树 · 全局关键字搜索(标题/详情/文件路径)
+   · 左栏「版本 → 需求 → 条目」树 · 全局关键字搜索(标题/详情/文件路径)
+   · 项目是条目属性与筛选维度(可绑定本地路径自动归属)
    · diff 折叠查看 · 人工增删改/重命名(内联编辑,零弹窗)
 ```
 
-删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 9 个工具的示例话术)。
+删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 11 个工具的示例话术)。
 
 长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。默认**一对话一卡**,跨对话续写需显式允许。工作记录/结论卡都带**唯一阶段标签**（获取需求→设计→开发→自测→代码评审→覆盖度→上线→复盘;缺陷修改用 `fix` 标签）。
 
@@ -41,7 +42,9 @@ cd frontend && npm run dev  # 前端 :5678(vite,代理 /api → 后端)
 cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端配置无需改
 ```
 
-工具(12):`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
+工具(14):`record_work` / `query_work` / `list_projects` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
+
+`record_work` 的 `versionId` / `requirementId` 必须来自 `list_versions` / `list_requirements`;版本与需求只能由用户在页面创建。
 
 注册清单、当前版本与更新 SOP 见 **[docs/mcp-registration.md](docs/mcp-registration.md)**。
 
@@ -49,12 +52,12 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 
 | 模块 | 说明 |
 |---|---|
-| **工作记录**(核心) | 项目→版本→功能点;MCP 记录 + 页面人工增删改/搜索;diff 与文件行号关联;按阶段筛选 |
+| **工作记录**(核心) | 版本→需求→条目;版本/需求由页面创建,AI 传 id 记录;项目为条目属性;diff 与文件行号关联;按版本/需求/项目/阶段筛选 |
 | **项目路径绑定** | 项目可绑定本地绝对路径:MCP 记录自动带 `sourcePath`,按最长前缀归属项目;未绑定不丢记录,提示到页面绑定;绑定/解绑仅在页面操作 |
 | **关联项目** | 工作记录与结论卡可关联其他项目:存稳定 `relatedProjectIds` + 名称快照,项目改名后按 id 映射显示新名称 |
 | **结论卡** | 长对话结论按主题沉淀:结论/数据/待办/代码位置;逐版完整历史,默认看最新;按阶段筛选 |
 | **阶段标签** | `record_work` / `record_conclusion` 唯一单值 stage:获取需求/设计/开发/自测/评审/覆盖度/上线/复盘;缺陷修改用 `fix` tag |
-| 知识库 | markdown/文档库,目录树 + wiki 链接;MCP `save_to_knowledge` 可写 |
+| 知识库 | markdown/文档库,目录树 + wiki 链接;多视图(分类/版本/项目/阶段);文档可写版本/需求/项目/阶段元数据并回写 frontmatter;MCP `save_to_knowledge` 可写 |
 | 网页剪藏 | 浏览器扩展剪藏 → LLM 拆解为任务草稿 → 入库 |
 | 思维导图 | 画布编辑,Mermaid 导入 |
 | Claude 配置切换 | settings.json 多套快照一键切换(单面板,自动备份) |
@@ -69,8 +72,9 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 ## 测试
 
 ```bash
-cd backend && npx vitest run    # 253 用例(领域/锁协议/路由/MCP 工具)
-cd frontend && npm test         # 158 用例(组件/搜索过滤)
+cd backend && npx vitest run    # 390 用例(领域/锁协议/迁移/路由/MCP 工具)
+cd frontend && npm test         # 211 用例(组件/搜索过滤/多视图)
+cd extension && npm test        # 17 用例(剪藏)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
 node tests/mcp/conclusion-stdio-smoke.mjs              # MCP stdio 冒烟(需先 cd backend && npm run build)
 ```

@@ -17,9 +17,11 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `fa1cb1e`(feat(mcp): worklog 工具适配版本/需求新模型并新增 list_versions/list_requirements) |
-| 构建时间 | 2026-11-23 17:56 |
+| dist 构建来源 commit | `f883635`(fix(knowledge): 评审修复——meta 入参校验、保存关联后回填正文、分类视图计数；MCP 工具定义沿用 `fa1cb1e` 的 14 工具) |
+| 构建时间 | 2026-11-23 20:14 |
 | server version(MCP initialize 返回) | 0.1.0 |
+
+> 注：本次全量 `npm run build` 在 backend `tsc` 阶段因 `knowledgeRoutes.ts` 一处仅类型转换报错（TS2352）退出非零，但 `tsc` 默认仍产出 dist；MCP 与 worklog 工具产物已按 HEAD 重新生成。详见 SDD Task 15 报告。
 
 ## 注册清单
 

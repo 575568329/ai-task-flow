@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目定位与现状
 
-个人 AI 工作记录中枢 + 个人工具集。核心闭环：终端里的 AI 改完代码 → 通过 MCP `record_work` 记录为「项目 → 版本 → 功能点」（含 git diff 与文件行号）→ 在 Web 工作记录页按项目/版本/关键字回溯，支持人工增删改。
+个人 AI 工作记录中枢 + 个人工具集。核心闭环：终端里的 AI 改完代码 → 通过 MCP `record_work` 记录为「版本 → 需求 → 条目」（项目是条目属性，含 git diff 与文件行号）→ 在 Web 工作记录页按版本/需求/项目/关键字回溯，支持人工增删改。**版本与需求只能由用户在页面创建；AI 先用 `list_versions`/`list_requirements` 取 id，再按 `versionId`/`requirementId` 写入，不猜名称、不自动建层。**
 
 **2026-11 转型**：任务编排看板、AI 聊天、任务文档、用量统计已整体砍除（代码在 git 历史，旧数据保留在 `~/.ai-task-flow/`）。不要再按「看板 / 派发 / worktree / Task 聚合根 / 四态机」理解本项目；`.claude/2026-06-05-*` 与 `docs/plans/` 里的旧任务文档只是历史归档。当前形态以 `README.md` 为准。
 
@@ -63,6 +63,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 - 入口 `backend/src/http-server.ts` 的 `startApp()`：手工 `new` 仓储/服务并注入（**无 DI 容器**），随后启动 HTTP。新增模块的装配点就在这里。
 - 四层：`domain/`（实体、值对象、仓储接口）→ `application/`（用例服务）→ `infrastructure/`（JSON 持久化、LLM、外部客户端）→ `interfaces/`（http routes + mcp tools）。
 - 业务模块：worklog（核心）、conclusion、knowledge、mindmap、webclip、claude-profile、llm-config、system。
+- 知识库文档元数据：frontmatter 支持 `versionId`/`requirementId`/`projectId`/`stage` 四项软关联（`PUT /api/knowledge/doc/meta` 编辑，空串=清除，其余 frontmatter 键保留，写后回填正文）；前端目录树有「分类 / 版本 / 项目 / 阶段」四视图（版本视图下按需求分组），未关联文档收口到「未关联」。
 - ESM + Node16 解析：TS 源码里的相对 import **必须带 `.js` 后缀**。
 - HTTP 路由注册集中在 `interfaces/http/server.ts`；新增模块顺序：repository → service → routes → `startApp` 装配 → 可选 MCP 工具。
 - 前后端日志落 `.logs/`；跨上下文链路必须保证日志能在后端可查。
@@ -72,6 +73,8 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
 - 主要数据文件：`worklog.json`、`conclusions.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
 - `.migration-project-id.json` 是项目 id 迁移标记（记录迁移版本）；**删除该文件可重跑「结论卡按项目名绑定」**，而项目补 id 每次启动都会自愈，不依赖该标记。
+- **worklog 数据模型**：`worklog.json` 顶层为 `{ projects, versions }`。`versions` 是「版本 → 需求 → 条目」主树：版本名全局唯一、需求标题版本内唯一，条目带 `project`/`projectId` 属性（原项目归属）；`projects` 是字典数组（`id`/`name`/`paths`/`createdAt`），只用于路径归属与项目筛选，不再承载版本。版本/需求只能由页面创建，MCP 只传 id。
+- `.migration-version-tree.json` 是「项目 → 版本 → 条目」一次性归并迁移标记（记录版本与时间）。迁移在 HTTP 启动时执行、幂等：数据已无旧版 `versions` 字段即跳过，不写文件、哈希不变；迁移前快照留在 `worklog-backups/`（滚动 10 份）。**回滚约束**：新代码启动即自动迁移，删标记不能回退到旧结构；必须同时换回旧版本代码并用迁移前快照覆盖 `worklog.json`。
 - **项目路径身份字段**：项目有稳定 `id` 与 `paths`（本地绝对路径，可多个，页面绑定）；工作记录条目有 `sourcePath`（MCP 取 `process.cwd()`，按最长前缀归属项目）；工作记录与结论卡用 `relatedProjectIds` 存关联项目稳定引用、`relatedProjects` 存名称快照（改名后靠 id 映射显示新名称）。旧数据由 HTTP 启动时一次性迁移补 `id` 并按名称绑定结论卡（幂等）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
@@ -79,7 +82,8 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## MCP Server
 
 - stdio transport，入口 `backend/src/interfaces/mcp/server.ts`，产物 `backend/dist/interfaces/mcp/server.js`。
-- 12 个工具：`record_work` / `query_work` / `list_projects` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
+- 14 个工具：`record_work` / `query_work` / `list_projects` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
+- **创建规则**：版本与需求只能由用户在页面创建；`record_work` 的 `versionId`/`requirementId` 必须来自 `list_versions`/`list_requirements`（id 不存在时报错并列出可选值），AI 不得创建或猜名称。`list_projects` 只管项目字典（id/名称/路径），不再返回版本树。
 - **worklog 工具**的描述与 detail 写作模板**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里；conclusion 两个工具的定义就近在 `backend/src/interfaces/mcp/tools/conclusion/`。
 - 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
 - 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。
