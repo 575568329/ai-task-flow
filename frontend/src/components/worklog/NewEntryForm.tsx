@@ -124,6 +124,11 @@ export function NewEntryForm({
             <option key={r.id} value={r.id}>{r.title}</option>
           ))}
         </select>
+        {versionId && currentRequirements.length === 0 && (
+          <p className="text-muted-foreground text-xs">
+            该版本还没有需求,请先在左侧右键版本选择「新建需求」。
+          </p>
+        )}
       </div>
 
       <div className="space-y-1.5">

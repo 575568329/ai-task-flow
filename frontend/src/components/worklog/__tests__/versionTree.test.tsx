@@ -62,12 +62,47 @@ describe('VersionRequirementTree', () => {
     expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1', requirementId: 'r_1' });
   });
 
-  it('selects version and collapses its requirements on row click', () => {
+  it('selects version on row click without collapsing requirements', () => {
     const onSelect = vi.fn();
     render(<VersionRequirementTree data={data} selection={{}} onSelect={onSelect} />);
     fireEvent.click(screen.getByText('V8.0.8'));
     expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1' });
+    // 行点击只选择;折叠由独立箭头控制,避免被自动展开 effect 撤销
+    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
+  });
+
+  it('collapses and re-expands via the chevron button', () => {
+    render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
+    fireEvent.click(screen.getByLabelText('收起 V8.0.8'));
     expect(screen.queryByText('澳门底层数据建设')).toBeNull();
+    fireEvent.click(screen.getByLabelText('展开 V8.0.8'));
+    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
+  });
+
+  it('auto-expands a collapsed version when a new requirement is selected', () => {
+    const { rerender } = render(
+      <VersionRequirementTree data={data} selection={{ versionId: 'v_1' }} onSelect={() => {}} />,
+    );
+    fireEvent.click(screen.getByLabelText('收起 V8.0.8'));
+    expect(screen.queryByText('澳门底层数据建设')).toBeNull();
+    // versionId 未变、仅 requirementId 变化(新建需求后选中)也必须展开
+    rerender(
+      <VersionRequirementTree data={data} selection={{ versionId: 'v_1', requirementId: 'r_1' }} onSelect={() => {}} />,
+    );
+    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
+  });
+
+  it('sorts versions by name descending with numeric awareness', () => {
+    const sortData: WorklogData = {
+      projects: [],
+      versions: [
+        { id: 'v9', name: 'V8.0.9', createdAt: 1, requirements: [] },
+        { id: 'v10', name: 'V8.0.10', createdAt: 2, requirements: [] },
+      ],
+    };
+    render(<VersionRequirementTree data={sortData} selection={{}} onSelect={() => {}} />);
+    const names = screen.getAllByText(/^V8\.0\.\d+$/).map((el) => el.textContent);
+    expect(names).toEqual(['V8.0.10', 'V8.0.9']);
   });
 
   it('creates a version through the minimal inline entry', () => {

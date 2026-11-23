@@ -65,7 +65,8 @@ export function VersionRequirementTree({
     });
   };
 
-  // 外部选择(搜索定位等)落到某版本时,自动展开被收起的版本。
+  // 外部选择(搜索定位/新建需求后选中)落到某版本时,自动展开被收起的版本。
+  // 同时依赖 requirementId:在同一折叠版本下新建需求,versionId 不变也要展开出新行。
   useEffect(() => {
     const vid = selection.versionId;
     if (!vid) return;
@@ -75,7 +76,7 @@ export function VersionRequirementTree({
       next.delete(vid);
       return next;
     });
-  }, [selection.versionId]);
+  }, [selection.versionId, selection.requirementId]);
 
   const start = (action: PendingAction, initial = '') => {
     setInputValue(initial);
@@ -103,6 +104,11 @@ export function VersionRequirementTree({
     }
   };
 
+  // 版本新→旧:数字感知排序,V8.0.10 排在 V8.0.9 前(与旧树一致)。
+  const sortedVersions = [...data.versions].sort((a, b) =>
+    b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }),
+  );
+
   return (
     <div className="space-y-0.5">
       {data.versions.length === 0 && (
@@ -111,7 +117,7 @@ export function VersionRequirementTree({
         </p>
       )}
 
-      {data.versions.map((version) => {
+      {sortedVersions.map((version) => {
         const isCollapsed = collapsed.has(version.id);
         const isVersionActive = selection.versionId === version.id && !selection.requirementId;
         const entryCount = countVersionEntries(version);
@@ -123,18 +129,26 @@ export function VersionRequirementTree({
                 isVersionActive && 'bg-accent',
               )}
             >
+              {/* 折叠箭头独立于选择按钮:点击只切换展开,不会触发 onSelect 触发的自动展开 */}
+              {version.requirements.length > 0 ? (
+                <button
+                  type="button"
+                  aria-label={isCollapsed ? `展开 ${version.name}` : `收起 ${version.name}`}
+                  onClick={(e) => { e.stopPropagation(); toggle(version.id); }}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  {isCollapsed
+                    ? <ChevronRight className="size-3.5" />
+                    : <ChevronDown className="size-3.5" />}
+                </button>
+              ) : <span className="size-3.5 shrink-0" />}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <button
                     type="button"
-                    onClick={() => { onSelect({ versionId: version.id }); toggle(version.id); }}
+                    onClick={() => onSelect({ versionId: version.id })}
                     className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-medium"
                   >
-                    {version.requirements.length > 0 ? (
-                      isCollapsed
-                        ? <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
-                        : <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-                    ) : <span className="size-3.5 shrink-0" />}
                     <Tag className="text-primary size-4 shrink-0" />
                     <span className="flex-1 truncate">{version.name}</span>
                   </button>
@@ -164,7 +178,7 @@ export function VersionRequirementTree({
               <span className="text-muted-foreground shrink-0 text-[11px]">
                 {version.requirements.length} 需求 · {entryCount} 条
               </span>
-              <CopyIdButton id={version.id} label="" className="shrink-0 text-[11px]" />
+              <CopyIdButton id={version.id} iconOnly className="text-muted-foreground shrink-0" />
             </div>
 
             {/* 新建版本:最小内联入口 */}
@@ -248,7 +262,7 @@ export function VersionRequirementTree({
                       <span className="text-muted-foreground shrink-0 text-[10px]">+{extraProjects}</span>
                     )}
                     <Badge variant="secondary" className="shrink-0">{req.entries.length}</Badge>
-                    <CopyIdButton id={req.id} label="" className="shrink-0 text-[11px]" />
+                    <CopyIdButton id={req.id} iconOnly className="text-muted-foreground shrink-0" />
                   </div>
 
                   {pending?.kind === 'rename-requirement' && pending.requirementId === req.id && (

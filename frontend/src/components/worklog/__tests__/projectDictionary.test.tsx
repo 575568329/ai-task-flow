@@ -34,7 +34,8 @@ function project(over: Partial<WorklogProject> = {}): WorklogProject {
 
 function renderDialog(projects: WorklogProject[], extra: Record<string, unknown> = {}) {
   const props = { open: true, onOpenChange: vi.fn(), onPathsChanged: vi.fn(), ...extra };
-  return render(<ProjectDictionaryDialog projects={projects} {...props} />);
+  const view = render(<ProjectDictionaryDialog projects={projects} {...props} />);
+  return { ...view, props };
 }
 
 describe('ProjectDictionaryDialog 路径三态', () => {
@@ -161,5 +162,20 @@ describe('ProjectPathDialog 路径绑定(经项目字典打开)', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('绑定失败:路径已被项目「组卷」占用'));
     expect(onPathsChanged).not.toHaveBeenCalled();
+  });
+
+  it('should keep unsaved input when unbinding an existing path', async () => {
+    const view = renderDialog([project({ paths: ['D:\\xunfei\\资源加工平台'] })]);
+
+    fireEvent.click(screen.getByText('绑定路径…'));
+    const textarea = screen.getByLabelText('项目路径');
+    fireEvent.change(textarea, { target: { value: 'D:\\xunfei\\资源加工平台\nE:\\repo' } });
+    fireEvent.click(screen.getByText('解绑'));
+    await waitFor(() => expect(mockedUnbind).toHaveBeenCalledTimes(1));
+
+    // 模拟 onChanged → 父组件 refresh 后服务端路径变化:不得覆盖用户未保存的新输入
+    view.rerender(<ProjectDictionaryDialog projects={[project({ paths: [] })]} {...view.props} />);
+
+    await waitFor(() => expect(screen.getByLabelText('项目路径')).toHaveValue('E:\\repo'));
   });
 });

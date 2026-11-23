@@ -9,10 +9,12 @@ interface Props {
   id: string;
   /** 前缀文案,默认「ID」 */
   label?: string;
+  /** 只显示复制图标(侧栏窄行用);id 仍在 title / aria-label 中 */
+  iconOnly?: boolean;
   className?: string;
 }
 
-export function CopyIdButton({ id, label = 'ID', className }: Props) {
+export function CopyIdButton({ id, label = 'ID', iconOnly = false, className }: Props) {
   const copy = async () => {
     if (!navigator.clipboard) {
       toast.error('当前环境不支持复制');
@@ -32,9 +34,10 @@ export function CopyIdButton({ id, label = 'ID', className }: Props) {
       type="button"
       className={cn('hover:text-foreground inline-flex items-center gap-1 font-mono', className)}
       title={`复制 ${id}`}
+      aria-label={iconOnly ? `复制 ${id}` : undefined}
       onClick={() => void copy()}
     >
-      {label} {id}
+      {iconOnly ? null : <>{label} {id}</>}
       <Copy className="size-3" />
     </button>
   );
