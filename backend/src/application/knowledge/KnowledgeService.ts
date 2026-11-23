@@ -8,9 +8,11 @@ import type {
   DocKind,
   KnowledgeCreateRequest,
   KnowledgeDocWriteResponse,
+  KnowledgeFrontmatter,
 } from '@ai-task-flow/shared';
 import { scanKnowledge } from '../../infrastructure/knowledge/KnowledgeScanner.js';
 import { safeResolve, toRelativePosix } from '../../infrastructure/utils/safePath.js';
+import { parseFrontmatter, serializeFrontmatter } from './frontmatter.js';
 
 /** 文件名非法字符(跨 Windows/Linux) */
 const ILLEGAL_FILENAME_CHARS = /[\/\\:\*\?"<>\|]/g;
@@ -92,10 +94,15 @@ export class KnowledgeService {
       throw new Error('不支持的文件类型');
     }
 
-    // md 返回文本内容
+    // md 返回文本内容(去掉 frontmatter,正文交给页面渲染;元数据单独返回)
     if (kind === 'md') {
-      const content = await fs.readFile(abs, 'utf-8');
-      return { path: relPath, kind, content };
+      const raw = await fs.readFile(abs, 'utf-8');
+      const parsed = parseFrontmatter(raw);
+      const response: KnowledgeDocResponse = { path: relPath, kind, content: parsed.body };
+      if (parsed.hasFrontmatter) {
+        response.frontmatter = parsed.data;
+      }
+      return response;
     }
 
     // 非 md 返回元信息(前端通过 /raw 拿二进制)
@@ -133,11 +140,12 @@ export class KnowledgeService {
 
   /**
    * 创建文档:文件名由服务端按命名规则生成,调用方只传语义字段(无法干预物理文件名)。
-   * 文件名 = <YYYYMMDDHHMMSS>_<sanitizedTitle>.md;tags 非空时拼 frontmatter。
+   * 文件名 = <YYYYMMDDHHMMSS>_<sanitizedTitle>.md;
+   * tags 与版本/需求/项目/阶段非空时拼 frontmatter。
    * 原子写(临时文件 + rename),防中途崩溃产生半截文件。
    */
   async createDoc(input: KnowledgeCreateRequest): Promise<KnowledgeDocWriteResponse> {
-    const { title, content, tags, dir } = input;
+    const { title, content, tags, dir, versionId, requirementId, projectId, stage } = input;
 
     if (!title || !title.trim()) {
       throw new Error('标题不能为空');
@@ -149,7 +157,7 @@ export class KnowledgeService {
     await fs.mkdir(dirAbs, { recursive: true });
 
     const abs = path.join(dirAbs, fileName);
-    const body = this.withFrontmatter(content, tags);
+    const body = this.withFrontmatter(content, { tags, versionId, requirementId, projectId, stage });
 
     await this.atomicWrite(abs, body);
     await this.refreshManifest();
@@ -158,8 +166,9 @@ export class KnowledgeService {
   }
 
   /**
-   * 覆盖更新已有文档(content 即完整 md 正文)。
-   * 不自动保留旧 frontmatter——如需保留由调用方拼好再传。
+   * 覆盖更新已有文档(content 即 md 正文)。
+   * - 新内容自带 frontmatter:按新内容原样写入;
+   * - 否则沿用旧文档的 frontmatter(避免编辑一次就丢元数据)。
    */
   async saveDoc(relPath: string, content: string): Promise<KnowledgeDocWriteResponse> {
     const abs = safeResolve(this.root, relPath);
@@ -174,7 +183,17 @@ export class KnowledgeService {
       throw new Error('目标不是文件');
     }
 
-    await this.atomicWrite(abs, content);
+    let body = content;
+    if (!parseFrontmatter(content).hasFrontmatter) {
+      const oldRaw = await fs.readFile(abs, 'utf-8');
+      const oldParsed = parseFrontmatter(oldRaw);
+      // 原样沿用旧 frontmatter 块,保留本项目不识别的外部键
+      if (oldParsed.hasFrontmatter) {
+        body = `${oldParsed.raw}${content}`;
+      }
+    }
+
+    await this.atomicWrite(abs, body);
     await this.refreshManifest();
 
     return { path: toRelativePosix(this.root, abs) };
@@ -196,14 +215,13 @@ export class KnowledgeService {
     return cleaned || FALLBACK_TITLE;
   }
 
-  /** tags 非空时拼 frontmatter,否则原样返回 content */
-  private withFrontmatter(content: string, tags?: string[]): string {
-    if (!tags || tags.length === 0) return content;
-    const tagList = tags.map(t => t.trim()).filter(Boolean);
-    if (tagList.length === 0) return content;
-    // tag 内逗号替换为空格,避免破坏 YAML 内联数组
-    const safe = tagList.map(t => t.replace(/,/g, ' '));
-    return `---\ntags: [${safe.join(', ')}]\n---\n${content}`;
+  /**
+   * 拼接 frontmatter:有可写元数据且正文自身不带 frontmatter 时前置。
+   * 正文已带 frontmatter 时保持原样,避免出现两个 --- 块。
+   */
+  private withFrontmatter(content: string, meta: KnowledgeFrontmatter): string {
+    if (parseFrontmatter(content).hasFrontmatter) return content;
+    return serializeFrontmatter(meta) + content;
   }
 
   /** 原子写:先写同目录临时文件再 rename,避免半截文件 */

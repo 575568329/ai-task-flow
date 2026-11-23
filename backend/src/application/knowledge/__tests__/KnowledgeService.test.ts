@@ -59,18 +59,15 @@ describe('KnowledgeService 写入', () => {
       await expect(service.createDoc({ title: '   ', content: 'x' })).rejects.toThrow();
     });
 
-    it('should write content with tags frontmatter', async () => {
+    it('should write tags frontmatter and return body without frontmatter', async () => {
       const { path: relPath } = await service.createDoc({
         title: '带标签',
         content: '正文',
         tags: ['foo', 'bar'],
       });
       const doc = await service.getDoc(relPath);
-      expect(doc.content).toMatch(/^---\n/);
-      expect(doc.content).toContain('tags:');
-      expect(doc.content).toContain('foo');
-      expect(doc.content).toContain('bar');
-      expect(doc.content).toContain('正文');
+      expect(doc.content).toBe('正文');
+      expect(doc.frontmatter?.tags).toEqual(['foo', 'bar']);
     });
 
     it('should write content as-is when no tags', async () => {
@@ -80,6 +77,40 @@ describe('KnowledgeService 写入', () => {
       });
       const doc = await service.getDoc(relPath);
       expect(doc.content).toBe('纯正文');
+      expect(doc.frontmatter).toBeUndefined();
+    });
+
+    it('should write version/requirement/project/stage into frontmatter', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '设计',
+        content: '# x',
+        dir: '技术方案',
+        versionId: 'v_1',
+        requirementId: 'r_1',
+        projectId: 'p_1',
+        stage: 'design',
+      });
+      const doc = await service.getDoc(relPath);
+      expect(doc.frontmatter).toEqual({
+        versionId: 'v_1',
+        requirementId: 'r_1',
+        projectId: 'p_1',
+        stage: 'design',
+      });
+      expect(doc.content).toBe('# x');
+      expect(doc.content).not.toContain('---');
+    });
+
+    it('should merge tags and association metadata in one frontmatter block', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '合并',
+        content: '正文',
+        tags: ['调研'],
+        versionId: 'v_1',
+        stage: 'req',
+      });
+      const doc = await service.getDoc(relPath);
+      expect(doc.frontmatter).toEqual({ tags: ['调研'], versionId: 'v_1', stage: 'req' });
     });
 
     it('should write to subdir and create it if missing', async () => {
@@ -127,6 +158,42 @@ describe('KnowledgeService 写入', () => {
       await service.saveDoc(relPath, 'new content');
       const doc = await service.getDoc(relPath);
       expect(doc.content).toBe('new content');
+    });
+
+    it('should keep old frontmatter when incoming content has none', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '保留元数据',
+        content: '旧正文',
+        tags: ['调研'],
+        versionId: 'v_1',
+      });
+      await service.saveDoc(relPath, '新正文');
+      const doc = await service.getDoc(relPath);
+      expect(doc.content).toBe('新正文');
+      expect(doc.frontmatter).toEqual({ tags: ['调研'], versionId: 'v_1' });
+    });
+
+    it('should preserve unknown old frontmatter keys when incoming content has none', async () => {
+      const abs = path.join(root, 'external.md');
+      await fs.writeFile(abs, '---\ntitle: 外部标题\nversionId: v_1\n---\n旧正文', 'utf-8');
+      await service.saveDoc('external.md', '新正文');
+      const raw = await fs.readFile(abs, 'utf-8');
+      expect(raw).toContain('title: 外部标题');
+      const doc = await service.getDoc('external.md');
+      expect(doc.content).toBe('新正文');
+      expect(doc.frontmatter).toEqual({ versionId: 'v_1' });
+    });
+
+    it('should keep incoming frontmatter as-is when content carries its own', async () => {
+      const { path: relPath } = await service.createDoc({
+        title: '换元数据',
+        content: '旧正文',
+        versionId: 'v_old',
+      });
+      await service.saveDoc(relPath, '---\nversionId: v_new\nstage: dev\n---\n新正文');
+      const doc = await service.getDoc(relPath);
+      expect(doc.content).toBe('新正文');
+      expect(doc.frontmatter).toEqual({ versionId: 'v_new', stage: 'dev' });
     });
 
     it('should reject non-existent path', async () => {

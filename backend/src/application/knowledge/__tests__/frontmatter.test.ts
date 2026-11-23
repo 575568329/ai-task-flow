@@ -1,0 +1,92 @@
+// backend/src/application/knowledge/__tests__/frontmatter.test.ts
+// 最小 frontmatter 解析/序列化:往返、固定顺序、空值、非法格式降级
+import { describe, it, expect } from 'vitest';
+import { parseFrontmatter, serializeFrontmatter } from '../frontmatter.js';
+import type { KnowledgeFrontmatter } from '@ai-task-flow/shared';
+
+describe('serializeFrontmatter', () => {
+  it('should write keys in fixed order: tags → versionId → requirementId → projectId → stage', () => {
+    const data: KnowledgeFrontmatter = {
+      stage: 'design',
+      projectId: 'p_1',
+      requirementId: 'r_1',
+      versionId: 'v_1',
+      tags: ['架构设计', '知识库'],
+    };
+    expect(serializeFrontmatter(data)).toBe(
+      '---\ntags: [架构设计, 知识库]\nversionId: v_1\n' +
+        'requirementId: r_1\nprojectId: p_1\nstage: design\n---\n',
+    );
+  });
+
+  it('should omit empty fields', () => {
+    expect(serializeFrontmatter({ versionId: 'v_1', stage: '' })).toBe('---\nversionId: v_1\n---\n');
+    expect(serializeFrontmatter({ tags: [] })).toBe('');
+    expect(serializeFrontmatter({})).toBe('');
+  });
+
+  it('should replace commas inside tags and collapse newlines in values', () => {
+    const block = serializeFrontmatter({ tags: ['a,b'], versionId: 'v\n1' });
+    expect(block).toContain('tags: [a b]');
+    expect(block).toContain('versionId: v 1');
+  });
+});
+
+describe('parseFrontmatter', () => {
+  it('should round-trip tags and Chinese values', () => {
+    const data: KnowledgeFrontmatter = {
+      tags: ['架构设计', '知识库'],
+      versionId: 'v_abc',
+      requirementId: 'r_abc',
+      projectId: 'p_abc',
+      stage: 'dev',
+    };
+    const parsed = parseFrontmatter(serializeFrontmatter(data) + '# 正文\n内容');
+    expect(parsed.hasFrontmatter).toBe(true);
+    expect(parsed.data).toEqual(data);
+    expect(parsed.body).toBe('# 正文\n内容');
+  });
+
+  it('should return body as-is when document has no frontmatter', () => {
+    const parsed = parseFrontmatter('# 标题\n正文');
+    expect(parsed).toMatchObject({ data: {}, body: '# 标题\n正文', hasFrontmatter: false, raw: '' });
+  });
+
+  it('should treat unclosed frontmatter as no frontmatter', () => {
+    const raw = '---\nversionId: v_1\n正文';
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.hasFrontmatter).toBe(false);
+    expect(parsed.body).toBe(raw);
+  });
+
+  it('should ignore unknown keys and multi-line values', () => {
+    const raw = [
+      '---',
+      'title: 某方案',
+      'versionId: v_1',
+      'related:',
+      '  - a',
+      '  - b',
+      'tags: [x, "y"]',
+      '---',
+      'body',
+    ].join('\n');
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.data).toEqual({ versionId: 'v_1', tags: ['x', 'y'] });
+    expect(parsed.body).toBe('body');
+  });
+
+  it('should support empty frontmatter block', () => {
+    const parsed = parseFrontmatter('---\n---\nbody');
+    expect(parsed.hasFrontmatter).toBe(true);
+    expect(parsed.data).toEqual({});
+    expect(parsed.body).toBe('body');
+    expect(parsed.raw).toBe('---\n---\n');
+  });
+
+  it('should preserve raw block for round-trip writes', () => {
+    const raw = '---\ntitle: 外部键\nversionId: v_1\n---\n正文';
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.raw).toBe('---\ntitle: 外部键\nversionId: v_1\n---\n');
+  });
+});

@@ -41,11 +41,24 @@ export interface KnowledgeManifest {
   basePath: string;
 }
 
+/** Markdown frontmatter:本项目写入的元数据(软关联,不级联) */
+export interface KnowledgeFrontmatter {
+  tags?: string[];
+  versionId?: string;
+  requirementId?: string;
+  projectId?: string;
+  /** 唯一阶段标签(与 worklog stage 同源,类型上保持宽松以便解析历史文档) */
+  stage?: string;
+}
+
 /** GET /api/knowledge/doc 返回 */
 export interface KnowledgeDocResponse {
   path: string;
   kind: DocKind;
-  content?: string;       // md 返回文本内容
+  /** md 返回文本内容(已去掉 frontmatter,避免页面显示 ---) */
+  content?: string;
+  /** md 返回解析出的 frontmatter;文档没有 frontmatter 时缺省 */
+  frontmatter?: KnowledgeFrontmatter;
   meta?: {                // 非 md 返回元信息
     name: string;
     size: number;
@@ -60,6 +73,11 @@ export interface KnowledgeCreateRequest {
   tags?: string[];
   /** 可选子目录(相对 knowledge-base/),服务端校验越界 */
   dir?: string;
+  /** 可选软关联:版本/需求/项目/阶段,写入 frontmatter 供知识库归类 */
+  versionId?: string;
+  requirementId?: string;
+  projectId?: string;
+  stage?: string;
 }
 
 /** PUT /api/knowledge/doc 请求体:覆盖更新已有文档 */
