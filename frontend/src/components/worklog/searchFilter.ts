@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/searchFilter.ts
 // 工作记录条目过滤纯函数:树选择(版本/需求)+ 关键字模糊匹配(与后端 query_work 语义一致——
 // title/detail/files.path 不区分大小写;keyword 非空时忽略树选择做全局搜索)。
-import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
+import type { WorklogData, WorklogEntry, WorklogRequirement } from '@ai-task-flow/shared';
 import { matchStageFilter, type StageFilter } from '@/lib/workStage';
 import type { RequirementSelection } from './VersionRequirementTree';
 
@@ -67,4 +67,19 @@ export function filterEntries(
 
 function entriesSortNewestFirst(entries: VisibleEntry[]): void {
   entries.sort((a, b) => b.entry.createdAt - a.entry.createdAt);
+}
+
+/**
+ * 需求范围外改动:该需求下条目实际归属的项目(entry.project)中,不在需求计划项目
+ * (requirement.projects)里的部分。去重 + 稳定排序,供右栏弱提示展示。
+ * 只做提示,不回写需求范围(实际跨项目改动是事实,不自动扩大计划范围)。
+ */
+export function getOutsideProjects(requirement: WorklogRequirement): string[] {
+  const planned = new Set(requirement.projects ?? []);
+  const outside = new Set<string>();
+  for (const entry of requirement.entries) {
+    const project = entry.project?.trim();
+    if (project && !planned.has(project)) outside.add(project);
+  }
+  return [...outside].sort((a, b) => a.localeCompare(b));
 }

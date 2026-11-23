@@ -25,7 +25,7 @@ import { WorkStageMultiSelect } from '@/components/common/WorkStageMultiSelect';
 import { SearchInput } from '@/components/common/SearchInput';
 import { WorkspaceLayout, WorkspaceSidebar, WorkspaceToolbar } from '@/components/layout/WorkspaceLayout';
 import type { StageFilter } from '@/lib/workStage';
-import { filterEntries } from './searchFilter';
+import { filterEntries, getOutsideProjects } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -39,6 +39,7 @@ export function WorklogView() {
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
   const [stageFilter, setStageFilter] = useState<StageFilter>([]);
   const [relatedFilter, setRelatedFilter] = useState(''); // 关联项目筛选(项目名快照,空=不过滤)
+  const [projectFilter, setProjectFilter] = useState(''); // 实际归属项目筛选(项目名,空=不过滤)
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   /** 弹窗目标:新建版本 / 新建需求(所属版本 id) / 删除版本(版本 id) */
@@ -88,10 +89,10 @@ export function WorklogView() {
 
   // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择(版本/需求)过滤。新在前。
   const { entries: visibleEntries, isSearching } = useMemo(
-    () => filterEntries(data, selection, keyword, stageFilter, relatedFilter),
-    [data, selection, keyword, stageFilter, relatedFilter],
+    () => filterEntries(data, selection, keyword, stageFilter, relatedFilter, projectFilter),
+    [data, selection, keyword, stageFilter, relatedFilter, projectFilter],
   );
-  // 仅关联筛选时也视为全局视图(不要求树选择)
+  // 仅关联筛选时也视为全局视图(不要求树选择);项目/阶段筛选只做叠加,不单独触发加载
   const noSelection = !isSearching && !selection.versionId && !relatedFilter;
 
   // 「关联项目」下拉选项:全树条目 relatedProjects 去重(名称快照,与筛选口径一致)
@@ -114,6 +115,17 @@ export function WorklogView() {
     if (relatedFilter && !relatedProjectOptions.includes(relatedFilter)) setRelatedFilter('');
   }, [relatedFilter, relatedProjectOptions]);
 
+  // 「实际归属项目」下拉选项:项目字典名称,排序与需求弹窗一致
+  const projectOptions = useMemo(
+    () => data.projects.map((p) => p.name).sort((a, b) => a.localeCompare(b)),
+    [data.projects],
+  );
+
+  // 项目被删除/改名后,残留的筛选值回退为不过滤
+  useEffect(() => {
+    if (projectFilter && !projectOptions.includes(projectFilter)) setProjectFilter('');
+  }, [projectFilter, projectOptions]);
+
   // 新建条目的版本/需求下拉数据
   const versionOptions = useMemo(
     () => data.versions.map((v) => ({
@@ -131,6 +143,11 @@ export function WorklogView() {
   const selectedRequirement = useMemo(
     () => selectedVersion?.requirements.find((r) => r.id === selection.requirementId),
     [selectedVersion, selection.requirementId],
+  );
+  // 需求范围外改动:条目实际项目不在需求计划项目里(只提示,不自动扩范围)
+  const outsideProjects = useMemo(
+    () => (selectedRequirement ? getOutsideProjects(selectedRequirement) : []),
+    [selectedRequirement],
   );
 
   /** 点击条目上的关联项目徽标:按该项目名筛选(清空关键词,保留当前树选择) */
@@ -198,12 +215,14 @@ export function WorklogView() {
         ...(input.tags ? { tags: input.tags } : {}),
         ...(input.stage ? { stage: input.stage } : {}),
       };
-      await worklogApi.record(payload as WorklogRecordRequest);
+      const result = await worklogApi.record(payload as WorklogRecordRequest);
       setCreating(false);
       setMode('entries');
       setSelection({ versionId: input.versionId, requirementId: input.requirementId });
       await refresh();
       toast.success('已记录');
+      // 未知关联项目 / 路径未归属等非阻塞提示(后端 warnings)
+      if (result.warnings?.length) toast.info(result.warnings.join('；'));
     } catch (err) {
       toast.error(`记录失败:${errMessage(err)}`);
     }
@@ -214,9 +233,10 @@ export function WorklogView() {
     patch: { title?: string; detail?: string; tags?: string[]; stage?: WorkStage },
   ) => {
     try {
-      await worklogApi.update(id, patch);
+      const result = await worklogApi.update(id, patch);
       await refresh();
       toast.success('已更新');
+      if (result.warnings?.length) toast.info(result.warnings.join('；'));
     } catch (err) {
       toast.error(`更新失败:${errMessage(err)}`);
     }
@@ -334,6 +354,9 @@ export function WorklogView() {
               {relatedFilter && (isSearching || selection.versionId) && (
                 <span className="text-muted-foreground ml-2 text-xs font-normal">· 筛选关联「{relatedFilter}」</span>
               )}
+              {projectFilter && !noSelection && (
+                <span className="text-muted-foreground ml-2 text-xs font-normal">· 筛选项目「{projectFilter}」</span>
+              )}
               {!noSelection && (
                 <span className="text-muted-foreground ml-2 text-xs font-normal">{visibleEntries.length} 条</span>
               )}
@@ -341,6 +364,20 @@ export function WorklogView() {
           )}
           actions={(
             <>
+              {projectOptions.length > 0 && (
+                <select
+                  aria-label="按项目筛选"
+                  title="只看实际改动归属指定项目的记录(可与版本/需求选择叠加)"
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                  className="border-input bg-background h-8 w-32 shrink-0 rounded-md border px-2 text-xs"
+                >
+                  <option value="">全部项目</option>
+                  {projectOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              )}
               {relatedProjectOptions.length > 0 && (
                 <select
                   aria-label="按关联项目筛选"
@@ -387,6 +424,12 @@ export function WorklogView() {
         <AiGuideView />
       ) : (
         <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
+          {outsideProjects.length > 0 && !isSearching && !relatedFilter && (
+            <p className="text-muted-foreground text-xs">
+              存在范围外改动：{outsideProjects.join('、')}
+            </p>
+          )}
+
           {creating && (
             <NewEntryForm
               versions={versionOptions}

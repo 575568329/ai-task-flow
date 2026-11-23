@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/__tests__/searchFilter.test.ts
 // 搜索过滤纯函数测试:关键字命中语义(与后端 query_work 一致)/版本·需求定位/全局搜索忽略树选择/组合过滤。
 import { describe, it, expect } from 'vitest';
-import { filterEntries, matchesKeyword } from '../searchFilter';
+import { filterEntries, getOutsideProjects, matchesKeyword } from '../searchFilter';
 import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
 
 function entry(over: Partial<WorklogEntry>): WorklogEntry {
@@ -144,5 +144,78 @@ describe('filterEntries', () => {
     const { entries, isSearching } = filterEntries(data, {}, '不存在的关键字xyz');
     expect(isSearching).toBe(true);
     expect(entries).toHaveLength(0);
+  });
+
+  it('should stack version/requirement/stage/related/project filters', () => {
+    const combo: WorklogData = {
+      projects: [
+        { id: 'p_1', name: 'P1', createdAt: 1 },
+        { id: 'p_2', name: 'P2', createdAt: 2 },
+      ],
+      versions: [{
+        id: 'v_1', name: 'V1', createdAt: 1,
+        requirements: [
+          {
+            id: 'r_1', title: 'R1', createdAt: 1,
+            entries: [
+              entry({ id: 'm1', createdAt: 3, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
+              entry({ id: 'm2', createdAt: 2, stage: 'dev', project: 'P2', relatedProjects: ['题库'] }),
+              entry({ id: 'm3', createdAt: 1, stage: 'review', project: 'P1', relatedProjects: ['题库'] }),
+            ],
+          },
+          {
+            id: 'r_2', title: 'R2', createdAt: 2,
+            entries: [
+              entry({ id: 'm4', createdAt: 4, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
+            ],
+          },
+        ],
+      }],
+    };
+    // 六参全给:版本 + 需求 + 阶段 + 关联项目 + 实际归属项目
+    expect(filterEntries(combo, { versionId: 'v_1', requirementId: 'r_1' }, '', ['dev'], '题库', 'P1')
+      .entries.map((e) => e.entry.id)).toEqual(['m1']);
+    // 版本级 + 项目筛选跨需求;新在前
+    expect(filterEntries(combo, { versionId: 'v_1' }, '', [], undefined, 'P1')
+      .entries.map((e) => e.entry.id)).toEqual(['m4', 'm1', 'm3']);
+    // 关键字全局搜索 + 阶段 + 项目叠加
+    expect(filterEntries(combo, {}, '标题', ['dev'], undefined, 'P2')
+      .entries.map((e) => e.entry.id)).toEqual(['m2']);
+    // 任一条件不匹配即空
+    expect(filterEntries(combo, { versionId: 'v_1' }, '', ['dev'], '不存在的关联', 'P1').entries)
+      .toHaveLength(0);
+  });
+});
+
+describe('getOutsideProjects', () => {
+  it('should return empty when every entry project is inside the requirement scope', () => {
+    expect(getOutsideProjects({
+      id: 'r_1', title: 'R1', createdAt: 1, projects: ['A', 'B'],
+      entries: [
+        entry({ id: 'e1', project: 'A' }),
+        entry({ id: 'e2', project: 'B' }),
+        entry({ id: 'e3' }), // 无归属项目,不参与判断
+      ],
+    })).toEqual([]);
+  });
+
+  it('should return deduped, sorted projects outside the requirement scope', () => {
+    expect(getOutsideProjects({
+      id: 'r_1', title: 'R1', createdAt: 1, projects: ['A'],
+      entries: [
+        entry({ id: 'e1', project: 'A' }),
+        entry({ id: 'e2', project: 'C' }),
+        entry({ id: 'e3', project: 'B' }),
+        entry({ id: 'e4', project: 'C' }),
+      ],
+    })).toEqual(['B', 'C']);
+    // 需求未声明计划项目时,所有条目项目都算范围外
+    expect(getOutsideProjects({
+      id: 'r_2', title: 'R2', createdAt: 1,
+      entries: [
+        entry({ id: 'e1', project: 'B' }),
+        entry({ id: 'e2', project: 'A' }),
+      ],
+    })).toEqual(['A', 'B']);
   });
 });
