@@ -278,6 +278,9 @@ export class WorklogService {
             stage: entry.stage,
             files: entry.files?.map((f: WorklogEntryFile) => f.path),
             relatedProjects: entry.relatedProjects,
+            // 供调用方(前端详情/MCP query_work)提示来源与归属状态
+            ...(entry.sourcePath ? { sourcePath: entry.sourcePath } : {}),
+            ...(entry.pathUnmatched ? { pathUnmatched: true } : {}),
             ...(input.includeDiff && entry.diff ? { diff: entry.diff } : {}),
             __createdAt: entry.createdAt,
           });

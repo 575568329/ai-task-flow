@@ -1,6 +1,6 @@
 // backend/src/interfaces/mcp/tools/worklog/__tests__/worklog-tools.test.ts
 // worklog MCP 工具测试:真实 Service+临时目录;catalog 一致性断言(单一来源守护)。
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -92,5 +92,62 @@ describe('worklog MCP tools', () => {
     const result = await HANDLERS.list_projects({}, deps);
     expect(result.content[0].text).toContain('p');
     expect(result.content[0].text).toContain('v1(1 条');
+  });
+
+  it('record_work should auto-fill cwd as sourcePath and surface warnings', async () => {
+    const spy = vi.spyOn(deps.worklogService, 'record');
+    const result = await HANDLERS.record_work(
+      { project: 'A', version: 'V1', title: 't', detail: 'd' }, deps,
+    );
+    expect(result.isError).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ sourcePath: process.cwd() }));
+    // 测试环境 cwd 未绑定任何项目 → service 返回「路径未归属」告警,应回传给 AI
+    expect(result.content[0].text).toContain('⚠');
+    expect(result.content[0].text).toContain('路径未归属');
+    spy.mockRestore();
+  });
+
+  it('record_work should pass relatedProjects and warn on unknown names', async () => {
+    await deps.worklogService.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+    const result = await HANDLERS.record_work({
+      project: 'A', version: 'V1', title: 't', detail: 'd', relatedProjects: ['B', '拼错的'],
+    }, deps);
+    expect(result.content[0].text).toContain('拼错的');
+    const tree = await deps.worklogService.getTree();
+    const entry = tree.projects.find((p) => p.name === 'A')!.versions[0].entries[0];
+    expect(entry.relatedProjects).toEqual(['B']);
+  });
+
+  it('query_work should filter by relatedProject and render 关联 meta', async () => {
+    await deps.worklogService.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+    await deps.worklogService.record({
+      project: 'A', version: 'V1', title: '跨项目', detail: 'd', relatedProjects: ['B'],
+    });
+    await deps.worklogService.record({ project: 'A', version: 'V1', title: '普通改动', detail: 'd' });
+    const result = await HANDLERS.query_work({ relatedProject: 'B' }, deps);
+    expect(result.content[0].text).toContain('共 1 条');
+    expect(result.content[0].text).toContain('关联:B');
+    expect(result.content[0].text).not.toContain('普通改动');
+  });
+
+  it('query_work should mark entries recorded from an unmatched path', async () => {
+    await HANDLERS.record_work({ project: 'A', version: 'V1', title: '路径记录', detail: 'd' }, deps);
+    const result = await HANDLERS.query_work({ keyword: '路径记录' }, deps);
+    expect(result.content[0].text).toContain('路径未归属');
+  });
+
+  it('list_projects should show id and path tail, never the full absolute path', async () => {
+    await deps.worklogService.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+    await deps.worklogService.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+    const idA = (await deps.worklogService.getTree()).projects.find((p) => p.name === 'A')!.id;
+    const deepPath = path.join(tmpDir, 'deep', 'repo');
+    await deps.worklogService.bindProjectPaths('A', [deepPath]);
+
+    const result = await HANDLERS.list_projects({}, deps);
+    const text = result.content[0].text;
+    expect(text).toContain(idA);
+    expect(text).toContain('…deep\\repo'); // 尾段(两级,反斜杠分隔)
+    expect(text).not.toContain(deepPath);  // 隐私红线:不出完整绝对路径
+    expect(text).toContain('未绑定路径');   // B 未绑定
   });
 });

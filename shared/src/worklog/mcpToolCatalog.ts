@@ -62,7 +62,8 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
     name: 'record_work',
     description:
       '记录一条工作内容(项目→版本→功能点)。干完一波修改后调用;项目/版本不存在会自动创建;' +
-      'files 从 git status/diff 取改动文件路径与行号,diff 附 git diff 原文。' +
+      'files 从 git status/diff 取改动文件路径与行号,diff 附 git diff 原文;' +
+      'relatedProjects 传同时涉及的其他项目名;记录时自动带上当前工作目录用于路径归属。' +
       'detail 必须结构化分条,禁止大段流水账:Bug 修复按「### 问题(现象+报错)→### 原因→### 解决(1.2.3.分点)→### 验证」;' +
       '任务功能按「### 需求→### 方案→### 实现(1.2.3.分点)→### 验证」。' +
       '内容要完善可追溯:文件路径/版本号/数字必须属实,禁止臆造。' +
@@ -77,7 +78,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
     name: 'query_work',
     description:
       '回溯查询工作记录。entryId 按条目 id 精确查询(页面上复制的 e_xxx),传入时忽略其他过滤条件;' +
-      '其余支持项目/版本精确过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、' +
+      '其余支持项目/版本精确过滤、关联项目(relatedProject)过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、' +
       '日期范围(dateFrom/dateTo)。结果每条都带 ID:xxx,可用于后续 update_work/delete_work。' +
       'diff 默认不返回,includeDiff:true 时携带。',
     whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的",或直接给出记录 id 时,先查记录再回答。',
@@ -85,7 +86,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
   },
   {
     name: 'list_projects',
-    description: '列出所有项目与版本树(含每版本条目数与首末日期)。记录前先查,对齐已有项目/版本名,防止拼错裂树。',
+    description: '列出所有项目与版本树(含项目 id、路径尾段、每版本条目数与首末日期)。记录前先查,对齐已有项目/版本名,防止拼错裂树。输出项目 id 与路径尾段,绑定路径请让用户在页面操作。',
     whenToUse: '记录前不确定项目/版本的准确名字时,先调它看一眼再 record_work。',
     userPromptExample: '「看下工作记录里已经有哪些项目和版本」',
   },
