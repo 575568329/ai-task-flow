@@ -167,9 +167,13 @@ export async function registerWorklogRoutes(
     '/api/worklog/requirements/:id',
     async (request, reply) => {
       const bodyVersionId = readRequiredString(request.body, 'versionId');
-      const versionId = request.query.versionId ?? bodyVersionId;
+      // 重复 query 参数(?versionId=a&versionId=b)时 Fastify 给数组,直接 trim 会 TypeError → 500;
+      // 非字符串一律视为无效,回落 body 的 versionId;两者都无效 → 400。
+      const rawQueryVersionId: unknown = request.query.versionId;
+      const queryVersionId = typeof rawQueryVersionId === 'string' ? rawQueryVersionId : undefined;
+      const versionId = queryVersionId ?? bodyVersionId;
       if (!versionId) {
-        return reply.status(400).send({ error: 'versionId 必填(query 或 body)' });
+        return reply.status(400).send({ error: 'versionId 必填(query 或 body,且必须为字符串)' });
       }
       try {
         await worklogService.deleteRequirement(versionId, request.params.id);
@@ -189,9 +193,21 @@ export async function registerWorklogRoutes(
   fastify.post<{ Body: WorklogRecordRequest }>(
     '/api/worklog/entries',
     async (request, reply) => {
+      // title 必须是非空字符串;detail 给了就必须是字符串(缺失/空白交给服务层校验 → 400)。
+      // 不做类型守卫会放过 {title:123} 到 validateTitle 的 .trim() 抛 TypeError → 500。
+      const title = readRequiredString(request.body, 'title');
+      if (!title) {
+        return reply.status(400).send({ error: 'title 必须为非空字符串' });
+      }
+      const rawDetail = isPlainObject(request.body) ? request.body.detail : undefined;
+      if (rawDetail !== undefined && typeof rawDetail !== 'string') {
+        return reply.status(400).send({ error: 'detail 必须为字符串' });
+      }
       try {
         // 无 body 时传空对象,让服务层走必填校验 → 400,而不是读 undefined.title 抛 TypeError → 500
-        const result = await worklogService.record(request.body ?? ({} as WorklogRecordRequest));
+        const result = await worklogService.record(
+          request.body ?? ({} as WorklogRecordRequest),
+        );
         return reply.status(201).send(result);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -283,9 +299,9 @@ export async function registerWorklogRoutes(
   fastify.post<{ Params: { name: string }; Body: { newName: string } }>(
     '/api/worklog/projects/:name/rename',
     async (request, reply) => {
-      const newName = request.body?.newName;
+      const newName = readRequiredString(request.body, 'newName');
       if (!newName) {
-        return reply.status(400).send({ error: 'newName 必填' });
+        return reply.status(400).send({ error: 'newName 必须为非空字符串' });
       }
       try {
         await worklogService.renameProject(request.params.name, newName);

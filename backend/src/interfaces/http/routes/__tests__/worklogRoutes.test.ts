@@ -345,6 +345,45 @@ describe('worklogRoutes', () => {
     // 无 body 的 record:必填校验 → 400,不得因读 undefined.title 变 500
     const noBody = await app.inject({ method: 'POST', url: '/api/worklog/entries' });
     expect(noBody.statusCode).toBe(400);
+
+    // record 的 title/detail 同样做类型守卫:{title:123} 不得在 validateTitle.trim() 炸成 500
+    const badEntryTitle = await app.inject({
+      method: 'POST', url: '/api/worklog/entries',
+      payload: { versionId, requirementId, title: 123, detail: 'd' },
+    });
+    expect(badEntryTitle.statusCode).toBe(400);
+
+    const badEntryDetail = await app.inject({
+      method: 'POST', url: '/api/worklog/entries',
+      payload: { versionId, requirementId, title: 't', detail: 123 },
+    });
+    expect(badEntryDetail.statusCode).toBe(400);
+
+    // 项目改名 newName 非字符串 → 400
+    await createProject('gp');
+    const badProjectRename = await app.inject({
+      method: 'POST', url: '/api/worklog/projects/gp/rename', payload: { newName: 123 },
+    });
+    expect(badProjectRename.statusCode).toBe(400);
+  });
+
+  it('DELETE requirement should treat duplicated query versionId as invalid and fall back to body', async () => {
+    const versionId = await createVersion('v1');
+    const r1 = await createRequirement(versionId, 'R1');
+    const r2 = await createRequirement(versionId, 'R2');
+
+    // 重复 query → Fastify 给数组:视为无效,回落 body;body 有效则正常删除
+    const withBody = await app.inject({
+      method: 'DELETE', url: `/api/worklog/requirements/${r1}?versionId=a&versionId=b`,
+      payload: { versionId },
+    });
+    expect(withBody.statusCode).toBe(200);
+
+    // 重复 query 且无 body → 400(不得 500)
+    const noBody = await app.inject({
+      method: 'DELETE', url: `/api/worklog/requirements/${r2}?versionId=a&versionId=b`,
+    });
+    expect(noBody.statusCode).toBe(400);
   });
 
   it('DELETE project should only remove the dictionary entry and keep entries', async () => {
