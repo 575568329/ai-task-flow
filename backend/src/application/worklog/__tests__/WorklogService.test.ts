@@ -282,6 +282,73 @@ describe('WorklogService', () => {
   });
 
   // ---------------------------------------------------------------
+  // 项目路径绑定/解绑
+  // ---------------------------------------------------------------
+  describe('project paths', () => {
+    // 平台无关:用 path.resolve 生成当前平台绝对路径,Windows/Linux CI 都能跑
+    const pathA1 = path.resolve('x-a');
+    const pathA2 = path.resolve('x-y-a');
+
+    it('should reject a path already bound to another project', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.record({ project: 'B', version: 'V1', title: 'b', detail: 'd' });
+      await service.bindProjectPaths('A', [pathA1]);
+
+      await expect(service.bindProjectPaths('B', [pathA1]))
+        .rejects.toThrow(/已被项目/);
+      // 冲突时不得改动 B 的绑定
+      expect((await service.getTree()).projects.find((p) => p.name === 'B')!.paths).toBeUndefined();
+    });
+
+    it('should bind and unbind multiple paths', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [pathA1, pathA2]);
+      let tree = await service.getTree();
+      expect(tree.projects.find((p) => p.name === 'A')!.paths).toEqual([pathA1, pathA2]);
+
+      await service.unbindProjectPath('A', pathA1);
+      tree = await service.getTree();
+      expect(tree.projects.find((p) => p.name === 'A')!.paths).toEqual([pathA2]);
+    });
+
+    it('should reject relative paths and dedupe repeated ones', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await expect(service.bindProjectPaths('A', ['relative/dir']))
+        .rejects.toThrow(/绝对路径/);
+
+      await service.bindProjectPaths('A', [pathA1, ` ${pathA1} `, pathA2]);
+      const tree = await service.getTree();
+      expect(tree.projects.find((p) => p.name === 'A')!.paths).toEqual([pathA1, pathA2]);
+    });
+
+    it('should unbind by normalized comparison', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [pathA1]);
+      // 带尾分隔符的形式归一化后应命中同一条绑定
+      await service.unbindProjectPath('A', `${pathA1}${path.sep}`);
+      expect((await service.getTree()).projects.find((p) => p.name === 'A')!.paths).toEqual([]);
+    });
+
+    it('should mark missing paths in getTree without persisting them', async () => {
+      const { nanoid } = await import('nanoid');
+      const missing = path.join(os.tmpdir(), `no-such-dir-${nanoid()}`);
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [tmpDir, missing]);
+
+      const tree = await service.getTree();
+      expect(tree.projects.find((p) => p.name === 'A')!.missingPaths).toEqual([missing]);
+      // missingPaths 仅为读时计算,不得写回 worklog.json
+      const raw = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+      expect(raw.projects[0].missingPaths).toBeUndefined();
+    });
+
+    it('should require an existing project when binding', async () => {
+      await expect(service.bindProjectPaths('no-such-project', [pathA1]))
+        .rejects.toThrow(/不存在/);
+    });
+  });
+
+  // ---------------------------------------------------------------
   // 双实例(模拟 HTTP 进程与 MCP 进程)并发
   // ---------------------------------------------------------------
   it('should persist and filter by stage', async () => {

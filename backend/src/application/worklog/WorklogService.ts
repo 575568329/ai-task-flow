@@ -2,6 +2,8 @@
 // 工作记录应用服务:MCP 工具与 HTTP API 的唯一入口(partial/建层/重名规则单点)。
 // 写协议(双层锁/备份)由 JsonWorklogRepository 承担,本类只做业务规则与查询过滤。
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { isWorkStage } from '@ai-task-flow/shared';
 import type {
@@ -22,6 +24,7 @@ import type { WorklogRepository } from '../../domain/worklog/repositories/Worklo
 import {
   WorklogNotFoundError, WorklogConflictError, WorklogValidationError,
 } from '../../domain/worklog/errors.js';
+import { normalizePath } from '../../domain/worklog/pathMatch.js';
 
 /** 项目/版本名约束:trim 后非空、不含路径分隔符(防路由参数歧义)、长度上限 */
 const NAME_MAX_LEN = 60;
@@ -74,9 +77,54 @@ function findProject(data: WorklogData, name: string): WorklogProject {
 export class WorklogService {
   constructor(private readonly repo: WorklogRepository) {}
 
-  /** 全树(工作记录页一次拉取;读最新,不缓存) */
+  /** 全树(工作记录页一次拉取;读最新,不缓存)+ 每个项目失效路径标记(前端据此标红) */
   async getTree(): Promise<WorklogData> {
-    return this.repo.load();
+    const data = await this.repo.load();
+    // 项目数量少,直接 access 探测可接受;missingPaths 仅为读时计算结果,不持久化
+    for (const project of data.projects) {
+      const missing: string[] = [];
+      for (const p of project.paths ?? []) {
+        try {
+          await fs.access(p);
+        } catch {
+          missing.push(p);
+        }
+      }
+      if (missing.length) project.missingPaths = missing;
+    }
+    return data;
+  }
+
+  /** 绑定项目路径(整体替换);路径须绝对,同一路径不得被两个项目占用 */
+  async bindProjectPaths(projectName: string, paths: string[]): Promise<void> {
+    const name = validateName(projectName, '项目名');
+    const cleaned = [...new Set(paths.map((p) => p.trim()).filter(Boolean))];
+    for (const p of cleaned) {
+      if (!path.isAbsolute(p)) throw new WorklogValidationError(`路径必须是绝对路径:${p}`);
+    }
+    await this.repo.mutate((data) => {
+      const proj = findProject(data, name);
+      // 按归一化比较:同一目录写成不同形式(尾分隔符/Windows 大小写)也算占用
+      for (const other of data.projects) {
+        if (other.name === name) continue;
+        for (const p of cleaned) {
+          if ((other.paths ?? []).some((op) => normalizePath(op) === normalizePath(p))) {
+            throw new WorklogConflictError(`路径 ${p} 已被项目 "${other.name}" 占用`);
+          }
+        }
+      }
+      proj.paths = cleaned;
+    }, { backup: true });
+  }
+
+  /** 解绑单个路径(按归一化比较,未命中则无副作用) */
+  async unbindProjectPath(projectName: string, targetPath: string): Promise<void> {
+    const name = validateName(projectName, '项目名');
+    await this.repo.mutate((data) => {
+      const proj = findProject(data, name);
+      const key = normalizePath(targetPath);
+      proj.paths = (proj.paths ?? []).filter((p) => normalizePath(p) !== key);
+    }, { backup: true });
   }
 
   /** 记录一条工作内容;项目/版本不存在自动创建(建层) */

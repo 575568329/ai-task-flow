@@ -137,4 +137,37 @@ export async function registerWorklogRoutes(
       }
     },
   );
+
+  // PUT /api/worklog/projects/:name/paths - 绑定项目路径(整体替换,自动备份)
+  fastify.put<{ Params: { name: string }; Body: { paths?: string[] } }>(
+    '/api/worklog/projects/:name/paths',
+    async (request, reply) => {
+      const paths = Array.isArray(request.body?.paths) ? request.body.paths : [];
+      try {
+        await worklogService.bindProjectPaths(request.params.name, paths);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // DELETE /api/worklog/projects/:name/paths?path=... - 解绑单个路径(自动备份)
+  fastify.delete<{ Params: { name: string }; Querystring: { path?: string } }>(
+    '/api/worklog/projects/:name/paths',
+    async (request, reply) => {
+      const target = request.query.path?.trim();
+      if (!target) {
+        return reply.status(400).send({ error: 'path 不能为空' });
+      }
+      try {
+        await worklogService.unbindProjectPath(request.params.name, target);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
 }

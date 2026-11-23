@@ -13,6 +13,7 @@ import { JsonConclusionRepository } from '../../../infrastructure/persistence/Js
 import { ConclusionService } from '../../../application/conclusion/ConclusionService.js';
 import path from 'path';
 import os from 'os';
+import { nanoid } from 'nanoid';
 import { FastifyInstance } from 'fastify';
 
 // worklog 转型 Step1:Task CRUD 集成测试已随 taskRoutes 砍除;
@@ -169,6 +170,71 @@ describe('HTTP Server', () => {
       const updated = JSON.parse(updResp.body);
       expect(updated.version).toBe(1);
       expect(updated.nodeCount).toBe(2);
+    });
+  });
+
+  // 项目路径绑定/解绑:PUT 整体替换、DELETE 单个解绑;冲突 409、缺参 400
+  describe('Worklog project paths', () => {
+    const boundPath = path.join(os.tmpdir(), `path-bind-${nanoid()}`);
+
+    async function createProject(name: string): Promise<void> {
+      await server.inject({
+        method: 'POST',
+        url: '/api/worklog/entries',
+        payload: { project: name, version: 'v1', title: `t-${name}`, detail: 'd' },
+      });
+    }
+
+    it('should bind, report missing paths, reject conflicts and unbind', async () => {
+      await createProject('A');
+      await createProject('B');
+
+      const putResp = await server.inject({
+        method: 'PUT',
+        url: '/api/worklog/projects/A/paths',
+        payload: { paths: [boundPath] },
+      });
+      expect(putResp.statusCode).toBe(200);
+
+      // GET 全树:已绑定路径回显,不存在的路径进 missingPaths
+      const tree = JSON.parse((await server.inject({ method: 'GET', url: '/api/worklog' })).body);
+      const projectA = tree.projects.find((p: { name: string }) => p.name === 'A');
+      expect(projectA.paths).toEqual([boundPath]);
+      expect(projectA.missingPaths).toEqual([boundPath]);
+
+      // 同一路径绑到 B → 409
+      const conflictResp = await server.inject({
+        method: 'PUT',
+        url: '/api/worklog/projects/B/paths',
+        payload: { paths: [boundPath] },
+      });
+      expect(conflictResp.statusCode).toBe(409);
+
+      // 缺 path 参数 → 400
+      const badDelete = await server.inject({
+        method: 'DELETE',
+        url: '/api/worklog/projects/A/paths',
+      });
+      expect(badDelete.statusCode).toBe(400);
+
+      const delResp = await server.inject({
+        method: 'DELETE',
+        url: `/api/worklog/projects/A/paths?path=${encodeURIComponent(boundPath)}`,
+      });
+      expect(delResp.statusCode).toBe(200);
+
+      const after = JSON.parse((await server.inject({ method: 'GET', url: '/api/worklog' })).body);
+      expect(after.projects.find((p: { name: string }) => p.name === 'A').paths).toEqual([]);
+    });
+
+    it('should reject relative paths with 400', async () => {
+      await createProject('C');
+      const resp = await server.inject({
+        method: 'PUT',
+        url: '/api/worklog/projects/C/paths',
+        payload: { paths: ['relative/dir'] },
+      });
+      expect(resp.statusCode).toBe(400);
     });
   });
 });
