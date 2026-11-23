@@ -71,6 +71,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
 - 主要数据文件：`worklog.json`、`conclusions.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
+- **项目路径身份字段**：项目有稳定 `id` 与 `paths`（本地绝对路径，可多个，页面绑定）；工作记录条目有 `sourcePath`（MCP 取 `process.cwd()`，按最长前缀归属项目）；工作记录与结论卡用 `relatedProjectIds` 存关联项目稳定引用、`relatedProjects` 存名称快照（改名后靠 id 映射显示新名称）。旧数据由 HTTP 启动时一次性迁移补 `id` 并按名称绑定结论卡（幂等）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
 
@@ -106,6 +107,7 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 - 勿提交运行时产物（已 gitignore）：`*hook-events.jsonl`、`backend/public/`、`backend/uploads/`。
 - WSL ↔ Windows 混合环境：后端常跑 Windows、MCP 常跑 WSL，两边 home 是不同物理目录，统一靠 `resolveDataDir()` 自探测；`appendWindowsPath=false` 时用绝对路径调 `cmd.exe` / `powershell.exe`；WSL 下不要跑 `vite build`（node_modules 是 Windows 侧的），只做 `tsc` 类型检查。
 - 启动子终端必须传 `buildCleanEnv()`（剥离 `ANTHROPIC_*` / `CLAUDE_*`），否则子进程继承后端启动时的 Claude 配置。
+- **路径绑定仅页面操作**：项目的 `paths` 只通过页面（`PUT/DELETE /api/worklog/projects/:name/paths`）绑定/解绑，MCP 工具不提供绑定入口、`sourcePath` 也不暴露给 AI（由 handler 自动填 `cwd`）。排查归属问题时让用户在页面操作，不要让 AI 改绑定。
 - 详细原因与排障：`docs/20260723130001_项目避坑与约定.md`、`docs/20260723130000_依赖安装排坑记录.md`。
 
 ## 文档地图

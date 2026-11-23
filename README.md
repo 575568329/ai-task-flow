@@ -50,6 +50,8 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 | 模块 | 说明 |
 |---|---|
 | **工作记录**(核心) | 项目→版本→功能点;MCP 记录 + 页面人工增删改/搜索;diff 与文件行号关联;按阶段筛选 |
+| **项目路径绑定** | 项目可绑定本地绝对路径:MCP 记录自动带 `sourcePath`,按最长前缀归属项目;未绑定不丢记录,提示到页面绑定;绑定/解绑仅在页面操作 |
+| **关联项目** | 工作记录与结论卡可关联其他项目:存稳定 `relatedProjectIds` + 名称快照,项目改名后按 id 映射显示新名称 |
 | **结论卡** | 长对话结论按主题沉淀:结论/数据/待办/代码位置;逐版完整历史,默认看最新;按阶段筛选 |
 | **阶段标签** | `record_work` / `record_conclusion` 唯一单值 stage:获取需求/设计/开发/自测/评审/覆盖度/上线/复盘;缺陷修改用 `fix` tag |
 | 知识库 | markdown/文档库,目录树 + wiki 链接;MCP `save_to_knowledge` 可写 |
@@ -67,8 +69,8 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 ## 测试
 
 ```bash
-cd backend && npx vitest run    # 274 用例(领域/锁协议/路由/MCP 工具)
-cd frontend && npm test         # 141 用例(组件/搜索过滤)
+cd backend && npx vitest run    # 253 用例(领域/锁协议/路由/MCP 工具)
+cd frontend && npm test         # 158 用例(组件/搜索过滤)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
 node tests/mcp/conclusion-stdio-smoke.mjs              # MCP stdio 冒烟(需先 cd backend && npm run build)
 ```
