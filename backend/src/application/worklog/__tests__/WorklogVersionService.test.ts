@@ -39,11 +39,11 @@ describe('WorklogService version/requirement CRUD', () => {
     }
   }
 
-  async function seedProject(name: string): Promise<string> {
+  async function seedProject(name: string, extra?: { id?: string | null }): Promise<string> {
+    const id = extra?.id === null ? undefined : (extra?.id ?? `p_${name}`);
     return repo.mutate((data) => {
-      const id = `p_${name}`;
-      data.projects.push({ id, name, createdAt: Date.now() });
-      return id;
+      data.projects.push({ id, name, createdAt: Date.now() } as (typeof data.projects)[number]);
+      return id ?? '';
     });
   }
 
@@ -75,9 +75,11 @@ describe('WorklogService version/requirement CRUD', () => {
       await expect(service.createVersion({ name: 'x'.repeat(61) })).rejects.toThrow(/长度不能超过/);
     });
 
-    it('backs up before creating', async () => {
-      await service.createVersion({ name: 'V1' });
-      expect(await listBackups()).toHaveLength(1);
+    it('does not back up pure create operations', async () => {
+      const v = await service.createVersion({ name: 'V1' });
+      await seedProject('题库');
+      await service.createRequirement({ versionId: v.id, title: 'R', projects: ['题库'] });
+      expect(await listBackups()).toHaveLength(0);
     });
   });
 
@@ -138,10 +140,32 @@ describe('WorklogService version/requirement CRUD', () => {
       expect(requirement.projectIds).toEqual(['p_题库']);
     });
 
-    it('rejects invalid title', async () => {
+    it('allows slashes in requirement titles but rejects empty/overlong ones', async () => {
       const v = await service.createVersion({ name: 'V1' });
+      await expect(service.createRequirement({ versionId: v.id, title: '登录/白屏修复' }))
+        .resolves.toHaveProperty('id');
       await expect(service.createRequirement({ versionId: v.id, title: ' ' }))
         .rejects.toBeInstanceOf(WorklogValidationError);
+      await expect(service.createRequirement({ versionId: v.id, title: 'x'.repeat(201) }))
+        .rejects.toThrow(/长度不能超过 200/);
+    });
+
+    it('skips projects without stable id instead of writing undefined projectIds', async () => {
+      await seedProject('无id项目', { id: null });
+      const v = await service.createVersion({ name: 'V1' });
+      const r = await service.createRequirement({
+        versionId: v.id, title: 'R', projects: ['无id项目'],
+      });
+      const requirement = (await service.getTree()).versions[0].requirements
+        .find((item) => item.id === r.id)!;
+      expect(requirement.projects).toBeUndefined();
+      expect(requirement.projectIds).toBeUndefined();
+    });
+
+    it('lists existing versions as candidates when version is unknown', async () => {
+      const existing = await service.createVersion({ name: 'V8.0.7' });
+      await expect(service.createRequirement({ versionId: 'v_nope', title: 'R' }))
+        .rejects.toThrow(new RegExp(`现有版本：V8\\.0\\.7\\(${existing.id}\\)`));
     });
   });
 

@@ -127,12 +127,14 @@ export interface WorklogRequirementCreateRequest {
   projects?: string[];
 }
 
-/** record 响应:createdXxx 告知调用方是否新建了层(防拼写错误的版本名裂树) */
+/** record 响应:版本/需求不再自动创建,createdXxx 为兼容旧客户端保留(恒 false) */
 export interface WorklogRecordResponse {
   entryId: string;
-  /** 展示用路径:项目/版本/entryId */
+  /** 展示用路径:版本名/需求名/entryId */
   path: string;
+  /** 兼容保留,恒 false */
   createdProject: boolean;
+  /** 兼容保留,恒 false */
   createdVersion: boolean;
   projectId?: string;
   warnings?: string[];
