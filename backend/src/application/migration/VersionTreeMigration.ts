@@ -114,10 +114,18 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
     return { data, report }; // 已是新结构:原样返回(幂等)
   }
 
-  // 顶层版本按名称索引;混合态下复用已有版本(不新建、不改 id)
+  // 顶层版本按名称索引;混合态下复用已有版本(不新建、不改 id)。
+  // 先浅拷贝 version/requirements/entries 数组:后续 push 只落在副本上,
+  // 保证纯函数不就地改写入参(同一混合态对象重复调用结果稳定)。
   const byName = new Map<string, WorklogVersion>();
   for (const version of data.versions ?? []) {
-    byName.set(version.name, version);
+    byName.set(version.name, {
+      ...version,
+      requirements: version.requirements.map((requirement) => ({
+        ...requirement,
+        entries: [...requirement.entries],
+      })),
+    });
   }
   // 版本名 → 出现过的项目名集合,用于报告跨项目重名
   const sourcesByName = new Map<string, Set<string>>();

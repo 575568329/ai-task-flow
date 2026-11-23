@@ -174,6 +174,40 @@ describe('migrateToVersionTree', () => {
     expect('versions' in data.projects[0]).toBe(false);
   });
 
+  it('does not mutate its input: repeated calls on the same mixed object are stable', () => {
+    const mixed: WorklogData = {
+      projects: [
+        { id: 'p1', name: '资源加工平台', createdAt: 1, versions: [
+          { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
+        ] } as LegacyProject,
+      ],
+      versions: [
+        {
+          id: 'v1',
+          name: 'V8.0.8',
+          createdAt: 5,
+          requirements: [
+            { id: 'r1', title: LEGACY_REQUIREMENT_TITLE, createdAt: 5, entries: [entry('e_new')] },
+          ],
+        },
+      ],
+    };
+
+    const first = migrateToVersionTree(mixed);
+    const second = migrateToVersionTree(mixed);
+
+    // 第二次结果与第一次完全一致,条目不会翻倍
+    expect(second.data).toEqual(first.data);
+    expect(first.data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual([
+      'e_new',
+      'e_old',
+    ]);
+    // 入参原对象未被就地改写(旧版本、已有需求都保持原样)
+    expect((mixed.projects[0] as LegacyProject).versions[0].entries).toHaveLength(1);
+    expect(mixed.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e_new']);
+    expect(mixed.versions[0].requirements).toHaveLength(1);
+  });
+
   it('reuses the migration requirement when a version already has it', () => {
     const mixed: WorklogData = {
       projects: [
