@@ -3,6 +3,7 @@
 // 写协议(双层锁/备份)由 JsonWorklogRepository 承担,本类只做业务规则与查询过滤。
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { isWorkStage } from '@ai-task-flow/shared';
@@ -16,7 +17,6 @@ import type {
   WorklogRecordResponse,
   WorklogQueryRequest,
   WorklogQueryResultEntry,
-  WorklogProjectSummary,
   WorklogUpdateRequest,
   WorkStage,
 } from '@ai-task-flow/shared';
@@ -52,6 +52,26 @@ function localDate(d = new Date()): string {
 /** 生成短随机 id:e_ + uuid 前 8 位 hex */
 function newEntryId(): string {
   return `e_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+}
+
+/** 绑定黑名单:这些目录「本身」不允许绑定,其子目录允许 */
+const WINDOWS_SYSTEM_DIRS = ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)'];
+
+/**
+ * 判定路径是否为不可绑定的公共目录(自身)。
+ * 绑定主目录/盘符根/临时目录等于把整个目录树归属给一个项目,后续路径归属会全部误命中;
+ * 只拒绝目录本身,子目录(真正的工作区)不受影响。
+ * 用 normalizePath 比较,兼容尾分隔符/Windows 大小写/WSL↔Windows 盘符两种写法。
+ */
+function forbiddenBindReason(input: string): string | undefined {
+  const normalized = normalizePath(input);
+  if (normalized === normalizePath(os.homedir())) return `用户主目录 ${os.homedir()}`;
+  if (normalized === normalizePath(os.tmpdir())) return `系统临时目录 ${os.tmpdir()}`;
+  if (normalized === normalizePath(path.parse(input).root)) return `文件系统根目录 ${path.parse(input).root}`;
+  for (const dir of WINDOWS_SYSTEM_DIRS) {
+    if (normalized === normalizePath(dir)) return `Windows 系统目录 ${dir}`;
+  }
+  return undefined;
 }
 
 /** 在数据中定位条目与其所属项目/版本(浅拷贝引用,便于原地变更) */
@@ -90,6 +110,8 @@ function resolveRelated(
       ignored.push(trimmed);
       continue;
     }
+    // 迁移前旧项目可能缺 id:没有稳定身份就无法写入引用,跳过(不把 undefined 塞进 relatedProjectIds)
+    if (!project.id) continue;
     if (!ids.includes(project.id)) {
       ids.push(project.id);
       labels.push(project.name);
@@ -139,6 +161,11 @@ export class WorklogService {
     for (const p of cleaned) {
       if (!path.isAbsolute(p)) throw new WorklogValidationError(`路径必须是绝对路径:${p}`);
     }
+    // 公共目录本身不允许绑定(主目录/盘符根/临时目录/Windows 系统目录),子目录放行
+    for (const p of cleaned) {
+      const reason = forbiddenBindReason(p);
+      if (reason) throw new WorklogValidationError(`不能绑定${reason}`);
+    }
     await this.repo.mutate((data) => {
       const proj = findProject(data, name);
       // 按归一化比较:同一目录写成不同形式(尾分隔符/Windows 大小写)也算占用
@@ -179,9 +206,10 @@ export class WorklogService {
         : undefined;
       let ownerId: string | undefined;
       if (normalizedSource) {
-        const refs = data.projects.flatMap((p) =>
-          (p.paths ?? []).map((pth) => ({ projectId: p.id, path: pth })),
-        );
+        // 无 id 的旧项目没有稳定身份,不能作为归属目标(否则 undefined 会被当成 projectId)
+        const refs = data.projects
+          .filter((p) => Boolean(p.id))
+          .flatMap((p) => (p.paths ?? []).map((pth) => ({ projectId: p.id, path: pth })));
         ownerId = findOwningProject(refs, normalizedSource);
       }
       const ownerProject = ownerId ? data.projects.find((p) => p.id === ownerId) : undefined;
@@ -235,7 +263,9 @@ export class WorklogService {
       if (normalizedSource && !ownerProject) entry.pathUnmatched = true;
       ver.entries.push(entry);
 
-      if (normalizedSource && !ownerProject) {
+      // 只有「存在已绑定路径的项目」时未命中才算配置异常;全部项目都没绑定时不告警,避免每条记录都刷屏
+      const hasBoundPaths = data.projects.some((p) => (p.paths ?? []).length > 0);
+      if (normalizedSource && !ownerProject && hasBoundPaths) {
         warnings.push('当前路径未归属任何项目，可在页面绑定路径');
       }
       return {
@@ -305,23 +335,6 @@ export class WorklogService {
       .sort((a, b) => b.__createdAt - a.__createdAt)
       .slice(0, limit)
       .map(({ __createdAt, ...rest }) => rest);
-  }
-
-  /** 项目/版本树汇总(条目数 + 首末日期)——供 AI 记录前对齐已有结构 */
-  async listProjects(): Promise<WorklogProjectSummary[]> {
-    const data = await this.repo.load();
-    return data.projects.map((project) => ({
-      name: project.name,
-      versions: project.versions.map((version) => {
-        const dates = version.entries.map((e) => e.date).sort();
-        return {
-          name: version.name,
-          entryCount: version.entries.length,
-          firstDate: dates[0],
-          lastDate: dates[dates.length - 1],
-        };
-      }),
-    }));
   }
 
   /** partial 更新:只改传入字段;version 传新值 = 挪到该版本(不存在自动建,与 record 一致) */

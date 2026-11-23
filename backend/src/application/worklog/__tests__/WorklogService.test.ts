@@ -24,6 +24,7 @@ describe('WorklogService', () => {
   let tmpDir: string;
   let filePath: string;
   let backupsDir: string;
+  let repo: JsonWorklogRepository;
   let service: WorklogService;
 
   beforeEach(async () => {
@@ -31,7 +32,8 @@ describe('WorklogService', () => {
     tmpDir = path.join(os.tmpdir(), `worklog-test-${nanoid()}`);
     filePath = path.join(tmpDir, 'worklog.json');
     backupsDir = path.join(tmpDir, 'worklog-backups');
-    service = new WorklogService(new JsonWorklogRepository(filePath, backupsDir));
+    repo = new JsonWorklogRepository(filePath, backupsDir);
+    service = new WorklogService(repo);
   });
 
   afterEach(async () => {
@@ -61,11 +63,11 @@ describe('WorklogService', () => {
       expect(res.entryId).toBeTruthy();
       expect(res.path).toBe(`ai-task-flow/v1.2.0/${res.entryId}`);
 
-      const tree = await service.listProjects();
-      expect(tree).toHaveLength(1);
-      expect(tree[0].name).toBe('ai-task-flow');
-      expect(tree[0].versions[0].name).toBe('v1.2.0');
-      expect(tree[0].versions[0].entryCount).toBe(1);
+      const tree = await service.getTree();
+      expect(tree.projects).toHaveLength(1);
+      expect(tree.projects[0].name).toBe('ai-task-flow');
+      expect(tree.projects[0].versions[0].name).toBe('v1.2.0');
+      expect(tree.projects[0].versions[0].entries).toHaveLength(1);
     });
 
     it('should not mark created flags when project/version already exist', async () => {
@@ -235,17 +237,17 @@ describe('WorklogService', () => {
     it('should backup before rename and apply rename', async () => {
       await service.renameVersion('p', 'v1', 'v1.0');
       expect(await listBackups()).toHaveLength(1);
-      const tree = await service.listProjects();
-      expect(tree[0].versions[0].name).toBe('v1.0');
-      expect(tree[0].versions[0].entryCount).toBe(2); // 条目随版本保留
+      const tree = await service.getTree();
+      expect(tree.projects[0].versions[0].name).toBe('v1.0');
+      expect(tree.projects[0].versions[0].entries).toHaveLength(2); // 条目随版本保留
     });
 
     it('should reject rename to existing name without modifying data', async () => {
       await service.record({ project: 'p', version: 'v2', title: 'c', detail: 'd' });
       await expect(service.renameVersion('p', 'v1', 'v2')).rejects.toThrow(/已存在/);
       await expect(service.renameProject('p', 'p')).rejects.toThrow(/已存在/);
-      const tree = await service.listProjects();
-      expect(tree[0].versions.map((v) => v.name)).toEqual(['v1', 'v2']);
+      const tree = await service.getTree();
+      expect(tree.projects[0].versions.map((v) => v.name)).toEqual(['v1', 'v2']);
     });
 
     it('should keep at most 10 rolling backups', async () => {
@@ -263,22 +265,6 @@ describe('WorklogService', () => {
       await Promise.all([service.deleteEntry(r1.entryId), service.deleteEntry(r2.entryId)]);
       expect(await listBackups()).toHaveLength(2);
     });
-  });
-
-  // ---------------------------------------------------------------
-  // list_projects 汇总
-  // ---------------------------------------------------------------
-  it('listProjects should summarize entryCount and first/last date', async () => {
-    await service.record({ project: 'p', version: 'v1', title: 'a', detail: 'd' });
-    await service.record({ project: 'p', version: 'v2', title: 'b', detail: 'd' });
-    const tree = await service.listProjects();
-    expect(tree).toHaveLength(1);
-    expect(tree[0].versions).toHaveLength(2);
-    for (const v of tree[0].versions) {
-      expect(v.entryCount).toBe(1);
-      expect(v.firstDate).toBe(today());
-      expect(v.lastDate).toBe(today());
-    }
   });
 
   // ---------------------------------------------------------------
@@ -319,6 +305,31 @@ describe('WorklogService', () => {
       await service.bindProjectPaths('A', [pathA1, ` ${pathA1} `, pathA2]);
       const tree = await service.getTree();
       expect(tree.projects.find((p) => p.name === 'A')!.paths).toEqual([pathA1, pathA2]);
+    });
+
+    it('should reject home dir, filesystem root and tmpdir themselves but allow subdirectories', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await expect(service.bindProjectPaths('A', [os.homedir()])).rejects.toThrow(/用户主目录/);
+      await expect(service.bindProjectPaths('A', [path.parse(tmpDir).root])).rejects.toThrow(/文件系统根目录/);
+      await expect(service.bindProjectPaths('A', [os.tmpdir()])).rejects.toThrow(/系统临时目录/);
+      // 拒绝后不得留下半截绑定
+      expect((await service.getTree()).projects.find((p) => p.name === 'A')!.paths).toBeUndefined();
+
+      // 其子目录放行(真正的工作区)
+      const homeSub = path.join(os.homedir(), 'worklog-bind-subdir');
+      const tmpSub = path.join(os.tmpdir(), 'worklog-bind-subdir');
+      await service.bindProjectPaths('A', [homeSub, tmpSub]);
+      expect((await service.getTree()).projects.find((p) => p.name === 'A')!.paths).toEqual([homeSub, tmpSub]);
+    });
+
+    it('should reject Windows system directories themselves but allow subdirectories', async () => {
+      if (process.platform !== 'win32') return; // 仅 Windows 存在这些目录
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await expect(service.bindProjectPaths('A', ['C:\\Windows'])).rejects.toThrow(/Windows 系统目录/);
+      await expect(service.bindProjectPaths('A', ['C:\\Program Files'])).rejects.toThrow(/Windows 系统目录/);
+      await expect(service.bindProjectPaths('A', ['C:\\Program Files (x86)'])).rejects.toThrow(/Windows 系统目录/);
+      await service.bindProjectPaths('A', ['C:\\Windows\\System32']);
+      expect((await service.getTree()).projects.find((p) => p.name === 'A')!.paths).toEqual(['C:\\Windows\\System32']);
     });
 
     it('should unbind by normalized comparison', async () => {
@@ -412,7 +423,59 @@ describe('WorklogService', () => {
       expect(entry.pathUnmatched).toBe(true);
       expect(entry.sourcePath).toBe(unmatchedPath); // 未命中也要留痕,便于后续重新归属
       expect(r.projectId).toBe(demo.id);
+      // 全部项目都没绑定路径 → 未命中是常态(还没配置),不告警
+      expect(r.warnings).toBeUndefined();
+    });
+
+    it('should warn when some project has bound paths but the cwd matches none', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [parentPath]);
+
+      const r = await service.record({
+        project: 'B', version: 'V1', title: 't', detail: 'd',
+        sourcePath: path.join(base, 'nowhere', 'x'),
+      });
+      // 有绑定却落在绑定范围外 = 配置异常信号,必须告警
       expect(r.warnings?.some((w) => w.includes('未归属'))).toBe(true);
+    });
+
+    it('should stay quiet when the cwd matches a bound project', async () => {
+      await service.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+      await service.bindProjectPaths('A', [parentPath]);
+
+      const r = await service.record({
+        project: '随便写的名字', version: 'V1', title: 't', detail: 'd',
+        sourcePath: path.join(parentPath, 'backend'),
+      });
+      expect(r.warnings).toBeUndefined();
+      const tree = await service.getTree();
+      expect(tree.projects.find((p) => p.id === r.projectId)!.name).toBe('A');
+    });
+
+    it('should ignore projects without id for ownership and related refs', async () => {
+      // 直接写仓储模拟迁移前旧数据:项目可能存在但缺稳定 id
+      await repo.mutate((data) => {
+        data.projects.push({
+          name: '无id项目', createdAt: 1, versions: [], paths: [parentPath],
+        } as unknown as (typeof data.projects)[number]);
+        data.projects.push({ id: 'p_with_id', name: '有id项目', createdAt: 1, versions: [] });
+      });
+
+      const r = await service.record({
+        project: '新项目', version: 'V1', title: 't', detail: 'd',
+        sourcePath: path.join(parentPath, 'src'),
+        relatedProjects: ['无id项目', '有id项目'],
+      });
+
+      const tree = await service.getTree();
+      // 路径命中的项目无 id → 不归属(不得把 undefined 当 projectId),退回传入项目名
+      const owner = tree.projects.find((p) => p.id === r.projectId)!;
+      expect(owner.name).toBe('新项目');
+      const entry = owner.versions[0].entries[0];
+      expect(entry.pathUnmatched).toBe(true);
+      // 无 id 的关联项目被跳过,只有有 id 的写入引用
+      expect(entry.relatedProjectIds).toEqual(['p_with_id']);
+      expect(entry.relatedProjects).toEqual(['有id项目']);
     });
 
     it('should keep legacy behavior when sourcePath is absent', async () => {

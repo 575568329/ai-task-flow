@@ -95,13 +95,17 @@ describe('worklog MCP tools', () => {
   });
 
   it('record_work should auto-fill cwd as sourcePath and surface warnings', async () => {
+    // 先让某个项目绑定路径(且 cwd 落在范围外):此时未命中才是配置异常,service 才会告警
+    await deps.worklogService.record({ project: 'A', version: 'V1', title: 'a', detail: 'd' });
+    await deps.worklogService.bindProjectPaths('A', [path.resolve('x-other-project')]);
+
     const spy = vi.spyOn(deps.worklogService, 'record');
     const result = await HANDLERS.record_work(
       { project: 'A', version: 'V1', title: 't', detail: 'd' }, deps,
     );
     expect(result.isError).toBeUndefined();
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ sourcePath: process.cwd() }));
-    // 测试环境 cwd 未绑定任何项目 → service 返回「路径未归属」告警,应回传给 AI
+    // 有绑定却未命中 → service 返回「路径未归属」告警,应回传给 AI
     expect(result.content[0].text).toContain('⚠');
     expect(result.content[0].text).toContain('路径未归属');
     spy.mockRestore();
