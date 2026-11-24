@@ -1,8 +1,8 @@
 #!/bin/bash
 # tests/curl/test_worklog_api.sh
-# worklog API 冒烟(新模型 主题 → 版本 → 需求 → 条目):
-#   建项目 → 建主题 → 建版本 → 建需求 → 记录条目 → 查询 → partial 更新 → 删除(断言备份)
-#   → 版本/需求 CRUD → 清理(版本 → 主题 → 项目)。
+# worklog API 冒烟(新模型 主题 → 版本 → 条目):
+#   建项目 → 建主题 → 建版本 → 记录条目 → 查询 → partial 更新 → 删除(断言备份)
+#   → 版本/主题 CRUD → 清理(版本 → 主题 → 项目)。
 # 覆盖正常 + 异常场景(AGENTS.md 5.2 curl 测试约定);只依赖 BASE_URL,不写死端口。
 set -euo pipefail
 
@@ -13,7 +13,6 @@ PROJECT="curl-smoke-$TS"
 PROGRAM="g-curl-$TS"
 VERSION="v-curl-$TS"
 VERSION_2="v-curl2-$TS"
-REQUIREMENT="r-curl-$TS"
 
 # 从 `{"id":"v_xxx"}` / `{"entryId":"e_xxx"}` 里提取标识
 extract_field() {
@@ -101,11 +100,11 @@ if [ "$HTTP_CODE" -ne 400 ]; then
   echo "FAIL: versions name 非字符串期望 400,实际 $HTTP_CODE"
   exit 1
 fi
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/requirements" \
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/entries" \
   -H "Content-Type: application/json" \
-  --data-binary '{"versionId":123,"title":"r"}')
+  --data-binary '{"versionId":"v_x","title":123,"detail":"d"}')
 if [ "$HTTP_CODE" -ne 400 ]; then
-  echo "FAIL: requirements versionId 非字符串期望 400,实际 $HTTP_CODE"
+  echo "FAIL: entries title 非字符串期望 400,实际 $HTTP_CODE"
   exit 1
 fi
 echo "PASS"
@@ -128,27 +127,9 @@ if [ -z "$VERSION_ID" ]; then
 fi
 echo "PASS (versionId=$VERSION_ID)"
 
-echo "=== 测试:建需求 正常场景 ==="
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/worklog/requirements" \
-  -H "Content-Type: application/json" \
-  --data-binary "{\"versionId\":\"$VERSION_ID\",\"title\":\"$REQUIREMENT\",\"projects\":[\"$PROJECT\"]}")
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | sed '$d')
-if [ "$HTTP_CODE" -ne 201 ]; then
-  echo "FAIL: 期望 201,实际 $HTTP_CODE"
-  echo "Response: $BODY"
-  exit 1
-fi
-REQUIREMENT_ID=$(extract_field "$BODY" "id")
-if [ -z "$REQUIREMENT_ID" ]; then
-  echo "FAIL: 未取到需求 id"
-  exit 1
-fi
-echo "PASS (requirementId=$REQUIREMENT_ID)"
-
-echo "=== 测试:record 正常场景 ==="
-PAYLOAD=$(printf '{"versionId":"%s","requirementId":"%s","title":"smoke %s","detail":"curl e2e entry %s","tags":["test"],"stage":"dev","project":"%s"}' \
-  "$VERSION_ID" "$REQUIREMENT_ID" "$TS" "$TS" "$PROJECT")
+echo "=== 测试:record 正常场景(版本直挂条目,无需求层) ==="
+PAYLOAD=$(printf '{"versionId":"%s","title":"smoke %s","detail":"curl e2e entry %s","tags":["test"],"stage":"dev","project":"%s"}' \
+  "$VERSION_ID" "$TS" "$TS" "$PROJECT")
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/worklog/entries" \
   -H "Content-Type: application/json" \
   --data-binary "$PAYLOAD")
@@ -169,7 +150,7 @@ echo "PASS (entryId=$ENTRY_ID)"
 echo "=== 测试:record 参数缺失 → 400 ==="
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/entries" \
   -H "Content-Type: application/json" \
-  --data-binary "{\"versionId\":\"$VERSION_ID\",\"requirementId\":\"$REQUIREMENT_ID\"}")
+  --data-binary "{\"versionId\":\"$VERSION_ID\"}")
 if [ "$HTTP_CODE" -ne 400 ]; then
   echo "FAIL: 期望 400,实际 $HTTP_CODE"
   exit 1
@@ -179,7 +160,7 @@ echo "PASS"
 echo "=== 测试:record 未知版本 id → 404(不自动建层) ==="
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/entries" \
   -H "Content-Type: application/json" \
-  --data-binary "{\"versionId\":\"v_nope\",\"requirementId\":\"r_nope\",\"title\":\"t\",\"detail\":\"d\"}")
+  --data-binary "{\"versionId\":\"v_nope\",\"title\":\"t\",\"detail\":\"d\"}")
 if [ "$HTTP_CODE" -ne 404 ]; then
   echo "FAIL: 期望 404,实际 $HTTP_CODE"
   exit 1
@@ -234,20 +215,6 @@ if [ "$BACKUP_COUNT" -lt 1 ]; then
   exit 1
 fi
 echo "PASS (backups=$BACKUP_COUNT)"
-
-echo "=== 测试:需求删除缺 versionId → 400;正常删除 → 200 ==="
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE_URL/api/worklog/requirements/$REQUIREMENT_ID")
-if [ "$HTTP_CODE" -ne 400 ]; then
-  echo "FAIL: 缺 versionId 期望 400,实际 $HTTP_CODE"
-  exit 1
-fi
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-  "$BASE_URL/api/worklog/requirements/$REQUIREMENT_ID?versionId=$VERSION_ID")
-if [ "$HTTP_CODE" -ne 200 ]; then
-  echo "FAIL: 删除需求期望 200,实际 $HTTP_CODE"
-  exit 1
-fi
-echo "PASS"
 
 echo "=== 测试:删除版本/主题/项目(清理) ==="
 for path in \
