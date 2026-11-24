@@ -184,7 +184,8 @@ export function versionTreeMigrationMarkerPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), '.migration-version-tree.json');
 }
 
-/** 版本树迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移 */
+/** 版本树迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移。
+ *  与 v2(建设主题层)共用锁目标,保证跨进程 v1/v2 串行:两个迁移不会各自基于旧快照互相覆盖。 */
 export function versionTreeMigrationLockTarget(dataDir?: string): string {
   return resolveDataDir(dataDir);
 }
@@ -194,7 +195,8 @@ export function programLayerMigrationMarkerPath(dataDir?: string): string {
   return path.join(resolveDataDir(dataDir), '.migration-program-layer.json');
 }
 
-/** 建设主题层迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移 */
+/** 建设主题层迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移。
+ *  与 v1(版本树)共用锁目标,保证跨进程 v1/v2 串行:两个迁移不会各自基于旧快照互相覆盖。 */
 export function programLayerMigrationLockTarget(dataDir?: string): string {
   return resolveDataDir(dataDir);
 }

@@ -312,14 +312,22 @@ function emptyProgramReport(): ProgramMigrationReport {
   return { programsCreated: 0, versionsAssigned: 0 };
 }
 
-/** 数据是否还需要提升主题层:有版本且尚未全部归属主题 */
-export function needsProgramLayerMigration(data: WorklogData): boolean {
+/**
+ * 主题层是否已完成迁移:已有主题,且每个版本的 programId 都能解析到现有主题。
+ * 「programId 非空但指向已不存在的主题」(悬空)不算已归属——否则门禁与纯函数口径不一致,
+ * 悬空版本会永远显示「未归属主题」且没有自愈入口。
+ */
+export function isProgramLayerMigrated(data: WorklogData): boolean {
   const programs = data.programs ?? [];
-  if (programs.length > 0 && data.versions.every((version) => version.programId)) {
-    return false;
-  }
+  if (programs.length === 0) return false;
+  const byId = new Set(programs.map((program) => program.id));
+  return data.versions.every((version) => byId.has(version.programId));
+}
+
+/** 数据是否还需要提升主题层:有版本且尚未全部归属主题(与纯函数同一口径) */
+export function needsProgramLayerMigration(data: WorklogData): boolean {
   // 没有版本时无可归属对象:不制造空主题,也避免无意义写盘
-  return data.versions.length > 0;
+  return data.versions.length > 0 && !isProgramLayerMigrated(data);
 }
 
 /** 主题名:该版本「澳门底层数据建设」需求标题;没有则默认「未分类建设」 */
@@ -339,12 +347,9 @@ export function migrateProgramLayer(data: WorklogData): ProgramLayerMigrationRes
   const programs: WorklogProgram[] = [...(data.programs ?? [])];
   const byName = new Map(programs.map((program) => [program.name, program]));
   const byId = new Map(programs.map((program) => [program.id, program]));
-  // 已是目标形态:原样返回(幂等)。programId 悬空(指向已不存在的主题)不算已归属,
-  // 继续走下面的重新归属——执行器 fast-path 只看 truthy 会跳过,纯函数行为在此锁定。
-  const allAssigned = data.versions.every(
-    (version) => version.programId && byId.has(version.programId),
-  );
-  if (programs.length > 0 && allAssigned) {
+  // 已是目标形态:原样返回(幂等)。与执行器门禁共用 isProgramLayerMigrated,
+  // 保证「悬空 programId 需要自愈」在门禁与纯函数两侧判定完全一致。
+  if (isProgramLayerMigrated(data)) {
     return { data, report };
   }
   if (data.versions.length === 0) {

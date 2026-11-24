@@ -68,7 +68,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     const lines = versions.map((version) => {
       const { entryCount, firstDate, lastDate } = summarize(version);
       const range = firstDate ? ` · ${firstDate}~${lastDate}` : '';
-      const programName = programNameById.get(version.programId) ?? '未知主题';
+      // 悬空归属(指向已不存在的主题)与前端同一文案,便于对照页面排查
+      const programName = programNameById.get(version.programId) ?? '未归属主题';
       return `- ${version.name} (${version.id ?? '未迁移'}) · ${programName} · 需求 ${version.requirements.length} · 条目 ${entryCount}${range}`;
     });
     return ok([

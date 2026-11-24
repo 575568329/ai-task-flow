@@ -17,8 +17,10 @@ import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonW
 import {
   DEFAULT_PROGRAM_NAME,
   LEGACY_REQUIREMENT_TITLE,
+  isProgramLayerMigrated,
   migrateProgramLayer,
   migrateToVersionTree,
+  needsProgramLayerMigration,
   runProgramLayerMigration,
   runVersionTreeMigration,
 } from '../VersionTreeMigration.js';
@@ -501,6 +503,70 @@ describe('migrateProgramLayer', () => {
   });
 });
 
+describe('needsProgramLayerMigration / isProgramLayerMigrated', () => {
+  const program = { id: 'g_1', name: '澳门底层数据建设', createdAt: 1 };
+  const version = (programId: string) =>
+    ({ id: 'v1', name: 'V1', programId, createdAt: 1, requirements: [] });
+
+  it('treats fully assigned data as migrated', () => {
+    const data = {
+      projects: [],
+      programs: [program],
+      versions: [version('g_1')],
+    } as WorklogData;
+
+    expect(isProgramLayerMigrated(data)).toBe(true);
+    expect(needsProgramLayerMigration(data)).toBe(false);
+  });
+
+  it('treats a dangling programId as not migrated (self-heal needed)', () => {
+    const data = {
+      projects: [],
+      programs: [program],
+      versions: [version('g_missing')],
+    } as WorklogData;
+
+    expect(isProgramLayerMigrated(data)).toBe(false);
+    expect(needsProgramLayerMigration(data)).toBe(true);
+  });
+
+  it('treats an empty programId as not migrated', () => {
+    const data = {
+      projects: [],
+      programs: [program],
+      versions: [version('')],
+    } as WorklogData;
+
+    expect(isProgramLayerMigrated(data)).toBe(false);
+    expect(needsProgramLayerMigration(data)).toBe(true);
+  });
+
+  it('does not require migration when there are no versions (no empty programs to create)', () => {
+    const noPrograms = { projects: [], programs: [], versions: [] } as WorklogData;
+    const withPrograms = {
+      projects: [],
+      programs: [program],
+      versions: [],
+    } as WorklogData;
+
+    // 无版本时不需要迁移;isProgramLayerMigrated 的口径是「有主题且全部版本可解析」(空集恒真)
+    expect(isProgramLayerMigrated(noPrograms)).toBe(false);
+    expect(needsProgramLayerMigration(noPrograms)).toBe(false);
+    expect(isProgramLayerMigrated(withPrograms)).toBe(true);
+    expect(needsProgramLayerMigration(withPrograms)).toBe(false);
+  });
+
+  it('requires existing programs even when every version has a programId', () => {
+    // 有版本但 programs 为空(主题被整体删掉):programId 无从解析,仍需迁移
+    const data = {
+      projects: [],
+      programs: [],
+      versions: [version('g_gone')],
+    } as WorklogData;
+    expect(needsProgramLayerMigration(data)).toBe(true);
+  });
+});
+
 describe('runProgramLayerMigration', () => {
   let worklogRepo: JsonWorklogRepository;
   let dir: string;
@@ -598,6 +664,46 @@ describe('runProgramLayerMigration', () => {
     const data = await repo.load();
     expect(data.programs).toHaveLength(1);
     expect(data.versions[0].programId).toBe(data.programs[0].id);
+  });
+
+  it('self-heals a dangling programId instead of skipping, then stays stable', async () => {
+    // programs 非空 + 某版本指向不存在的主题:门禁若只看 truthy 会永远 skipped,
+    // 前端只能长期显示「未归属主题」。执行器必须重新归属,且第二次运行字节不变。
+    const danglingDir = path.join(os.tmpdir(), `mig-pl-dangling-${nanoid()}`);
+    await fs.mkdir(danglingDir, { recursive: true });
+    const repo = new JsonWorklogRepository(
+      path.join(danglingDir, 'worklog.json'),
+      path.join(danglingDir, 'wb'),
+    );
+    await repo.mutate((d) => {
+      d.programs.push({ id: 'g_kept', name: '旧主题', createdAt: 1 } as never);
+      d.versions.push({
+        id: 'v_dangling',
+        name: 'V-dangling',
+        programId: 'g_missing',
+        createdAt: 1,
+        requirements: [requirement('r1', LEGACY_REQUIREMENT_TITLE)],
+      } as never);
+    });
+
+    const first = await runProgramLayerMigration({ dataDir: danglingDir, worklogRepo: repo });
+
+    expect(first.skipped).toBe(false);
+    expect(first.versionsAssigned).toBe(1);
+    const data = await repo.load();
+    const target = data.programs.find((p) => p.name === LEGACY_REQUIREMENT_TITLE)!;
+    expect(target).toBeDefined();
+    expect(data.versions[0].programId).toBe(target.id);
+    // 既有主题不删除
+    expect(data.programs.some((p) => p.id === 'g_kept')).toBe(true);
+
+    // 二次运行:已全部可解析 → skipped 且 worklog.json 字节不变
+    const worklogFile = path.join(danglingDir, 'worklog.json');
+    const before = (await fs.readFile(worklogFile)).toString('base64');
+    const second = await runProgramLayerMigration({ dataDir: danglingDir, worklogRepo: repo });
+    expect(second.skipped).toBe(true);
+    expect(second.versionsAssigned).toBe(0);
+    expect((await fs.readFile(worklogFile)).toString('base64')).toBe(before);
   });
 
   it('does nothing (and marks skipped) on a data dir without versions', async () => {

@@ -16,7 +16,7 @@ export async function handle(_args: Record<string, unknown> | undefined, deps: T
   try {
     const programs = await deps.worklogService.listPrograms();
     if (programs.length === 0) {
-      return ok('暂无建设主题（请在页面新建）。');
+      return ok('暂无建设主题（若刚从旧版本升级，请先启动 Web 服务完成数据迁移；否则请在页面新建）。');
     }
 
     const lines = programs.map(

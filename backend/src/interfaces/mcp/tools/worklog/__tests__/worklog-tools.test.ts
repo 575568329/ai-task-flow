@@ -15,6 +15,7 @@ import type { ToolDeps } from '../../types.js';
 describe('worklog MCP tools', () => {
   let tmpDir: string;
   let deps: ToolDeps;
+  let repo: JsonWorklogRepository;
   let programId: string;
   const PROGRAM_NAME = '澳门底层数据建设';
 
@@ -31,11 +32,13 @@ describe('worklog MCP tools', () => {
   beforeEach(async () => {
     const { nanoid } = await import('nanoid');
     tmpDir = path.join(os.tmpdir(), `worklog-mcp-${nanoid()}`);
+    repo = new JsonWorklogRepository(
+      path.join(tmpDir, 'worklog.json'),
+      path.join(tmpDir, 'backups'),
+    );
     deps = {
       knowledgeService: {} as ToolDeps['knowledgeService'],
-      worklogService: new WorklogService(
-        new JsonWorklogRepository(path.join(tmpDir, 'worklog.json'), path.join(tmpDir, 'backups')),
-      ),
+      worklogService: new WorklogService(repo),
       conclusionService: {} as ToolDeps['conclusionService'],
       mcpSource: { tool: 'manual' },
     };
@@ -327,6 +330,21 @@ describe('worklog MCP tools', () => {
     const text = (await HANDLERS.list_programs({}, emptyDeps)).content[0].text;
     expect(text).toContain('暂无建设主题');
     expect(text).toContain('请在页面新建');
+    // 旧版本升级后主题为空:提示先启动 Web 服务完成迁移,避免误以为数据丢失
+    expect(text).toContain('请先启动 Web 服务完成数据迁移');
+  });
+
+  it('list_versions should show 未归属主题 for a dangling programId', async () => {
+    // 悬空归属不会经 Service 产生(createVersion 校验主题存在),只能模拟坏数据
+    const version = await deps.worklogService.createVersion({ name: 'V-dangling', programId });
+    await repo.mutate((data) => {
+      const target = data.versions.find((v) => v.id === version.id)!;
+      target.programId = 'g_gone';
+    });
+
+    const text = (await HANDLERS.list_versions({}, deps)).content[0].text;
+    expect(text).toContain('V-dangling');
+    expect(text).toContain('未归属主题'); // 与前端展示同一文案
   });
 
   it('list_versions should filter by programId and show program name', async () => {

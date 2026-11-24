@@ -1,7 +1,8 @@
 #!/bin/bash
 # tests/curl/test_worklog_api.sh
-# worklog API 冒烟(新模型 版本 → 需求 → 条目):
-#   建项目 → 建版本 → 建需求 → 记录条目 → 查询 → partial 更新 → 删除(断言备份) → 版本/需求 CRUD。
+# worklog API 冒烟(新模型 主题 → 版本 → 需求 → 条目):
+#   建项目 → 建主题 → 建版本 → 建需求 → 记录条目 → 查询 → partial 更新 → 删除(断言备份)
+#   → 版本/需求 CRUD → 清理(版本 → 主题 → 项目)。
 # 覆盖正常 + 异常场景(AGENTS.md 5.2 curl 测试约定);只依赖 BASE_URL,不写死端口。
 set -euo pipefail
 
@@ -9,6 +10,7 @@ BASE_URL="${BASE_URL:-http://127.0.0.1:47821}"
 DATA_DIR="${AI_TASK_FLOW_DATA_DIR:-$HOME/.ai-task-flow}"
 TS="$(date +%s)"
 PROJECT="curl-smoke-$TS"
+PROGRAM="g-curl-$TS"
 VERSION="v-curl-$TS"
 VERSION_2="v-curl2-$TS"
 REQUIREMENT="r-curl-$TS"
@@ -46,6 +48,51 @@ if [ "$HTTP_CODE" -ne 409 ]; then
 fi
 echo "PASS"
 
+echo "=== 测试:建主题 正常场景 ==="
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/worklog/programs" \
+  -H "Content-Type: application/json" \
+  --data-binary "{\"name\":\"$PROGRAM\"}")
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | sed '$d')
+if [ "$HTTP_CODE" -ne 201 ]; then
+  echo "FAIL: 期望 201,实际 $HTTP_CODE"
+  echo "Response: $BODY"
+  exit 1
+fi
+PROGRAM_ID=$(extract_field "$BODY" "id")
+if [ -z "$PROGRAM_ID" ]; then
+  echo "FAIL: 未取到主题 id"
+  exit 1
+fi
+case "$PROGRAM_ID" in
+  g_*) ;;
+  *)
+    echo "FAIL: 主题 id 应以 g_ 开头,实际 $PROGRAM_ID"
+    exit 1
+    ;;
+esac
+echo "PASS (programId=$PROGRAM_ID)"
+
+echo "=== 测试:建版本缺 programId → 400 ==="
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/versions" \
+  -H "Content-Type: application/json" \
+  --data-binary "{\"name\":\"v-nopid-$TS\"}")
+if [ "$HTTP_CODE" -ne 400 ]; then
+  echo "FAIL: 缺 programId 期望 400,实际 $HTTP_CODE"
+  exit 1
+fi
+echo "PASS"
+
+echo "=== 测试:建版本未知 programId → 404 ==="
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/versions" \
+  -H "Content-Type: application/json" \
+  --data-binary "{\"name\":\"v-badpid-$TS\",\"programId\":\"g_nope\"}")
+if [ "$HTTP_CODE" -ne 404 ]; then
+  echo "FAIL: 未知 programId 期望 404,实际 $HTTP_CODE"
+  exit 1
+fi
+echo "PASS"
+
 echo "=== 测试:非法字段类型 → 400(不得 500) ==="
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/worklog/versions" \
   -H "Content-Type: application/json" \
@@ -66,7 +113,7 @@ echo "PASS"
 echo "=== 测试:建版本 正常场景 ==="
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/worklog/versions" \
   -H "Content-Type: application/json" \
-  --data-binary "{\"name\":\"$VERSION\"}")
+  --data-binary "{\"name\":\"$VERSION\",\"programId\":\"$PROGRAM_ID\"}")
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 if [ "$HTTP_CODE" -ne 201 ]; then
@@ -153,7 +200,7 @@ echo "PASS"
 echo "=== 测试:版本 rename 重名冲突 → 409,按 id 改名 → 200 ==="
 VERSION_2_BODY=$(curl -s -X POST "$BASE_URL/api/worklog/versions" \
   -H "Content-Type: application/json" \
-  --data-binary "{\"name\":\"$VERSION_2\"}")
+  --data-binary "{\"name\":\"$VERSION_2\",\"programId\":\"$PROGRAM_ID\"}")
 VERSION_2_ID=$(extract_field "$VERSION_2_BODY" "id")
 if [ -z "$VERSION_2_ID" ]; then
   echo "FAIL: 未取到第二版本 id"
@@ -202,9 +249,17 @@ if [ "$HTTP_CODE" -ne 200 ]; then
 fi
 echo "PASS"
 
-echo "=== 测试:删除版本/项目(清理) ==="
-curl -s -o /dev/null -X DELETE "$BASE_URL/api/worklog/versions/$VERSION_ID"
-curl -s -o /dev/null -X DELETE "$BASE_URL/api/worklog/versions/$VERSION_2_ID"
-curl -s -o /dev/null -X DELETE "$BASE_URL/api/worklog/projects/$PROJECT"
+echo "=== 测试:删除版本/主题/项目(清理) ==="
+for path in \
+  "versions/$VERSION_ID" \
+  "versions/$VERSION_2_ID" \
+  "programs/$PROGRAM_ID" \
+  "projects/$PROJECT"; do
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE_URL/api/worklog/$path")
+  if [ "$HTTP_CODE" -ne 200 ]; then
+    echo "FAIL: DELETE $path 期望 200,实际 $HTTP_CODE"
+    exit 1
+  fi
+done
 echo "PASS"
 echo "=== 全部通过 ==="
