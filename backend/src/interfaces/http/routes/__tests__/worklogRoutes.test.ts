@@ -1,5 +1,5 @@
 // backend/src/interfaces/http/routes/__tests__/worklogRoutes.test.ts
-// worklog HTTP API 集成测试(新模型 版本 → 需求 → 条目):
+// worklog HTTP API 集成测试(新模型 主题 → 版本 → 需求 → 条目):
 // 版本/需求 CRUD 按 id、条目 record/update/delete、项目创建与路径校验、partial 语义(diff 不丢)、
 // rename 冲突 409、删除产生备份。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -14,15 +14,23 @@ import { JsonWorklogRepository } from '../../../../infrastructure/persistence/Js
 describe('worklogRoutes', () => {
   let app: ReturnType<typeof Fastify>;
   let tmpDir: string;
+  /** 版本必须归属主题:直写仓储预置(不产生备份,避免干扰备份计数断言) */
+  let programId: string;
 
   beforeEach(async () => {
     const { nanoid } = await import('nanoid');
     tmpDir = path.join(os.tmpdir(), `worklog-routes-${nanoid()}`);
-    const service = new WorklogService(
-      new JsonWorklogRepository(path.join(tmpDir, 'worklog.json'), path.join(tmpDir, 'worklog-backups')),
+    const repo = new JsonWorklogRepository(
+      path.join(tmpDir, 'worklog.json'), path.join(tmpDir, 'worklog-backups'),
     );
+    const service = new WorklogService(repo);
     app = Fastify();
     await registerWorklogRoutes(app, service);
+    programId = await repo.mutate((data) => {
+      const id = 'g_test';
+      data.programs.push({ id, name: '测试主题', createdAt: Date.now() });
+      return id;
+    });
   });
 
   afterEach(async () => {
@@ -41,7 +49,7 @@ describe('worklogRoutes', () => {
 
   async function createVersion(name: string): Promise<string> {
     const res = await app.inject({
-      method: 'POST', url: '/api/worklog/versions', payload: { name },
+      method: 'POST', url: '/api/worklog/versions', payload: { name, programId },
     });
     expect(res.statusCode).toBe(201);
     return JSON.parse(res.body).id as string;
@@ -156,7 +164,7 @@ describe('worklogRoutes', () => {
 
     // 全局重名 → 409
     const dup = await app.inject({
-      method: 'POST', url: '/api/worklog/versions', payload: { name: 'v1' },
+      method: 'POST', url: '/api/worklog/versions', payload: { name: 'v1', programId },
     });
     expect(dup.statusCode).toBe(409);
 
@@ -185,6 +193,79 @@ describe('worklogRoutes', () => {
 
     const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
     expect(tree.json().versions.map((v: { name: string }) => v.name)).toEqual(['v1.0']);
+  });
+
+  it('program CRUD should validate body and cascade versions on delete', async () => {
+    // 缺 name / name 非字符串 → 400
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/worklog/programs', payload: {} })).statusCode,
+    ).toBe(400);
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/worklog/programs', payload: { name: 123 } })).statusCode,
+    ).toBe(400);
+
+    // 创建 → 201 + g_ id
+    const created = await app.inject({
+      method: 'POST', url: '/api/worklog/programs',
+      payload: { name: '澳门底层数据建设', description: '说明' },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdId = JSON.parse(created.body).id as string;
+    expect(createdId).toMatch(/^g_/);
+
+    // 重名 → 409
+    const dup = await app.inject({
+      method: 'POST', url: '/api/worklog/programs', payload: { name: '澳门底层数据建设' },
+    });
+    expect(dup.statusCode).toBe(409);
+
+    // POST /versions 缺 programId / 非字符串 → 400(入口守卫,不是 404)
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/worklog/versions', payload: { name: 'V1' } })).statusCode,
+    ).toBe(400);
+    expect(
+      (await app.inject({
+        method: 'POST', url: '/api/worklog/versions', payload: { name: 'V1', programId: 123 },
+      })).statusCode,
+    ).toBe(400);
+
+    // 正常建版本并归属主题
+    const version = await app.inject({
+      method: 'POST', url: '/api/worklog/versions', payload: { name: 'V1', programId: createdId },
+    });
+    expect(version.statusCode).toBe(201);
+    const versionId = JSON.parse(version.body).id as string;
+    const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
+    expect(tree.json().programs.map((p: { name: string }) => p.name)).toContain('澳门底层数据建设');
+    expect(tree.json().versions.find((v: { id: string }) => v.id === versionId).programId).toBe(createdId);
+
+    // 改名:缺 newName → 400;正常 → 200
+    expect(
+      (await app.inject({
+        method: 'POST', url: `/api/worklog/programs/${createdId}/rename`, payload: {},
+      })).statusCode,
+    ).toBe(400);
+    const renamed = await app.inject({
+      method: 'POST', url: `/api/worklog/programs/${createdId}/rename`, payload: { newName: '澳门数据建设' },
+    });
+    expect(renamed.statusCode).toBe(200);
+
+    // 删除主题级联其版本
+    const del = await app.inject({ method: 'DELETE', url: `/api/worklog/programs/${createdId}` });
+    expect(del.statusCode).toBe(200);
+    const after = await app.inject({ method: 'GET', url: '/api/worklog' });
+    expect(after.json().programs.find((p: { id: string }) => p.id === createdId)).toBeUndefined();
+    expect(after.json().versions.find((v: { id: string }) => v.id === versionId)).toBeUndefined();
+
+    // 未知主题 → 404
+    expect(
+      (await app.inject({ method: 'DELETE', url: '/api/worklog/programs/g_nope' })).statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({
+        method: 'POST', url: '/api/worklog/programs/g_nope/rename', payload: { newName: 'X' },
+      })).statusCode,
+    ).toBe(404);
   });
 
   it('requirement CRUD should require versionId and map conflicts/unknown to 409/404', async () => {

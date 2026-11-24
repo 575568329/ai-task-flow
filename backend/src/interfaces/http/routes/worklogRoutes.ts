@@ -1,12 +1,13 @@
 // backend/src/interfaces/http/routes/worklogRoutes.ts
 // worklog REST API(与 MCP 工具共享同一 WorklogService,业务规则单点;写协议见 JsonWorklogRepository)。
-// 新模型:「版本 → 需求 → 条目」,项目降为字典(路径归属/筛选);版本/需求只能由页面显式创建。
+// 新模型:「主题 → 版本 → 需求 → 条目」,项目降为字典(路径归属/筛选);主题/版本/需求只能由页面显式创建。
 import { FastifyInstance } from 'fastify';
 import type {
   WorklogRecordRequest,
   WorklogUpdateRequest,
   WorklogVersionCreateRequest,
   WorklogRequirementCreateRequest,
+  WorklogProgramCreateRequest,
 } from '@ai-task-flow/shared';
 import type { WorklogService } from '../../../application/worklog/WorklogService.js';
 import { DomainError } from '../../../domain/_shared/DomainError.js';
@@ -79,7 +80,64 @@ export async function registerWorklogRoutes(
   });
 
   // ------------------------------------------------------------------
-  // 版本:创建 / 重命名 / 删除(名称全局唯一)
+  // 建设主题:创建 / 重命名 / 删除(名称全局唯一;删除级联版本)
+  // ------------------------------------------------------------------
+
+  // POST /api/worklog/programs - 新建建设主题
+  fastify.post<{ Body: WorklogProgramCreateRequest }>(
+    '/api/worklog/programs',
+    async (request, reply) => {
+      const name = readRequiredString(request.body, 'name');
+      if (!name) {
+        return reply.status(400).send({ error: 'name 必须为非空字符串' });
+      }
+      try {
+        const result = await worklogService.createProgram({
+          name,
+          description: readOptionalString(request.body, 'description'),
+        });
+        return reply.status(201).send(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // POST /api/worklog/programs/:id/rename - 重命名主题
+  fastify.post<{ Params: { id: string }; Body: { newName?: string } }>(
+    '/api/worklog/programs/:id/rename',
+    async (request, reply) => {
+      const newName = readRequiredString(request.body, 'newName');
+      if (!newName) {
+        return reply.status(400).send({ error: 'newName 必须为非空字符串' });
+      }
+      try {
+        await worklogService.renameProgram(request.params.id, newName);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // DELETE /api/worklog/programs/:id - 删整个主题(级联版本/需求/条目,自动备份)
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/worklog/programs/:id',
+    async (request, reply) => {
+      try {
+        await worklogService.deleteProgram(request.params.id);
+        return { ok: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // 版本:创建 / 重命名 / 删除(名称全局唯一;必须归属主题)
   // ------------------------------------------------------------------
 
   // POST /api/worklog/versions - 新建版本
@@ -87,12 +145,18 @@ export async function registerWorklogRoutes(
     '/api/worklog/versions',
     async (request, reply) => {
       const name = readRequiredString(request.body, 'name');
+      const programId = readRequiredString(request.body, 'programId');
       if (!name) {
         return reply.status(400).send({ error: 'name 必须为非空字符串' });
+      }
+      // 主题归属必填:缺失/非字符串在入口挡成 400,不落到 Service 的「主题不存在」404
+      if (!programId) {
+        return reply.status(400).send({ error: 'programId 必须为非空字符串' });
       }
       try {
         const result = await worklogService.createVersion({
           name,
+          programId,
           description: readOptionalString(request.body, 'description'),
         });
         return reply.status(201).send(result);

@@ -39,7 +39,8 @@ describe('conclusionRoutes', () => {
 
   /** 造项目字典项(新模型 record 不再自动建项目;结论夹具只需项目名/id 可解析) */
   async function seedProjects(...names: string[]): Promise<void> {
-    const version = await worklogService.createVersion({ name: 'v1' });
+    const program = await worklogService.createProgram({ name: '测试主题' });
+    const version = await worklogService.createVersion({ name: 'v1', programId: program.id });
     const requirement = await worklogService.createRequirement({ versionId: version.id, title: 'R' });
     for (const name of names) {
       await worklogService.createProject({ name });
