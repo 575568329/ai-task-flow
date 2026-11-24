@@ -62,6 +62,8 @@ export function VersionDialog({
   }, [open, programId, programs]);
 
   const canSubmit = name.trim().length > 0 && programId.length > 0 && !saving;
+  // 与左树同序:主题按名称升序,避免两处下拉/分组的顺序观感不一致
+  const sortedPrograms = [...programs].sort((a, b) => a.name.localeCompare(b.name));
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -133,7 +135,7 @@ export function VersionDialog({
                   className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
                 >
                   <option value="">请选择主题</option>
-                  {programs.map((program) => (
+                  {sortedPrograms.map((program) => (
                     <option key={program.id} value={program.id}>{program.name}</option>
                   ))}
                 </select>

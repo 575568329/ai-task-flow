@@ -81,6 +81,25 @@ describe('VersionRequirementTree', () => {
     expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
   });
 
+  it('auto-expands a collapsed program when selection points into it after refresh', () => {
+    const { rerender } = render(
+      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />,
+    );
+    fireEvent.click(screen.getByLabelText('收起 建设主题A'));
+    expect(screen.queryByText('V8.0.8')).toBeNull();
+
+    // 模拟 refresh:data 换新对象,selection 指向该主题内的版本
+    const refreshed: WorklogData = {
+      ...data,
+      programs: data.programs.map((p) => ({ ...p })),
+      versions: data.versions.map((v) => ({ ...v })),
+    };
+    rerender(
+      <VersionRequirementTree data={refreshed} selection={{ versionId: 'v_1' }} onSelect={() => {}} />,
+    );
+    expect(screen.getByText('V8.0.8')).toBeTruthy();
+  });
+
   it('auto-expands a collapsed version when a new requirement is selected', () => {
     const { rerender } = render(
       <VersionRequirementTree data={data} selection={{ versionId: 'v_1' }} onSelect={() => {}} />,

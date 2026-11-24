@@ -28,12 +28,19 @@ export function AiGuideView() {
         </div>
 
         <div className="space-y-3">
-          {/* 版本/需求由用户在页面创建,AI 只传 id:三步说清入口与顺序 */}
+          {/* 主题/版本/需求由用户在页面创建,AI 只传 id:四步说清入口与顺序 */}
           <div className="bg-muted/40 rounded-lg border p-4">
             <h3 className="text-sm font-semibold">🚀 新版本怎么开始</h3>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
               <li>
                 左侧点
+                <span className="font-semibold">「新建主题」</span>
+                (如「澳门底层数据建设」),创建后复制
+                <code className="bg-muted mx-1 rounded px-1 font-mono text-xs">g_xxx</code>
+                给 AI;
+              </li>
+              <li>
+                在主题上右键
                 <span className="font-semibold">「新建版本」</span>
                 ,创建后复制
                 <code className="bg-muted mx-1 rounded px-1 font-mono text-xs">v_xxx</code>
@@ -51,7 +58,7 @@ export function AiGuideView() {
                 <code className="bg-muted mx-1 rounded px-1 font-mono text-xs">versionId</code>/
                 <code className="bg-muted mx-1 rounded px-1 font-mono text-xs">requirementId</code>
                 记录;
-                <span className="text-primary font-semibold">AI 不会自行创建版本或需求</span>。
+                <span className="text-primary font-semibold">AI 不会自行创建主题、版本或需求</span>。
               </li>
             </ol>
           </div>

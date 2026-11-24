@@ -1,6 +1,6 @@
 // frontend/src/api/worklog.ts
 // 工作记录 API 客户端(端点契约见 backend worklogRoutes)。
-// 模型:版本 → 需求 → 条目;项目降为字典(路径归属/筛选)。
+// 模型:建设主题 → 版本 → 需求 → 条目;项目降为字典(路径归属/筛选)。
 // 全部 silent:http 层不弹 toast,由 WorklogView 各 handler 统一提示(避免双重 toast)。
 import type {
   WorklogData,

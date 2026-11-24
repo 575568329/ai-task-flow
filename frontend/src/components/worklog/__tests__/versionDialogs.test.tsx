@@ -149,6 +149,23 @@ describe('VersionDialog', () => {
     expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('创建版本失败'));
     expect(mockedCreateVersion).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the created id visible when programs refresh with a new array reference', async () => {
+    const { rerender } = render(
+      <VersionDialog open programs={programs} defaultProgramId="g_1" onClose={() => {}} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+    expect(await screen.findByText('v_new')).toBeTruthy();
+
+    // 父组件 refresh 后 data.programs 是新数组:不得把成功态(可复制 id)重置掉
+    rerender(
+      <VersionDialog open programs={programs.map((p) => ({ ...p }))} defaultProgramId="g_1" onClose={() => {}} />,
+    );
+    expect(screen.getByText('v_new')).toBeTruthy();
+    expect(screen.getByTitle('复制 v_new')).toBeTruthy();
+  });
 });
 
 describe('DeleteVersionDialog', () => {

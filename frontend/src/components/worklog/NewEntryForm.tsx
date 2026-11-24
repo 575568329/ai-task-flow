@@ -88,7 +88,7 @@ export function NewEntryForm({
     <div className="bg-card border-primary/40 rounded-lg border p-4 space-y-3 shadow-sm" onKeyDown={onKeyDown}>
       {versions.length === 0 && (
         <p className="text-muted-foreground text-xs">
-          还没有版本。请先在左侧「＋ 新建版本」并创建需求,再来记一条。
+          还没有版本。请先新建主题/版本并创建需求,再来记一条。
         </p>
       )}
 
