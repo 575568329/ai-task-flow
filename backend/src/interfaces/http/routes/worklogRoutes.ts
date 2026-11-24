@@ -121,7 +121,7 @@ export async function registerWorklogRoutes(
     },
   );
 
-  // DELETE /api/worklog/programs/:id - 删整个主题(级联版本/需求/条目,自动备份)
+  // DELETE /api/worklog/programs/:id - 删整个主题(级联版本/条目,自动备份)
   fastify.delete<{ Params: { id: string } }>(
     '/api/worklog/programs/:id',
     async (request, reply) => {

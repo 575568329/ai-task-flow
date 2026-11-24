@@ -11,7 +11,8 @@ export const toolDef = {
   name: 'save_to_knowledge' as const,
   description:
     '将调研结论/笔记写入知识库(创建新 Markdown 文档,文件名由服务端按命名规则生成,调用方无法干预物理文件名)。' +
-    '可选传 versionId / requirementId / projectId / stage,用于知识库按版本/需求/项目/阶段归类;' +
+    '可选传 versionId / projectId / stage,用于知识库按版本/项目/阶段归类;' +
+    'requirementId 已废弃(需求层已移除),传入会被忽略并提示,请改用 versionId;' +
     '关联 id 不存在时自动降级为不关联并提示,不影响文档保存。',
   inputSchema: {
     type: 'object' as const,
@@ -39,7 +40,7 @@ export const toolDef = {
       },
       requirementId: {
         type: 'string' as const,
-        description: '兼容参数(需求层已移除):传入会被忽略并提示,请改用 versionId',
+        description: '已废弃(需求层已移除):传入会被忽略并提示,请改用 versionId',
       },
       projectId: {
         type: 'string' as const,
@@ -91,6 +92,13 @@ async function resolveRefs(
     }
   }
 
+  // 需求层已移除:任何 requirementId 都无法再解析,先于 needsTree 提前返回,避免「只传 requirementId」时无提示
+  if (requested.requirementId) {
+    warnings.push(
+      `需求 id "${requested.requirementId}" 已废弃,将被忽略(需求层已移除,请改用 versionId)`,
+    );
+  }
+
   const needsTree = Boolean(requested.versionId || requested.projectId);
   if (!needsTree) return { meta, warnings };
 
@@ -99,11 +107,11 @@ async function resolveRefs(
     tree = await deps.worklogService.getTree();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`读取版本/需求/项目数据失败(${message}),版本/需求/项目关联已降级为不关联`);
+    warnings.push(`读取版本/项目数据失败(${message}),版本/项目关联已降级为不关联`);
     return { meta, warnings };
   }
 
-  // 数据损坏(versions/projects/requirements 缺失)时按空数组处理,保持降级而不是抛错
+  // 数据损坏(versions/projects 缺失)时按空数组处理,保持降级而不是抛错
   const versions = Array.isArray(tree?.versions) ? tree.versions : [];
   const projects = Array.isArray(tree?.projects) ? tree.projects : [];
 
@@ -121,13 +129,6 @@ async function resolveRefs(
     } else {
       warnings.push(`项目 id "${requested.projectId}" 不存在,已降级为不关联(可先 list_projects 获取)`);
     }
-  }
-
-  // 需求层已移除:任何 requirementId 都无法再解析,统一降级为不关联并提示改用 versionId
-  if (requested.requirementId) {
-    warnings.push(
-      `需求 id "${requested.requirementId}" 不存在,已降级为不关联(需求层已移除,可改用 versionId)`,
-    );
   }
 
   return { meta, warnings };
@@ -166,7 +167,6 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     ];
     const associations = [
       meta.versionId ? `版本 \`${meta.versionId}\`` : '',
-      meta.requirementId ? `需求 \`${meta.requirementId}\`` : '',
       meta.projectId ? `项目 \`${meta.projectId}\`` : '',
       meta.stage ? `阶段 \`${meta.stage}\`` : '',
     ].filter(Boolean);

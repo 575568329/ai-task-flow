@@ -19,7 +19,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
   args ??= {};
   try {
     await deps.worklogService.deleteVersion(String(args.versionId ?? ''));
-    return ok('✅ 已删除该版本及其全部需求与条目(删除前已自动快照备份)。');
+    return ok('✅ 已删除该版本及其全部条目(删除前已自动快照备份)。');
   } catch (err) {
     return fail(err);
   }

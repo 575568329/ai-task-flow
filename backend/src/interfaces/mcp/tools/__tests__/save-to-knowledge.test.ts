@@ -64,6 +64,22 @@ describe('save_to_knowledge MCP tool', () => {
     expect(doc.content).toBe('# 正文');
   });
 
+  it('should ignore requirementId-only input with a warning and still save', async () => {
+    const result = await HANDLERS.save_to_knowledge(
+      { title: '仅需求关联', content: '正文', requirementId: 'r_legacy' },
+      deps,
+    );
+
+    const text = result.content[0].text;
+    expect(text).toContain('已写入知识库');
+    expect(text).toContain('需求 id "r_legacy" 已废弃');
+    expect(text).not.toContain('**关联**');
+
+    const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
+    expect(doc.frontmatter).toBeUndefined();
+    expect(doc.content).toBe('正文');
+  });
+
   it('should degrade unknown ids to unassociated and still save the document', async () => {
     const result = await HANDLERS.save_to_knowledge(
       {
@@ -79,7 +95,7 @@ describe('save_to_knowledge MCP tool', () => {
     const text = result.content[0].text;
     expect(text).toContain('已写入知识库');
     expect(text).toContain('版本 id "v_nope" 不存在');
-    expect(text).toContain('需求 id "r_nope" 不存在');
+    expect(text).toContain('需求 id "r_nope" 已废弃');
     expect(text).toContain('项目 id "p_nope" 不存在');
 
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
@@ -133,7 +149,7 @@ describe('save_to_knowledge MCP tool', () => {
     const text = result.content[0].text;
     expect(text).toContain('已写入知识库');
     expect(text).toContain('版本 id "v_1" 不存在');
-    expect(text).toContain('需求 id "r_1" 不存在');
+    expect(text).toContain('需求 id "r_1" 已废弃');
     expect(text).toContain('项目 id "p_1" 不存在');
 
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
