@@ -18,7 +18,7 @@
 | 项 | 值 |
 |---|---|
 | dist 构建来源 commit | `1aed9ab`(feat(knowledge): 移除需求关联写入与展示；14 工具) |
-| 构建时间 | 2026-11-24 22:51 |
+| 构建时间 | 2026-11-24 22:39（shared 22:38 / backend 22:39 / frontend 22:40，按产物 mtime） |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
@@ -44,7 +44,7 @@ cd backend && npm run build
 
 # 3. 回写本文档「当前版本」:
 #    dist 构建来源 commit ← git log --oneline -1
-#    构建时间 ← 当前时间
+#    构建时间 ← 产物 mtime（stat backend/dist/interfaces/mcp/server.js），不是编辑文档的时刻
 
 # 4. 客户端无需改配置——Claude/ZCode 每次新会话都会重新拉起 stdio 进程,自动加载新 dist;
 #    已开着的旧会话需重启才能用新版。
