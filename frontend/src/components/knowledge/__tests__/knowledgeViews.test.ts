@@ -23,10 +23,12 @@ function doc(path: string, over: Partial<KnowledgeFileNode> = {}): KnowledgeFile
 
 const worklogTree: WorklogData = {
   projects: [{ id: 'p1', name: 'ai-task-flow', createdAt: 0 }],
+  programs: [{ id: 'g1', name: '建设主题', createdAt: 0 }],
   versions: [
     {
       id: 'v1',
       name: 'V8.0.8',
+      programId: 'g1',
       createdAt: 0,
       requirements: [{ id: 'r1', title: '需求一', createdAt: 0, entries: [] }],
     },

@@ -23,8 +23,9 @@ vi.mock('@/components/ui/toaster', () => ({
 
 const data: WorklogData = {
   projects: [{ id: 'p1', name: '资源加工平台', createdAt: 1 }],
+  programs: [{ id: 'g_1', name: '建设主题A', createdAt: 1 }],
   versions: [{
-    id: 'v_1', name: 'V8.0.8', createdAt: 1,
+    id: 'v_1', name: 'V8.0.8', programId: 'g_1', createdAt: 1,
     requirements: [{
       id: 'r_1', title: '澳门底层数据建设', projects: ['资源加工平台'], createdAt: 1,
       entries: [{
@@ -33,7 +34,7 @@ const data: WorklogData = {
       }],
     }],
   }, {
-    id: 'v_2', name: 'V8.0.7', createdAt: 0, requirements: [],
+    id: 'v_2', name: 'V8.0.7', programId: 'g_1', createdAt: 0, requirements: [],
   }],
 };
 
@@ -96,9 +97,10 @@ describe('VersionRequirementTree', () => {
   it('sorts versions by name descending with numeric awareness', () => {
     const sortData: WorklogData = {
       projects: [],
+      programs: [{ id: 'g_1', name: '主题', createdAt: 1 }],
       versions: [
-        { id: 'v9', name: 'V8.0.9', createdAt: 1, requirements: [] },
-        { id: 'v10', name: 'V8.0.10', createdAt: 2, requirements: [] },
+        { id: 'v9', name: 'V8.0.9', programId: 'g_1', createdAt: 1, requirements: [] },
+        { id: 'v10', name: 'V8.0.10', programId: 'g_1', createdAt: 2, requirements: [] },
       ],
     };
     render(<VersionRequirementTree data={sortData} selection={{}} onSelect={() => {}} />);
@@ -111,8 +113,10 @@ describe('VersionRequirementTree', () => {
     render(
       <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onCreateVersionClick={onCreateVersionClick} />,
     );
-    fireEvent.click(screen.getByText('新建版本'));
+    // 主题右键菜单也有「新建版本」,底部入口是最后一个
+    fireEvent.click(screen.getAllByText('新建版本').at(-1)!);
     expect(onCreateVersionClick).toHaveBeenCalledTimes(1);
+    expect(onCreateVersionClick).toHaveBeenCalledWith();
   });
 
   it('opens the requirement dialog from the version context menu', () => {
@@ -135,8 +139,8 @@ describe('VersionRequirementTree', () => {
     render(
       <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onRenameVersion={onRenameVersion} />,
     );
-    // 版本菜单先于需求菜单渲染,'重命名' 第一处属于版本行
-    fireEvent.click(screen.getAllByText('重命名')[0]);
+    // 渲染顺序:主题菜单 → 版本菜单 → 需求菜单;'重命名' 第二处属于版本行
+    fireEvent.click(screen.getAllByText('重命名')[1]);
     const input = screen.getByLabelText('新版本名');
     expect(input).toHaveValue('V8.0.8');
     fireEvent.change(input, { target: { value: 'V8.0.10' } });
@@ -154,16 +158,16 @@ describe('VersionRequirementTree', () => {
   });
 
   it('shows load-failed hint instead of empty state when tree fetch failed', () => {
-    const empty: WorklogData = { projects: [], versions: [] };
+    const empty: WorklogData = { projects: [], programs: [], versions: [] };
     render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} loadFailed />);
     expect(screen.getByText('加载失败，请刷新重试。')).toBeTruthy();
-    expect(screen.queryByText(/还没有版本/)).toBeNull();
+    expect(screen.queryByText(/还没有建设主题/)).toBeNull();
   });
 
-  it('shows the normal empty state when load succeeded with no versions', () => {
-    const empty: WorklogData = { projects: [], versions: [] };
+  it('shows the normal empty state when load succeeded with no programs', () => {
+    const empty: WorklogData = { projects: [], programs: [], versions: [] };
     render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} />);
-    expect(screen.getByText(/还没有版本/)).toBeTruthy();
+    expect(screen.getByText(/还没有建设主题。先新建主题，再建版本与需求。/)).toBeTruthy();
     expect(screen.queryByText(/加载失败/)).toBeNull();
   });
 

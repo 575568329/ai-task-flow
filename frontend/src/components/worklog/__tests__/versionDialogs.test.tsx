@@ -7,7 +7,7 @@ import { DeleteVersionDialog } from '../DeleteVersionDialog';
 import { RequirementDialog } from '../RequirementDialog';
 import { worklogApi } from '@/api/worklog';
 import { toast } from '@/components/ui/toaster';
-import type { WorklogProject } from '@ai-task-flow/shared';
+import type { WorklogProgram, WorklogProject } from '@ai-task-flow/shared';
 
 // Dialog 基于 @radix-ui/react-dialog,会解析到根 react@18(双 React),按 projectDictionary.test 先例 mock。
 vi.mock('@/components/ui/dialog', () => ({
@@ -64,6 +64,11 @@ const projects: WorklogProject[] = [
   { id: 'p2', name: '组卷', createdAt: 2 },
 ];
 
+const programs: WorklogProgram[] = [
+  { id: 'g_1', name: '澳门底层数据建设', createdAt: 1 },
+  { id: 'g_2', name: '题库升级', createdAt: 2 },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockedCreateVersion.mockResolvedValue({ id: 'v_new' });
@@ -75,36 +80,51 @@ afterEach(() => {
 });
 
 describe('VersionDialog', () => {
-  it('creates a version and shows a copyable id', async () => {
+  it('creates a version under the preselected program and shows a copyable id', async () => {
     const onCreated = vi.fn();
-    render(<VersionDialog open onClose={() => {}} onCreated={onCreated} />);
+    render(
+      <VersionDialog open programs={programs} defaultProgramId="g_1" onClose={() => {}} onCreated={onCreated} />,
+    );
 
+    expect(screen.getByLabelText('所属主题')).toHaveValue('g_1');
     fireEvent.change(screen.getByLabelText('版本名'), { target: { value: ' V8.0.9 ' } });
     fireEvent.change(screen.getByLabelText('描述(可选)'), { target: { value: '第八版' } });
     fireEvent.click(screen.getByRole('button', { name: '创建' }));
 
     expect(await screen.findByText('v_new')).toBeTruthy();
     expect(screen.getByTitle('复制 v_new')).toBeTruthy();
-    expect(mockedCreateVersion).toHaveBeenCalledWith({ name: 'V8.0.9', description: '第八版' });
+    expect(mockedCreateVersion).toHaveBeenCalledWith({
+      name: 'V8.0.9',
+      programId: 'g_1',
+      description: '第八版',
+    });
     expect(onCreated).toHaveBeenCalledWith({ id: 'v_new', name: 'V8.0.9' });
     expect(toast.success).toHaveBeenCalledWith('版本已创建:V8.0.9');
   });
 
-  it('disables create until a non-blank name is entered', () => {
-    render(<VersionDialog open onClose={() => {}} />);
+  it('requires both a program and a non-blank name to create', () => {
+    render(<VersionDialog open programs={programs} onClose={() => {}} />);
     const create = screen.getByRole('button', { name: '创建' });
     expect(create).toBeDisabled();
 
+    fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
+    expect(create).toBeDisabled(); // 主题未选
+
+    fireEvent.change(screen.getByLabelText('所属主题'), { target: { value: 'g_2' } });
+    expect(create).toBeEnabled();
+
     fireEvent.change(screen.getByLabelText('版本名'), { target: { value: '   ' } });
     expect(create).toBeDisabled();
+  });
 
-    fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
-    expect(create).toBeEnabled();
+  it('auto-selects the only program when none is passed explicitly', () => {
+    render(<VersionDialog open programs={[programs[0]]} onClose={() => {}} />);
+    expect(screen.getByLabelText('所属主题')).toHaveValue('g_1');
   });
 
   it('toasts backend error and keeps the form when creation fails', async () => {
     mockedCreateVersion.mockRejectedValueOnce(new Error('版本已存在'));
-    render(<VersionDialog open onClose={() => {}} />);
+    render(<VersionDialog open programs={programs} defaultProgramId="g_1" onClose={() => {}} />);
 
     fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
     fireEvent.click(screen.getByRole('button', { name: '创建' }));
@@ -116,7 +136,9 @@ describe('VersionDialog', () => {
 
   it('separates refresh failure from create failure after the version is created', async () => {
     const onCreated = vi.fn(async () => { throw new Error('refresh failed'); });
-    render(<VersionDialog open onClose={() => {}} onCreated={onCreated} />);
+    render(
+      <VersionDialog open programs={programs} defaultProgramId="g_1" onClose={() => {}} onCreated={onCreated} />,
+    );
 
     fireEvent.change(screen.getByLabelText('版本名'), { target: { value: 'V8.0.9' } });
     fireEvent.click(screen.getByRole('button', { name: '创建' }));

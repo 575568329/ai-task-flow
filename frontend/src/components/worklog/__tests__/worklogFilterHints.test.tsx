@@ -37,6 +37,8 @@ vi.mock('../VersionRequirementTree', () => ({
   ),
 }));
 
+vi.mock('../ProgramDialog', () => ({ ProgramDialog: () => null }));
+vi.mock('../DeleteProgramDialog', () => ({ DeleteProgramDialog: () => null }));
 vi.mock('../VersionDialog', () => ({ VersionDialog: () => null }));
 vi.mock('../RequirementDialog', () => ({ RequirementDialog: () => null }));
 vi.mock('../DeleteVersionDialog', () => ({ DeleteVersionDialog: () => null }));
@@ -85,8 +87,9 @@ const tree: WorklogData = {
     { id: 'p_2', name: '项目B', createdAt: 2 },
     { id: 'p_3', name: '项目C', createdAt: 3 },
   ],
+  programs: [{ id: 'g_1', name: '建设主题', createdAt: 1 }],
   versions: [{
-    id: 'v_1', name: 'V1', createdAt: 1,
+    id: 'v_1', name: 'V1', programId: 'g_1', createdAt: 1,
     requirements: [{
       id: 'r_1', title: '需求A', projects: ['项目A'], createdAt: 1,
       entries: [

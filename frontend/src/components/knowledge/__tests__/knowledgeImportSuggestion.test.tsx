@@ -64,7 +64,7 @@ const mockedGetTree = vi.mocked(worklogApi.getTree);
 beforeEach(() => {
   vi.clearAllMocks();
   mockedFetchManifest.mockResolvedValue(manifest);
-  mockedGetTree.mockResolvedValue({ projects: [], versions: [] });
+  mockedGetTree.mockResolvedValue({ projects: [], programs: [], versions: [] });
   mockedSuggestion.mockResolvedValue({ suggested: true, sourceCount: 67, targetCount: 8 });
   mockedImport.mockResolvedValue({ copied: 67, skipped: 3, conflicts: [], errors: [] });
 });

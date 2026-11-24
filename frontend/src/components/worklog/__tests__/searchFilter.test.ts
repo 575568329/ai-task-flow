@@ -16,9 +16,10 @@ const data: WorklogData = {
     { id: 'p_1', name: '搜题平台', createdAt: 1 },
     { id: 'p_2', name: 'ai-task-flow', createdAt: 3 },
   ],
+  programs: [{ id: 'g_1', name: '建设主题', createdAt: 1 }],
   versions: [
     {
-      id: 'v_1', name: 'V8.0.5', createdAt: 3,
+      id: 'v_1', name: 'V8.0.5', programId: 'g_1', createdAt: 3,
       requirements: [
         {
           id: 'r_1', title: '澳门底层数据建设', projects: ['搜题平台'], createdAt: 1,
@@ -36,7 +37,7 @@ const data: WorklogData = {
       ],
     },
     {
-      id: 'v_2', name: 'v0.1.0', createdAt: 9,
+      id: 'v_2', name: 'v0.1.0', programId: 'g_1', createdAt: 9,
       requirements: [
         {
           id: 'r_3', title: '白屏修复', createdAt: 9,
@@ -118,8 +119,9 @@ describe('filterEntries', () => {
   it('should filter by related project', () => {
     const relatedData: WorklogData = {
       projects: [{ id: 'p_a', name: 'A', createdAt: 1 }],
+      programs: [],
       versions: [{
-        id: 'v_a', name: 'V1', createdAt: 1,
+        id: 'v_a', name: 'V1', programId: 'g_1', createdAt: 1,
         requirements: [{
           id: 'r_a', title: 'R1', createdAt: 1,
           entries: [
@@ -152,8 +154,9 @@ describe('filterEntries', () => {
         { id: 'p_1', name: 'P1', createdAt: 1 },
         { id: 'p_2', name: 'P2', createdAt: 2 },
       ],
+      programs: [],
       versions: [{
-        id: 'v_1', name: 'V1', createdAt: 1,
+        id: 'v_1', name: 'V1', programId: 'g_1', createdAt: 1,
         requirements: [
           {
             id: 'r_1', title: 'R1', createdAt: 1,

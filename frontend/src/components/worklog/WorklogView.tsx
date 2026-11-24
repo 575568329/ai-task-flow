@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/WorklogView.tsx
-// 工作记录页(应用默认落地视图):左栏「版本 → 需求」树 + 右栏条目流。
+// 工作记录页(应用默认落地视图):左栏「建设主题 → 版本 → 需求」树 + 右栏条目流。
 // 数据局部 state(单一树,能局部不全局);每次操作后重拉全树(读不缓存,与后端锁协议一致)。
 // 项目已降为字典(路径归属/筛选),路径绑定与三态展示移到「项目字典」弹窗。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,6 +14,8 @@ import type {
   WorkStage,
 } from '@ai-task-flow/shared';
 import { VersionRequirementTree, type RequirementSelection } from './VersionRequirementTree';
+import { ProgramDialog } from './ProgramDialog';
+import { DeleteProgramDialog } from './DeleteProgramDialog';
 import { VersionDialog } from './VersionDialog';
 import { RequirementDialog } from './RequirementDialog';
 import { DeleteVersionDialog } from './DeleteVersionDialog';
@@ -30,7 +32,7 @@ import { filterEntries, getOutsideProjects } from './searchFilter';
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export function WorklogView() {
-  const [data, setData] = useState<WorklogData>({ projects: [], versions: [] });
+  const [data, setData] = useState<WorklogData>({ projects: [], programs: [], versions: [] });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selection, setSelection] = useState<RequirementSelection>({});
@@ -42,10 +44,14 @@ export function WorklogView() {
   const [projectFilter, setProjectFilter] = useState(''); // 实际归属项目筛选(项目名,空=不过滤)
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-  /** 弹窗目标:新建版本 / 新建需求(所属版本 id) / 删除版本(版本 id) */
+  /** 新建主题弹窗 */
+  const [programDialogOpen, setProgramDialogOpen] = useState(false);
+  /** 弹窗目标:新建版本(从主题行右键进入时预选主题) / 新建需求(所属版本 id) / 删除版本 / 删除主题 */
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
+  const [versionDialogProgramId, setVersionDialogProgramId] = useState<string | undefined>(undefined);
   const [requirementVersionId, setRequirementVersionId] = useState<string | null>(null);
   const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
+  const [deleteProgramId, setDeleteProgramId] = useState<string | null>(null);
 
   /** 竞态守卫:只有最新一次 refresh 的响应可以落盘(慢的旧响应丢弃) */
   const refreshSeq = useRef(0);
@@ -167,10 +173,32 @@ export function WorklogView() {
     }
   };
 
-  /** 版本创建成功:刷新并把选择落在新版本上(树对新版本天然展开) */
+  /** 打开新建版本弹窗;从主题行右键进入时预选该主题 */
+  const openVersionDialog = (programId?: string) => {
+    setVersionDialogProgramId(programId);
+    setVersionDialogOpen(true);
+  };
+
+  /** 版本创建成功:刷新并把选择落在新版本上(树对新版本天然展开所属主题) */
   const handleVersionCreated = async ({ id }: { id: string; name: string }) => {
     setSelection({ versionId: id });
     await refresh();
+  };
+
+  /** 主题创建成功:刷新(弹窗保持打开以展示可复制的 g_xxx) */
+  const handleProgramCreated = async () => {
+    await refresh();
+  };
+
+  /** 强确认弹窗的删除动作:级联删除该主题下版本/需求/条目,失败向上抛由弹窗提示 */
+  const confirmDeleteProgram = async (programId: string) => {
+    const versionIds = new Set(
+      data.versions.filter((v) => v.programId === programId).map((v) => v.id),
+    );
+    await worklogApi.deleteProgram(programId);
+    if (selection.versionId && versionIds.has(selection.versionId)) setSelection({});
+    await refresh();
+    toast.success('主题已删除');
   };
 
   /** 需求创建成功:刷新并选中新需求(树会自动展开所属版本) */
@@ -287,6 +315,9 @@ export function WorklogView() {
   const deleteTargetVersion = deleteVersionId
     ? data.versions.find((v) => v.id === deleteVersionId)
     : undefined;
+  const deleteTargetProgram = deleteProgramId
+    ? data.programs.find((p) => p.id === deleteProgramId)
+    : undefined;
 
   return (
     <WorkspaceLayout
@@ -298,7 +329,7 @@ export function WorklogView() {
               <Button
                 variant="ghost" size="sm" className="size-7 p-0"
                 title="新建版本"
-                onClick={() => setVersionDialogOpen(true)}
+                onClick={() => openVersionDialog()}
               >
                 <Plus className="size-3.5" />
               </Button>
@@ -327,9 +358,14 @@ export function WorklogView() {
             selection={selection}
             loadFailed={loadFailed}
             onSelect={handleSelect}
-            onCreateVersionClick={() => setVersionDialogOpen(true)}
+            onCreateProgramClick={() => setProgramDialogOpen(true)}
+            onCreateVersionClick={openVersionDialog}
             onCreateRequirementClick={(versionId) => setRequirementVersionId(versionId)}
             onDeleteVersionClick={(versionId) => setDeleteVersionId(versionId)}
+            onDeleteProgramClick={(programId) => setDeleteProgramId(programId)}
+            onRenameProgram={(programId, newName) => runTreeAction(
+              () => worklogApi.renameProgram(programId, newName), '主题已重命名',
+            )}
             onRenameVersion={(versionId, newName) => runTreeAction(
               () => worklogApi.renameVersion(versionId, newName), '版本已重命名',
             )}
@@ -464,11 +500,31 @@ export function WorklogView() {
         </div>
       )}
 
+      <ProgramDialog
+        open={programDialogOpen}
+        onClose={() => setProgramDialogOpen(false)}
+        onCreated={handleProgramCreated}
+      />
+
       <VersionDialog
         open={versionDialogOpen}
-        onClose={() => setVersionDialogOpen(false)}
+        programs={data.programs}
+        defaultProgramId={versionDialogProgramId}
+        onClose={() => {
+          setVersionDialogOpen(false);
+          setVersionDialogProgramId(undefined);
+        }}
         onCreated={handleVersionCreated}
       />
+
+      {deleteTargetProgram && (
+        <DeleteProgramDialog
+          open
+          programName={deleteTargetProgram.name}
+          onClose={() => setDeleteProgramId(null)}
+          onConfirm={() => confirmDeleteProgram(deleteTargetProgram.id)}
+        />
+      )}
 
       {requirementTargetVersion && (
         <RequirementDialog

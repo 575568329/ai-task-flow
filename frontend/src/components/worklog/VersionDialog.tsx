@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/VersionDialog.tsx
-// 新建版本弹窗:名称 + 描述。创建成功后弹窗内常驻展示 v_xxx 与复制按钮,
+// 新建版本弹窗:所属主题(必选)+ 名称 + 描述。创建成功后弹窗内常驻展示 v_xxx 与复制按钮,
 // 并通过 onCreated 通知父组件刷新、把选择落到新版本(树对新版本天然展开)。
 // 不在创建成功后自动关闭:id 是让 AI 精确引用的入口,必须让用户看得到、复制得到。
 import { useEffect, useState } from 'react';
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { CopyIdButton } from '@/components/common/CopyIdButton';
 import { toast } from '@/components/ui/toaster';
 import { worklogApi } from '@/api/worklog';
+import type { WorklogProgram } from '@ai-task-flow/shared';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -22,32 +23,49 @@ export interface VersionCreatedResult {
 
 interface VersionDialogProps {
   open: boolean;
+  /** 主题列表(来自全树 data.programs):版本必须归属其一 */
+  programs: WorklogProgram[];
+  /** 从主题行右键进入时预选该主题;未传则只有一个主题时自动选中 */
+  defaultProgramId?: string;
   onClose: () => void;
   /** 创建成功后通知父组件刷新并展开/选中该版本;弹窗保持打开以展示可复制的 id */
   onCreated?: (created: VersionCreatedResult) => void | Promise<void>;
 }
 
-export function VersionDialog({ open, onClose, onCreated }: VersionDialogProps) {
+export function VersionDialog({
+  open, programs, defaultProgramId, onClose, onCreated,
+}: VersionDialogProps) {
   const [name, setName] = useState('');
+  const [programId, setProgramId] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   /** 创建成功后的版本 id;非空即进入成功态(展示 id + 复制) */
   const [createdId, setCreatedId] = useState<string | null>(null);
 
-  // 每次重新打开视为一次新会话,清空上一次的输入与成功态
+  // 每次重新打开视为一次新会话,清空上一次的输入与成功态。
+  // 预选优先级:主题行右键带入的 id > 仅有一个主题时自动选中 > 空(强制用户选择)。
+  // 不依赖 programs 引用:创建成功后父组件 refresh 会换新数组,依赖它会把成功态(可复制 id)擦掉。
   useEffect(() => {
     if (!open) return;
     setName('');
+    setProgramId(defaultProgramId ?? (programs.length === 1 ? programs[0].id : ''));
     setDescription('');
     setSaving(false);
     setCreatedId(null);
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在意「打开/预选变化」这一次会话
+  }, [open, defaultProgramId]);
 
-  const canSubmit = name.trim().length > 0 && !saving;
+  // 弹窗打开期间主题被外部删除:清空失效预选,避免提交时打到已不存在的主题
+  useEffect(() => {
+    if (!open || !programId) return;
+    if (!programs.some((p) => p.id === programId)) setProgramId('');
+  }, [open, programId, programs]);
+
+  const canSubmit = name.trim().length > 0 && programId.length > 0 && !saving;
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed || saving) return;
+    if (!trimmed || !programId || saving) return;
     const trimmedDescription = description.trim();
     // 创建与刷新分两个异常边界:创建成功后的刷新失败绝不能报成「创建失败」
     let result: { id: string } | null = null;
@@ -55,6 +73,7 @@ export function VersionDialog({ open, onClose, onCreated }: VersionDialogProps) 
     try {
       result = await worklogApi.createVersion({
         name: trimmed,
+        programId,
         ...(trimmedDescription ? { description: trimmedDescription } : {}),
       });
     } catch (err) {
@@ -80,7 +99,7 @@ export function VersionDialog({ open, onClose, onCreated }: VersionDialogProps) 
         <DialogHeader>
           <DialogTitle>新建版本</DialogTitle>
           <DialogDescription>
-            版本是工作记录的最高层级(如 V8.0.9)。创建后把版本 ID 给 AI,即可在其下精确记录。
+            版本归属建设主题(如「澳门底层数据建设」)。创建后把版本 ID 给 AI,即可在其下精确记录。
           </DialogDescription>
         </DialogHeader>
 
@@ -100,6 +119,26 @@ export function VersionDialog({ open, onClose, onCreated }: VersionDialogProps) 
           </div>
         ) : (
           <>
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">所属主题</span>
+              {programs.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  还没有建设主题。请先在左侧新建主题,再回来建版本。
+                </p>
+              ) : (
+                <select
+                  aria-label="所属主题"
+                  value={programId}
+                  onChange={(e) => setProgramId(e.target.value)}
+                  className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                >
+                  <option value="">请选择主题</option>
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.id}>{program.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
             <div className="space-y-1.5">
               <span className="text-sm font-medium">版本名</span>
               <Input

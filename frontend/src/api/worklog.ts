@@ -4,6 +4,7 @@
 // 全部 silent:http 层不弹 toast,由 WorklogView 各 handler 统一提示(避免双重 toast)。
 import type {
   WorklogData,
+  WorklogProgramCreateRequest,
   WorklogRecordRequest,
   WorklogRecordResponse,
   WorklogUpdateRequest,
@@ -27,7 +28,19 @@ export const worklogApi = {
   deleteEntry: (id: string) => http.delete<{ ok: boolean }>(`/worklog/entries/${id}`, true),
 
   // ------------------------------------------------------------------
-  // 版本
+  // 建设主题(顶层,版本通过 programId 归属)
+  // ------------------------------------------------------------------
+  createProgram: (data: WorklogProgramCreateRequest) =>
+    http.post<{ id: string }>('/worklog/programs', data, true),
+
+  renameProgram: (id: string, newName: string) =>
+    http.post<{ ok: boolean }>(`/worklog/programs/${encodeURIComponent(id)}/rename`, { newName }, true),
+
+  deleteProgram: (id: string) =>
+    http.delete<{ ok: boolean }>(`/worklog/programs/${encodeURIComponent(id)}`, true),
+
+  // ------------------------------------------------------------------
+  // 版本(必须归属主题)
   // ------------------------------------------------------------------
   createVersion: (data: WorklogVersionCreateRequest) =>
     http.post<{ id: string }>('/worklog/versions', data, true),
