@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/WorklogView.tsx
-// 工作记录页(应用默认落地视图):左栏「建设主题 → 版本 → 需求」树 + 右栏条目流。
+// 工作记录页(应用默认落地视图):左栏「建设主题 → 版本」树 + 右栏条目流。
 // 数据局部 state(单一树,能局部不全局);每次操作后重拉全树(读不缓存,与后端锁协议一致)。
 // 项目已降为字典(路径归属/筛选),路径绑定与三态展示移到「项目字典」弹窗。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,11 +13,10 @@ import type {
   WorklogRecordRequest,
   WorkStage,
 } from '@ai-task-flow/shared';
-import { VersionRequirementTree, type RequirementSelection } from './VersionRequirementTree';
+import { VersionRequirementTree, type VersionSelection } from './VersionRequirementTree';
 import { ProgramDialog } from './ProgramDialog';
 import { DeleteProgramDialog } from './DeleteProgramDialog';
 import { VersionDialog } from './VersionDialog';
-import { RequirementDialog } from './RequirementDialog';
 import { DeleteVersionDialog } from './DeleteVersionDialog';
 import { ProjectDictionaryDialog } from './ProjectDictionaryDialog';
 import { EntryItem } from './EntryItem';
@@ -27,7 +26,7 @@ import { WorkStageMultiSelect } from '@/components/common/WorkStageMultiSelect';
 import { SearchInput } from '@/components/common/SearchInput';
 import { WorkspaceLayout, WorkspaceSidebar, WorkspaceToolbar } from '@/components/layout/WorkspaceLayout';
 import type { StageFilter } from '@/lib/workStage';
-import { filterEntries, getOutsideProjects } from './searchFilter';
+import { filterEntries } from './searchFilter';
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -35,7 +34,7 @@ export function WorklogView() {
   const [data, setData] = useState<WorklogData>({ projects: [], programs: [], versions: [] });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [selection, setSelection] = useState<RequirementSelection>({});
+  const [selection, setSelection] = useState<VersionSelection>({});
   const [mode, setMode] = useState<'entries' | 'guide'>('entries');
   const [creating, setCreating] = useState(false);
   const [keyword, setKeyword] = useState(''); // 全局模糊搜索(标题/详情/文件路径)
@@ -46,10 +45,9 @@ export function WorklogView() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   /** 新建主题弹窗 */
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
-  /** 弹窗目标:新建版本(从主题行右键进入时预选主题) / 新建需求(所属版本 id) / 删除版本 / 删除主题 */
+  /** 弹窗目标:新建版本(从主题行右键进入时预选主题) / 删除版本 / 删除主题 */
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [versionDialogProgramId, setVersionDialogProgramId] = useState<string | undefined>(undefined);
-  const [requirementVersionId, setRequirementVersionId] = useState<string | null>(null);
   const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
   const [deleteProgramId, setDeleteProgramId] = useState<string | null>(null);
 
@@ -63,14 +61,10 @@ export function WorklogView() {
       if (seq !== refreshSeq.current) return; // 已有更新的请求在途,丢弃本次
       setData(tree);
       setLoadFailed(false);
-      // selection 跟随数据:指向的版本/需求不存在(被改名/删除)则回退
+      // selection 跟随数据:指向的版本不存在(被改名/删除)则回退
       setSelection((prev) => {
         if (!prev.versionId) return prev;
-        const version = tree.versions.find((v) => v.id === prev.versionId);
-        if (!version) return {};
-        if (prev.requirementId && !version.requirements.some((r) => r.id === prev.requirementId)) {
-          return { versionId: prev.versionId };
-        }
+        if (!tree.versions.some((v) => v.id === prev.versionId)) return {};
         return prev;
       });
     } catch {
@@ -93,7 +87,7 @@ export function WorklogView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打点变化即意图
   }, [worklogEnterTick]);
 
-  // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择(版本/需求)过滤。新在前。
+  // 可见条目:keyword 非空 → 全局搜索(忽略树选择);否则按树选择(版本)过滤。新在前。
   const { entries: visibleEntries, isSearching } = useMemo(
     () => filterEntries(data, selection, keyword, stageFilter, relatedFilter, projectFilter),
     [data, selection, keyword, stageFilter, relatedFilter, projectFilter],
@@ -105,11 +99,9 @@ export function WorklogView() {
   const relatedProjectOptions = useMemo(() => {
     const names = new Set<string>();
     for (const version of data.versions) {
-      for (const requirement of version.requirements) {
-        for (const entry of requirement.entries) {
-          for (const name of entry.relatedProjects ?? []) {
-            if (name) names.add(name);
-          }
+      for (const entry of version.entries) {
+        for (const name of entry.relatedProjects ?? []) {
+          if (name) names.add(name);
         }
       }
     }
@@ -121,7 +113,7 @@ export function WorklogView() {
     if (relatedFilter && !relatedProjectOptions.includes(relatedFilter)) setRelatedFilter('');
   }, [relatedFilter, relatedProjectOptions]);
 
-  // 「实际归属项目」下拉选项:项目字典名称,排序与需求弹窗一致
+  // 「实际归属项目」下拉选项:项目字典名称,按名称排序
   const projectOptions = useMemo(
     () => data.projects.map((p) => p.name).sort((a, b) => a.localeCompare(b)),
     [data.projects],
@@ -132,13 +124,9 @@ export function WorklogView() {
     if (projectFilter && !projectOptions.includes(projectFilter)) setProjectFilter('');
   }, [projectFilter, projectOptions]);
 
-  // 新建条目的版本/需求下拉数据
+  // 新建条目的版本下拉数据
   const versionOptions = useMemo(
-    () => data.versions.map((v) => ({
-      id: v.id,
-      name: v.name,
-      requirements: v.requirements.map((r) => ({ id: r.id, title: r.title })),
-    })),
+    () => data.versions.map((v) => ({ id: v.id, name: v.name })),
     [data],
   );
 
@@ -146,14 +134,9 @@ export function WorklogView() {
     () => data.versions.find((v) => v.id === selection.versionId),
     [data, selection.versionId],
   );
-  const selectedRequirement = useMemo(
-    () => selectedVersion?.requirements.find((r) => r.id === selection.requirementId),
-    [selectedVersion, selection.requirementId],
-  );
-  // 需求范围外改动:条目实际项目不在需求计划项目里(只提示,不自动扩范围)
-  const outsideProjects = useMemo(
-    () => (selectedRequirement ? getOutsideProjects(selectedRequirement) : []),
-    [selectedRequirement],
+  const selectedProgram = useMemo(
+    () => data.programs.find((p) => p.id === selectedVersion?.programId),
+    [data.programs, selectedVersion],
   );
 
   /** 点击条目上的关联项目徽标:按该项目名筛选(清空关键词,保留当前树选择) */
@@ -190,7 +173,7 @@ export function WorklogView() {
     await refresh();
   };
 
-  /** 强确认弹窗的删除动作:级联删除该主题下版本/需求/条目,失败向上抛由弹窗提示 */
+  /** 强确认弹窗的删除动作:级联删除该主题下版本与条目,失败向上抛由弹窗提示 */
   const confirmDeleteProgram = async (programId: string) => {
     const versionIds = new Set(
       data.versions.filter((v) => v.programId === programId).map((v) => v.id),
@@ -201,14 +184,6 @@ export function WorklogView() {
     toast.success('主题已删除');
   };
 
-  /** 需求创建成功:刷新并选中新需求(树会自动展开所属版本) */
-  const handleRequirementCreated = async (
-    { versionId, id }: { id: string; versionId: string; title: string },
-  ) => {
-    setSelection({ versionId, requirementId: id });
-    await refresh();
-  };
-
   /** 强确认弹窗的删除动作:失败向上抛,由弹窗提示并保持打开 */
   const confirmDeleteVersion = async (versionId: string) => {
     await worklogApi.deleteVersion(versionId);
@@ -217,16 +192,8 @@ export function WorklogView() {
     toast.success('版本已删除');
   };
 
-  const handleDeleteRequirement = async (versionId: string, requirementId: string) => {
-    await runTreeAction(async () => {
-      await worklogApi.deleteRequirement(versionId, requirementId);
-      if (selection.requirementId === requirementId) setSelection({ versionId });
-    }, '需求已删除');
-  };
-
   const handleCreate = async (input: {
     versionId: string;
-    requirementId: string;
     title: string;
     detail: string;
     tags?: string[];
@@ -236,7 +203,6 @@ export function WorklogView() {
       // 后端把空/缺失 stage 视为「未标注」;shared 的 stage 已可选,直接用请求类型,无需窄化断言
       const payload: WorklogRecordRequest = {
         versionId: input.versionId,
-        requirementId: input.requirementId,
         title: input.title,
         detail: input.detail,
         ...(input.tags ? { tags: input.tags } : {}),
@@ -245,7 +211,7 @@ export function WorklogView() {
       const result = await worklogApi.record(payload);
       setCreating(false);
       setMode('entries');
-      setSelection({ versionId: input.versionId, requirementId: input.requirementId });
+      setSelection({ versionId: input.versionId });
       await refresh();
       toast.success('已记录');
       // 未知关联项目 / 路径未归属等非阻塞提示(后端 warnings)
@@ -279,7 +245,7 @@ export function WorklogView() {
     }
   };
 
-  const handleSelect = (sel: RequirementSelection) => {
+  const handleSelect = (sel: VersionSelection) => {
     setSelection(sel);
     setMode('entries'); // 指南模式下点树 = 返回条目列表
   };
@@ -291,7 +257,7 @@ export function WorklogView() {
   const emptyHint = loadFailed
     ? '加载失败,点左上角刷新重试(后端可能未启动)。'
     : noSelection
-      ? '数据量较大,默认不加载全部。请在左侧选择版本或需求查看记录。'
+      ? '数据量较大,默认不加载全部。请在左侧选择版本查看记录。'
       : relatedFilter
         ? `没有关联「${relatedFilter}」的记录。`
         : isSearching || stageFilter.length > 0 || projectFilter
@@ -300,18 +266,13 @@ export function WorklogView() {
 
   const titleText = isSearching
     ? `搜索「${keyword.trim()}」`
-    : selection.requirementId
-      ? `${selectedVersion?.name ?? '版本'} / ${selectedRequirement?.title ?? '需求'}`
-      : selection.versionId
-        ? `${selectedVersion?.name ?? '版本'}(全部需求)`
-        : relatedFilter
-          ? `关联「${relatedFilter}」`
-          : '工作记录';
+    : selection.versionId
+      ? `${selectedProgram?.name ?? '主题'} / ${selectedVersion?.name ?? '版本'}`
+      : relatedFilter
+        ? `关联「${relatedFilter}」`
+        : '工作记录';
 
   // 弹窗目标从最新树数据反查;目标被外部删除时弹窗自动卸载
-  const requirementTargetVersion = requirementVersionId
-    ? data.versions.find((v) => v.id === requirementVersionId)
-    : undefined;
   const deleteTargetVersion = deleteVersionId
     ? data.versions.find((v) => v.id === deleteVersionId)
     : undefined;
@@ -360,7 +321,6 @@ export function WorklogView() {
             onSelect={handleSelect}
             onCreateProgramClick={() => setProgramDialogOpen(true)}
             onCreateVersionClick={openVersionDialog}
-            onCreateRequirementClick={(versionId) => setRequirementVersionId(versionId)}
             onDeleteVersionClick={(versionId) => setDeleteVersionId(versionId)}
             onDeleteProgramClick={(programId) => setDeleteProgramId(programId)}
             onRenameProgram={(programId, newName) => runTreeAction(
@@ -369,10 +329,6 @@ export function WorklogView() {
             onRenameVersion={(versionId, newName) => runTreeAction(
               () => worklogApi.renameVersion(versionId, newName), '版本已重命名',
             )}
-            onRenameRequirement={(versionId, requirementId, newTitle) => runTreeAction(
-              () => worklogApi.renameRequirement(versionId, requirementId, newTitle), '需求已重命名',
-            )}
-            onDeleteRequirement={(versionId, requirementId) => handleDeleteRequirement(versionId, requirementId)}
           />
         </WorkspaceSidebar>
       )}
@@ -382,7 +338,7 @@ export function WorklogView() {
             <SearchInput
               value={keyword}
               onChange={setKeyword}
-              placeholder="搜索需求:标题 / 详情 / 文件路径(全局,不分版本)"
+              placeholder="搜索条目:标题 / 详情 / 文件路径(全局,不分版本)"
               ariaLabel="搜索工作记录"
             />
           )}
@@ -405,7 +361,7 @@ export function WorklogView() {
               {projectOptions.length > 0 && (
                 <select
                   aria-label="按项目筛选"
-                  title="只看实际改动归属指定项目的记录(可与版本/需求选择叠加)"
+                  title="只看实际改动归属指定项目的记录(可与版本选择叠加)"
                   value={projectFilter}
                   onChange={(e) => setProjectFilter(e.target.value)}
                   className="border-input bg-background h-8 w-32 shrink-0 rounded-md border px-2 text-xs"
@@ -462,17 +418,10 @@ export function WorklogView() {
         <AiGuideView />
       ) : (
         <div className="mx-auto max-w-3xl space-y-3 p-4 @xl:p-6">
-          {outsideProjects.length > 0 && !isSearching && !relatedFilter && (
-            <p className="text-muted-foreground text-xs">
-              存在范围外改动：{outsideProjects.join('、')}
-            </p>
-          )}
-
           {creating && (
             <NewEntryForm
               versions={versionOptions}
               defaultVersionId={selection.versionId ?? ''}
-              defaultRequirementId={selection.requirementId ?? ''}
               onCreate={handleCreate}
               onCancel={() => setCreating(false)}
             />
@@ -481,15 +430,11 @@ export function WorklogView() {
           {visibleEntries.length === 0 && !creating ? (
             <p className="text-muted-foreground py-12 text-center text-sm">{emptyHint}</p>
           ) : (
-            visibleEntries.map(({ entry, version, requirement }) => (
+            visibleEntries.map(({ entry, version }) => (
               <EntryItem
                 key={entry.id}
                 entry={entry}
-                contextLabel={
-                  isSearching || relatedFilter
-                    ? `${version} / ${requirement}`
-                    : (!selection.requirementId ? requirement : undefined)
-                }
+                contextLabel={isSearching || relatedFilter ? version : undefined}
                 expandAll={expandAll}
                 onSave={handleSave}
                 onDelete={handleDeleteEntry}
@@ -523,17 +468,6 @@ export function WorklogView() {
           programName={deleteTargetProgram.name}
           onClose={() => setDeleteProgramId(null)}
           onConfirm={() => confirmDeleteProgram(deleteTargetProgram.id)}
-        />
-      )}
-
-      {requirementTargetVersion && (
-        <RequirementDialog
-          open
-          versionId={requirementTargetVersion.id}
-          versionName={requirementTargetVersion.name}
-          projects={data.projects}
-          onClose={() => setRequirementVersionId(null)}
-          onCreated={handleRequirementCreated}
         />
       )}
 

@@ -1,6 +1,6 @@
 // frontend/src/components/worklog/DeleteVersionDialog.tsx
 // 删除版本强确认弹窗:必须手工输入完整版本名才能启用「确认删除」。
-// 删除会级联该版本下全部需求与条目(后端自动快照备份),故不提供「一键确认」。
+// 删除会级联该版本下全部条目(后端自动快照备份),故不提供「一键确认」。
 // 实际删除动作由父组件通过 onConfirm 注入(便于复用统一刷新/选中回退逻辑)。
 import { useEffect, useState } from 'react';
 import {
@@ -55,7 +55,7 @@ export function DeleteVersionDialog({
         <DialogHeader>
           <DialogTitle>删除版本 · {versionName}</DialogTitle>
           <DialogDescription>
-            删除会级联移除该版本下的全部需求与条目(删除前自动快照备份),不可撤销。
+            删除会级联移除该版本下的全部条目(删除前自动快照备份),不可撤销。
             请输入完整版本名以确认。
           </DialogDescription>
         </DialogHeader>

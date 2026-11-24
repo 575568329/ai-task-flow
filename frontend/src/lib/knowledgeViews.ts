@@ -34,9 +34,11 @@ export interface DocGroup {
 /** worklog 树的 id → 名称映射 + 下拉选项(前端只读,失败时保持空索引) */
 export interface WorklogIndex {
   versionNames: Map<string, string>;
+  /** 需求层已从 worklog 移除:仅保留字段以兼容旧文档 frontmatter,恒为空 */
   requirementNames: Map<string, string>;
   projectNames: Map<string, string>;
   versions: Array<{ id: string; name: string }>;
+  /** 需求层已从 worklog 移除:恒为空(Task 6 正式删除) */
   requirements: Array<{ id: string; title: string; versionId: string }>;
   projects: Array<{ id: string; name: string }>;
 }
@@ -52,21 +54,13 @@ export function emptyWorklogIndex(): WorklogIndex {
   };
 }
 
-/** 由 worklog 全树构建索引(项目字典 + 版本/需求两级) */
+/** 由 worklog 全树构建索引(项目字典 + 版本);需求层已移除,旧文档需求关联退化为按 id 展示 */
 export function buildWorklogIndex(tree: WorklogData): WorklogIndex {
   const index = emptyWorklogIndex();
 
   for (const version of tree.versions) {
     index.versionNames.set(version.id, version.name);
     index.versions.push({ id: version.id, name: version.name });
-    for (const requirement of version.requirements) {
-      index.requirementNames.set(requirement.id, requirement.title);
-      index.requirements.push({
-        id: requirement.id,
-        title: requirement.title,
-        versionId: version.id,
-      });
-    }
   }
 
   for (const project of tree.projects) {

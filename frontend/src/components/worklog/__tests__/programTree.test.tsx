@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/__tests__/programTree.test.tsx
-// 四层树(建设主题 → 版本 → 需求):主题行计数/复制 id、折叠、右键新建版本预选主题、
+// 两层树(建设主题 → 版本):主题行计数/复制 id、折叠、右键新建版本预选主题、
 // 重命名/删除主题回调;无主题空态。
 // 主题创建弹窗:创建成功后常驻展示可复制的 g_xxx;删除主题:输入主题名强确认。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -48,8 +48,7 @@ const data: WorklogData = {
   projects: [],
   programs: [{ id: 'g_1', name: '澳门底层数据建设', createdAt: 1 }],
   versions: [{
-    id: 'v_1', name: 'V8.0.8', programId: 'g_1', createdAt: 1,
-    requirements: [{ id: 'r_1', title: '需求A', createdAt: 1, entries: [] }],
+    id: 'v_1', name: 'V8.0.8', programId: 'g_1', createdAt: 1, entries: [],
   }],
 };
 
@@ -65,11 +64,10 @@ afterEach(() => {
 });
 
 describe('VersionRequirementTree 建设主题层', () => {
-  it('renders program → version → requirement', () => {
+  it('renders program → version', () => {
     render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
     expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
     expect(screen.getByText('V8.0.8')).toBeTruthy();
-    expect(screen.getByText('需求A')).toBeTruthy();
   });
 
   it('shows version count and a copyable program id', () => {
@@ -130,7 +128,6 @@ describe('VersionRequirementTree 建设主题层', () => {
     render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
     fireEvent.click(screen.getByLabelText('收起 澳门底层数据建设'));
     expect(screen.queryByText('V8.0.8')).toBeNull();
-    expect(screen.queryByText('需求A')).toBeNull();
     fireEvent.click(screen.getByLabelText('展开 澳门底层数据建设'));
     expect(screen.getByText('V8.0.8')).toBeTruthy();
   });
@@ -138,14 +135,14 @@ describe('VersionRequirementTree 建设主题层', () => {
   it('shows the no-program empty state', () => {
     const empty: WorklogData = { projects: [], programs: [], versions: [] };
     render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} />);
-    expect(screen.getByText('还没有建设主题。先新建主题，再建版本与需求。')).toBeTruthy();
+    expect(screen.getByText('还没有建设主题。先新建主题，再建版本。')).toBeTruthy();
   });
 
   it('keeps dangling versions visible under an unassigned group', () => {
     const dangling: WorklogData = {
       projects: [],
       programs: [],
-      versions: [{ id: 'v_x', name: 'V0.0.1', programId: 'g_gone', createdAt: 1, requirements: [] }],
+      versions: [{ id: 'v_x', name: 'V0.0.1', programId: 'g_gone', createdAt: 1, entries: [] }],
     };
     render(<VersionRequirementTree data={dangling} selection={{}} onSelect={() => {}} />);
     expect(screen.getByText('未归属主题')).toBeTruthy();
@@ -188,7 +185,7 @@ describe('ProgramDialog', () => {
 describe('DeleteProgramDialog', () => {
   it('explains the cascade and requires typing the exact program name', () => {
     render(<DeleteProgramDialog open programName="澳门底层数据建设" onClose={() => {}} onConfirm={() => {}} />);
-    expect(screen.getByText(/级联移除该主题下的全部版本、需求与条目/)).toBeTruthy();
+    expect(screen.getByText(/级联移除该主题下的全部版本与条目/)).toBeTruthy();
     expect(screen.getByText(/项目字典不受影响/)).toBeTruthy();
 
     const confirm = screen.getByRole('button', { name: '确认删除' });

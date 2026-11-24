@@ -70,13 +70,7 @@ const worklogTree: WorklogData = {
   projects: [{ id: 'p1', name: 'ai-task-flow', createdAt: 0 }],
   programs: [{ id: 'g1', name: '建设主题', createdAt: 0 }],
   versions: [
-    {
-      id: 'v1',
-      name: 'V8.0.8',
-      programId: 'g1',
-      createdAt: 0,
-      requirements: [{ id: 'r1', title: '需求一', createdAt: 0, entries: [] }],
-    },
+    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 0, entries: [] },
   ],
 };
 
@@ -112,7 +106,8 @@ describe('KnowledgeTree 多视图', () => {
     expect(localStorage.getItem('ai-task-flow-knowledge-view')).toBe('version');
     expect(screen.getByText('已关联 1 / 未关联 1')).toBeTruthy();
     expect(screen.getByText('V8.0.8')).toBeTruthy();
-    expect(screen.getByText('需求一')).toBeTruthy();
+    // 需求层已移除:旧文档的 requirementId 退化为按 id 展示
+    expect(screen.getByText('r1')).toBeTruthy();
     expect(screen.getByText('未关联')).toBeTruthy();
   });
 

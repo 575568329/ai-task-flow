@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/EntryItem.tsx
 // 条目卡:title/tags/date/上下文徽标/files 徽标 + detail markdown + diff 折叠 + 内联编辑/删除。
 // 编辑为 partial 提交:表单外字段(diff/files)不回传即保留,不会被抹掉。
-// 新模型下条目由「版本 → 需求」承载,update 不支持跨版本/需求搬移,卡片不再提供挪版本入口。
+// 条目直接归属版本,update 不支持跨版本搬移,卡片不再提供挪版本入口。
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2, Check, X, FileCode2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ import type { WorklogEntry, WorkStage } from '@ai-task-flow/shared';
 
 interface EntryItemProps {
   entry: WorklogEntry;
-  /** 上下文徽标文本(如搜索结果的「版本/需求」或跨需求视图的需求名),不传则不显示 */
+  /** 上下文徽标文本(如全局搜索结果里的版本名),不传则不显示 */
   contextLabel?: string;
   /** 全局展开/收起信号：true=全部展开，false=全部收起，null/undefined=各卡自管 */
   expandAll?: boolean | null;

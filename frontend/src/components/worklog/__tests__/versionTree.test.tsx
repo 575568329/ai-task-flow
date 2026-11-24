@@ -1,6 +1,6 @@
 // frontend/src/components/worklog/__tests__/versionTree.test.tsx
-// 版本 → 需求树:层级渲染、复制 id、选择回调、计数/关联项目徽标、
-// 新建/删除版本与新建需求走弹窗回调、重命名行内编辑、删除需求行内二次确认。
+// 主题 → 版本树:层级渲染、复制 id、选择回调、条目计数、
+// 新建/删除版本走弹窗回调、重命名行内编辑。
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { VersionRequirementTree } from '../VersionRequirementTree';
@@ -26,15 +26,12 @@ const data: WorklogData = {
   programs: [{ id: 'g_1', name: '建设主题A', createdAt: 1 }],
   versions: [{
     id: 'v_1', name: 'V8.0.8', programId: 'g_1', createdAt: 1,
-    requirements: [{
-      id: 'r_1', title: '澳门底层数据建设', projects: ['资源加工平台'], createdAt: 1,
-      entries: [{
-        id: 'e1', title: 't', detail: 'd', date: '2026-11-23',
-        createdAt: 1, updatedAt: 1, project: '资源加工平台',
-      }],
+    entries: [{
+      id: 'e1', title: 't', detail: 'd', date: '2026-11-23',
+      createdAt: 1, updatedAt: 1, project: '资源加工平台',
     }],
   }, {
-    id: 'v_2', name: 'V8.0.7', programId: 'g_1', createdAt: 0, requirements: [],
+    id: 'v_2', name: 'V8.0.7', programId: 'g_1', createdAt: 0, entries: [],
   }],
 };
 
@@ -43,42 +40,26 @@ afterEach(() => {
 });
 
 describe('VersionRequirementTree', () => {
-  it('renders version → requirement tree with copyable ids', () => {
+  it('renders program → version tree with copyable ids', () => {
     render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
+    expect(screen.getByText('建设主题A')).toBeTruthy();
     expect(screen.getByText('V8.0.8')).toBeTruthy();
-    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
+    expect(screen.getByTitle('复制 g_1')).toBeTruthy();
     expect(screen.getByTitle('复制 v_1')).toBeTruthy();
-    expect(screen.getByTitle('复制 r_1')).toBeTruthy();
   });
 
-  it('shows requirement / entry counts and related project badge', () => {
+  it('shows entry counts per version', () => {
     render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
-    expect(screen.getByText(/1 需求 · 1 条/)).toBeTruthy();
-    expect(screen.getByText('资源加工平台')).toBeTruthy();
+    expect(screen.getByText('1 条')).toBeTruthy();
+    expect(screen.getByText('0 条')).toBeTruthy();
+    expect(screen.getByText('2 版本')).toBeTruthy();
   });
 
-  it('selects requirement with version + requirement ids', () => {
-    const onSelect = vi.fn();
-    render(<VersionRequirementTree data={data} selection={{}} onSelect={onSelect} />);
-    fireEvent.click(screen.getByText('澳门底层数据建设'));
-    expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1', requirementId: 'r_1' });
-  });
-
-  it('selects version on row click without collapsing requirements', () => {
+  it('selects a version on row click', () => {
     const onSelect = vi.fn();
     render(<VersionRequirementTree data={data} selection={{}} onSelect={onSelect} />);
     fireEvent.click(screen.getByText('V8.0.8'));
     expect(onSelect).toHaveBeenCalledWith({ versionId: 'v_1' });
-    // 行点击只选择;折叠由独立箭头控制,避免被自动展开 effect 撤销
-    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
-  });
-
-  it('collapses and re-expands via the chevron button', () => {
-    render(<VersionRequirementTree data={data} selection={{}} onSelect={() => {}} />);
-    fireEvent.click(screen.getByLabelText('收起 V8.0.8'));
-    expect(screen.queryByText('澳门底层数据建设')).toBeNull();
-    fireEvent.click(screen.getByLabelText('展开 V8.0.8'));
-    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
   });
 
   it('auto-expands a collapsed program when selection points into it after refresh', () => {
@@ -100,26 +81,13 @@ describe('VersionRequirementTree', () => {
     expect(screen.getByText('V8.0.8')).toBeTruthy();
   });
 
-  it('auto-expands a collapsed version when a new requirement is selected', () => {
-    const { rerender } = render(
-      <VersionRequirementTree data={data} selection={{ versionId: 'v_1' }} onSelect={() => {}} />,
-    );
-    fireEvent.click(screen.getByLabelText('收起 V8.0.8'));
-    expect(screen.queryByText('澳门底层数据建设')).toBeNull();
-    // versionId 未变、仅 requirementId 变化(新建需求后选中)也必须展开
-    rerender(
-      <VersionRequirementTree data={data} selection={{ versionId: 'v_1', requirementId: 'r_1' }} onSelect={() => {}} />,
-    );
-    expect(screen.getByText('澳门底层数据建设')).toBeTruthy();
-  });
-
   it('sorts versions by name descending with numeric awareness', () => {
     const sortData: WorklogData = {
       projects: [],
       programs: [{ id: 'g_1', name: '主题', createdAt: 1 }],
       versions: [
-        { id: 'v9', name: 'V8.0.9', programId: 'g_1', createdAt: 1, requirements: [] },
-        { id: 'v10', name: 'V8.0.10', programId: 'g_1', createdAt: 2, requirements: [] },
+        { id: 'v9', name: 'V8.0.9', programId: 'g_1', createdAt: 1, entries: [] },
+        { id: 'v10', name: 'V8.0.10', programId: 'g_1', createdAt: 2, entries: [] },
       ],
     };
     render(<VersionRequirementTree data={sortData} selection={{}} onSelect={() => {}} />);
@@ -138,27 +106,12 @@ describe('VersionRequirementTree', () => {
     expect(onCreateVersionClick).toHaveBeenCalledWith();
   });
 
-  it('opens the requirement dialog from the version context menu', () => {
-    const onCreateRequirementClick = vi.fn();
-    render(
-      <VersionRequirementTree
-        data={data}
-        selection={{}}
-        onSelect={() => {}}
-        onCreateRequirementClick={onCreateRequirementClick}
-      />,
-    );
-    // 每个版本行都有菜单项,取第一个(版本 v_1)
-    fireEvent.click(screen.getAllByText('新建需求')[0]);
-    expect(onCreateRequirementClick).toHaveBeenCalledWith('v_1');
-  });
-
   it('renames a version inline', () => {
     const onRenameVersion = vi.fn();
     render(
       <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onRenameVersion={onRenameVersion} />,
     );
-    // 渲染顺序:主题菜单 → 版本菜单 → 需求菜单;'重命名' 第二处属于版本行
+    // 渲染顺序:主题菜单 → 版本菜单;'重命名' 第二处属于版本行
     fireEvent.click(screen.getAllByText('重命名')[1]);
     const input = screen.getByLabelText('新版本名');
     expect(input).toHaveValue('V8.0.8');
@@ -186,18 +139,7 @@ describe('VersionRequirementTree', () => {
   it('shows the normal empty state when load succeeded with no programs', () => {
     const empty: WorklogData = { projects: [], programs: [], versions: [] };
     render(<VersionRequirementTree data={empty} selection={{}} onSelect={() => {}} />);
-    expect(screen.getByText(/还没有建设主题。先新建主题，再建版本与需求。/)).toBeTruthy();
+    expect(screen.getByText(/还没有建设主题。先新建主题，再建版本。/)).toBeTruthy();
     expect(screen.queryByText(/加载失败/)).toBeNull();
-  });
-
-  it('requires a second click before deleting a requirement', () => {
-    const onDeleteRequirement = vi.fn();
-    render(
-      <VersionRequirementTree data={data} selection={{}} onSelect={() => {}} onDeleteRequirement={onDeleteRequirement} />,
-    );
-    fireEvent.click(screen.getAllByText('删除需求')[0]);
-    expect(onDeleteRequirement).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText('确认'));
-    expect(onDeleteRequirement).toHaveBeenCalledWith('v_1', 'r_1');
   });
 });

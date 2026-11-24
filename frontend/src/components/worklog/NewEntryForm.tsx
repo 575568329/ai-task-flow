@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/NewEntryForm.tsx
-// 「+ 记一条」内联表单:版本 / 需求下拉 + 标题 + 详情 + 标签。
+// 「+ 记一条」内联表单:版本下拉 + 标题 + 详情 + 标签。
 // 人工记录默认无 diff/文件引用(可由 AI 用 update_work 后补)。
-// 版本/需求必须先存在(由页面显式创建),表单只选择、不再自动建层。
+// 版本必须先存在(由页面显式创建),表单只选择、不再自动建层。
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,16 +15,13 @@ import type { WorkStage } from '@ai-task-flow/shared';
 export interface VersionOption {
   id: string;
   name: string;
-  requirements: { id: string; title: string }[];
 }
 
 interface NewEntryFormProps {
   versions: VersionOption[];
   defaultVersionId: string;
-  defaultRequirementId: string;
   onCreate: (input: {
     versionId: string;
-    requirementId: string;
     title: string;
     detail: string;
     tags?: string[];
@@ -34,31 +31,23 @@ interface NewEntryFormProps {
 }
 
 export function NewEntryForm({
-  versions, defaultVersionId, defaultRequirementId, onCreate, onCancel,
+  versions, defaultVersionId, onCreate, onCancel,
 }: NewEntryFormProps) {
   const initialVersion =
     versions.find((v) => v.id === defaultVersionId) ?? versions[0];
   const initialVersionId = initialVersion?.id ?? '';
-  const initialRequirements = initialVersion?.requirements ?? [];
-  const initialRequirementId =
-    initialRequirements.find((r) => r.id === defaultRequirementId)?.id
-    ?? initialRequirements[0]?.id
-    ?? '';
 
   const [versionId, setVersionId] = useState(initialVersionId);
-  const [requirementId, setRequirementId] = useState(initialRequirementId);
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [stage, setStage] = useState<WorkStage | ''>('');
   const [saving, setSaving] = useState(false);
 
-  const currentRequirements = versions.find((v) => v.id === versionId)?.requirements ?? [];
-  const canSubmit = Boolean(versionId && requirementId);
+  const canSubmit = Boolean(versionId);
 
   const submit = async () => {
     if (!versionId) { toast.error('请选择版本（可先在左侧新建版本）'); return; }
-    if (!requirementId) { toast.error('请选择需求（可先在左侧新建需求）'); return; }
     if (!title.trim() || !detail.trim()) {
       toast.error('标题与详细说明均不能为空');
       return;
@@ -68,7 +57,6 @@ export function NewEntryForm({
       const tags = [...new Set(tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean))];
       await onCreate({
         versionId,
-        requirementId,
         title: title.trim(),
         detail,
         tags,
@@ -88,7 +76,7 @@ export function NewEntryForm({
     <div className="bg-card border-primary/40 rounded-lg border p-4 space-y-3 shadow-sm" onKeyDown={onKeyDown}>
       {versions.length === 0 && (
         <p className="text-muted-foreground text-xs">
-          还没有版本。请先新建主题/版本并创建需求,再来记一条。
+          还没有版本。请先在左侧新建主题/版本,再来记一条。
         </p>
       )}
 
@@ -96,13 +84,7 @@ export function NewEntryForm({
         <Label className="text-xs">版本</Label>
         <select
           value={versionId}
-          onChange={(e) => {
-            const nextId = e.target.value;
-            setVersionId(nextId);
-            setRequirementId(
-              versions.find((v) => v.id === nextId)?.requirements[0]?.id ?? '',
-            );
-          }}
+          onChange={(e) => setVersionId(e.target.value)}
           className="border-input bg-background h-8 rounded-md border px-2 text-sm"
           aria-label="选择版本"
         >
@@ -110,25 +92,6 @@ export function NewEntryForm({
             <option key={v.id} value={v.id}>{v.name}</option>
           ))}
         </select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-xs">需求</Label>
-        <select
-          value={requirementId}
-          onChange={(e) => setRequirementId(e.target.value)}
-          className="border-input bg-background h-8 rounded-md border px-2 text-sm"
-          aria-label="选择需求"
-        >
-          {currentRequirements.map((r) => (
-            <option key={r.id} value={r.id}>{r.title}</option>
-          ))}
-        </select>
-        {versionId && currentRequirements.length === 0 && (
-          <p className="text-muted-foreground text-xs">
-            该版本还没有需求,请先在左侧右键版本选择「新建需求」。
-          </p>
-        )}
       </div>
 
       <div className="space-y-1.5">

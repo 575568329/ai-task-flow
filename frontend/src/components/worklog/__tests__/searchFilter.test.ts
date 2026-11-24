@@ -1,7 +1,7 @@
 // frontend/src/components/worklog/__tests__/searchFilter.test.ts
-// 搜索过滤纯函数测试:关键字命中语义(与后端 query_work 一致)/版本·需求定位/全局搜索忽略树选择/组合过滤。
+// 搜索过滤纯函数测试:关键字命中语义(与后端 query_work 一致)/版本定位/全局搜索忽略树选择/组合过滤。
 import { describe, it, expect } from 'vitest';
-import { filterEntries, getOutsideProjects, matchesKeyword } from '../searchFilter';
+import { filterEntries, matchesKeyword } from '../searchFilter';
 import type { WorklogData, WorklogEntry } from '@ai-task-flow/shared';
 
 function entry(over: Partial<WorklogEntry>): WorklogEntry {
@@ -20,31 +20,16 @@ const data: WorklogData = {
   versions: [
     {
       id: 'v_1', name: 'V8.0.5', programId: 'g_1', createdAt: 3,
-      requirements: [
-        {
-          id: 'r_1', title: '澳门底层数据建设', projects: ['搜题平台'], createdAt: 1,
-          entries: [
-            entry({ id: 'e_a', title: '澳门试题管理页与检索域切换', detail: '字典域切换改造', files: [{ path: 'src/exam/SearchPanel.vue' }], createdAt: 3, stage: 'dev', project: '搜题平台' }),
-            entry({ id: 'e_b', title: '相似题接题库引擎', detail: 'SimilarQuestionFacade 接入', project: '搜题平台' }),
-          ],
-        },
-        {
-          id: 'r_2', title: 'AI 搜题排序', createdAt: 4,
-          entries: [
-            entry({ id: 'e_c', title: 'AI 搜题显式排序生效', detail: '两道重排守卫', createdAt: 5, stage: 'review', project: '搜题平台' }),
-          ],
-        },
+      entries: [
+        entry({ id: 'e_a', title: '澳门试题管理页与检索域切换', detail: '字典域切换改造', files: [{ path: 'src/exam/SearchPanel.vue' }], createdAt: 3, stage: 'dev', project: '搜题平台' }),
+        entry({ id: 'e_b', title: '相似题接题库引擎', detail: 'SimilarQuestionFacade 接入', project: '搜题平台' }),
+        entry({ id: 'e_c', title: 'AI 搜题显式排序生效', detail: '两道重排守卫', createdAt: 5, stage: 'review', project: '搜题平台' }),
       ],
     },
     {
       id: 'v_2', name: 'v0.1.0', programId: 'g_1', createdAt: 9,
-      requirements: [
-        {
-          id: 'r_3', title: '白屏修复', createdAt: 9,
-          entries: [
-            entry({ id: 'e_d', title: '修复白屏 bug', detail: 'ENOENT 容错', createdAt: 9, project: 'ai-task-flow' }),
-          ],
-        },
+      entries: [
+        entry({ id: 'e_d', title: '修复白屏 bug', detail: 'ENOENT 容错', createdAt: 9, project: 'ai-task-flow' }),
       ],
     },
   ],
@@ -67,27 +52,21 @@ describe('matchesKeyword', () => {
 });
 
 describe('filterEntries', () => {
-  it('should filter by version subtree when not searching', () => {
+  it('should filter by version when not searching', () => {
     const { entries } = filterEntries(data, { versionId: 'v_1' }, '');
-    // 版本下全部需求条目,新在前
+    // 版本下全部条目,新在前
     expect(entries.map((e) => e.entry.id)).toEqual(['e_c', 'e_a', 'e_b']);
   });
 
-  it('should narrow to a requirement within the version', () => {
-    const { entries } = filterEntries(data, { versionId: 'v_1', requirementId: 'r_2' }, '');
-    expect(entries.map((e) => e.entry.id)).toEqual(['e_c']);
-  });
-
-  it('should tag context with version and requirement names', () => {
+  it('should tag context with version name', () => {
     const { entries } = filterEntries(data, { versionId: 'v_2' }, '');
     expect(entries[0].version).toBe('v0.1.0');
-    expect(entries[0].requirement).toBe('白屏修复');
   });
 
   it('should search globally ignoring selection when keyword present', () => {
-    const { entries, isSearching } = filterEntries(data, { versionId: 'v_1', requirementId: 'r_1' }, '排序');
+    const { entries, isSearching } = filterEntries(data, { versionId: 'v_1' }, '排序');
     expect(isSearching).toBe(true);
-    expect(entries.map((e) => e.entry.id)).toEqual(['e_c']); // 命中跨需求,树选择被忽略
+    expect(entries.map((e) => e.entry.id)).toEqual(['e_c']); // 树选择被忽略
   });
 
   it('should not load all entries when no selection and no keyword', () => {
@@ -122,13 +101,10 @@ describe('filterEntries', () => {
       programs: [],
       versions: [{
         id: 'v_a', name: 'V1', programId: 'g_1', createdAt: 1,
-        requirements: [{
-          id: 'r_a', title: 'R1', createdAt: 1,
-          entries: [
-            entry({ id: 'e1', title: '跨项目改动', detail: 'd', createdAt: 2, relatedProjects: ['题库'] }),
-            entry({ id: 'e2', title: '普通改动', detail: 'd', createdAt: 1 }),
-          ],
-        }],
+        entries: [
+          entry({ id: 'e1', title: '跨项目改动', detail: 'd', createdAt: 2, relatedProjects: ['题库'] }),
+          entry({ id: 'e2', title: '普通改动', detail: 'd', createdAt: 1 }),
+        ],
       }],
     };
     expect(filterEntries(relatedData, { versionId: 'v_a' }, '', [], '题库').entries.map((e) => e.entry.id))
@@ -148,7 +124,7 @@ describe('filterEntries', () => {
     expect(entries).toHaveLength(0);
   });
 
-  it('should stack version/requirement/stage/related/project filters', () => {
+  it('should stack version/stage/related/project filters', () => {
     const combo: WorklogData = {
       projects: [
         { id: 'p_1', name: 'P1', createdAt: 1 },
@@ -157,28 +133,18 @@ describe('filterEntries', () => {
       programs: [],
       versions: [{
         id: 'v_1', name: 'V1', programId: 'g_1', createdAt: 1,
-        requirements: [
-          {
-            id: 'r_1', title: 'R1', createdAt: 1,
-            entries: [
-              entry({ id: 'm1', createdAt: 3, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
-              entry({ id: 'm2', createdAt: 2, stage: 'dev', project: 'P2', relatedProjects: ['题库'] }),
-              entry({ id: 'm3', createdAt: 1, stage: 'review', project: 'P1', relatedProjects: ['题库'] }),
-            ],
-          },
-          {
-            id: 'r_2', title: 'R2', createdAt: 2,
-            entries: [
-              entry({ id: 'm4', createdAt: 4, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
-            ],
-          },
+        entries: [
+          entry({ id: 'm1', createdAt: 3, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
+          entry({ id: 'm2', createdAt: 2, stage: 'dev', project: 'P2', relatedProjects: ['题库'] }),
+          entry({ id: 'm3', createdAt: 1, stage: 'review', project: 'P1', relatedProjects: ['题库'] }),
+          entry({ id: 'm4', createdAt: 4, stage: 'dev', project: 'P1', relatedProjects: ['题库'] }),
         ],
       }],
     };
-    // 六参全给:版本 + 需求 + 阶段 + 关联项目 + 实际归属项目
-    expect(filterEntries(combo, { versionId: 'v_1', requirementId: 'r_1' }, '', ['dev'], '题库', 'P1')
-      .entries.map((e) => e.entry.id)).toEqual(['m1']);
-    // 版本级 + 项目筛选跨需求;新在前
+    // 五参全给:版本 + 阶段 + 关联项目 + 实际归属项目
+    expect(filterEntries(combo, { versionId: 'v_1' }, '', ['dev'], '题库', 'P1')
+      .entries.map((e) => e.entry.id)).toEqual(['m4', 'm1']);
+    // 版本级 + 项目筛选;新在前
     expect(filterEntries(combo, { versionId: 'v_1' }, '', [], undefined, 'P1')
       .entries.map((e) => e.entry.id)).toEqual(['m4', 'm1', 'm3']);
     // 关键字全局搜索 + 阶段 + 项目叠加
@@ -189,38 +155,5 @@ describe('filterEntries', () => {
       .toHaveLength(0);
     // 仅项目筛选(无树选择/无关键字/无关联)不加载全部,返回空(产品取舍)
     expect(filterEntries(combo, {}, '', [], undefined, 'P1').entries).toHaveLength(0);
-  });
-});
-
-describe('getOutsideProjects', () => {
-  it('should return empty when every entry project is inside the requirement scope', () => {
-    expect(getOutsideProjects({
-      id: 'r_1', title: 'R1', createdAt: 1, projects: ['A', 'B'],
-      entries: [
-        entry({ id: 'e1', project: 'A' }),
-        entry({ id: 'e2', project: 'B' }),
-        entry({ id: 'e3' }), // 无归属项目,不参与判断
-      ],
-    })).toEqual([]);
-  });
-
-  it('should return deduped, sorted projects outside the requirement scope', () => {
-    expect(getOutsideProjects({
-      id: 'r_1', title: 'R1', createdAt: 1, projects: ['A'],
-      entries: [
-        entry({ id: 'e1', project: 'A' }),
-        entry({ id: 'e2', project: 'C' }),
-        entry({ id: 'e3', project: 'B' }),
-        entry({ id: 'e4', project: 'C' }),
-      ],
-    })).toEqual(['B', 'C']);
-    // 需求未声明计划项目时无基准可比,返回空(不把全部实际项目误报为范围外)
-    expect(getOutsideProjects({
-      id: 'r_2', title: 'R2', createdAt: 1,
-      entries: [
-        entry({ id: 'e1', project: 'B' }),
-        entry({ id: 'e2', project: 'A' }),
-      ],
-    })).toEqual([]);
   });
 });

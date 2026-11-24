@@ -71,13 +71,7 @@ const worklogTree: WorklogData = {
   projects: [{ id: 'p1', name: 'ai-task-flow', createdAt: 0 }],
   programs: [{ id: 'g1', name: '建设主题', createdAt: 0 }],
   versions: [
-    {
-      id: 'v1',
-      name: 'V8.0.8',
-      programId: 'g1',
-      createdAt: 0,
-      requirements: [{ id: 'r1', title: '需求一', createdAt: 0, entries: [] }],
-    },
+    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 0, entries: [] },
   ],
 };
 
@@ -115,14 +109,14 @@ describe('KnowledgeViewer 编辑关联', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '编辑关联' }));
     fireEvent.change(screen.getByLabelText('关联版本'), { target: { value: 'v1' } });
-    fireEvent.change(screen.getByLabelText('关联需求'), { target: { value: 'r1' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
+    // 需求层已移除:需求下拉无可选需求,不再写入 requirementId
     await waitFor(() =>
       expect(vi.mocked(updateDocMeta)).toHaveBeenCalledWith({
         path: 'a.md',
         versionId: 'v1',
-        requirementId: 'r1',
+        requirementId: '',
         projectId: '',
         stage: '',
       }),
@@ -131,7 +125,8 @@ describe('KnowledgeViewer 编辑关联', () => {
 
     // manifest 刷新后的关联徽标(映射为名称)
     expect(await screen.findByText('版本 · V8.0.8')).toBeTruthy();
-    expect(screen.getByText('需求 · 需求一')).toBeTruthy();
+    // 需求层已移除:旧文档的 requirementId 退化为按 id 展示
+    expect(screen.getByText('需求 · r1')).toBeTruthy();
     // 无未保存改动时按最新文件回填正文(fetchDoc 至少两次:挂载 + meta 保存后)
     expect(vi.mocked(fetchDoc).mock.calls.length).toBeGreaterThanOrEqual(2);
   });

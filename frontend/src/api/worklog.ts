@@ -1,6 +1,6 @@
 // frontend/src/api/worklog.ts
 // 工作记录 API 客户端(端点契约见 backend worklogRoutes)。
-// 模型:建设主题 → 版本 → 需求 → 条目;项目降为字典(路径归属/筛选)。
+// 模型:建设主题 → 版本 → 条目(需求层已移除);项目降为字典(路径归属/筛选)。
 // 全部 silent:http 层不弹 toast,由 WorklogView 各 handler 统一提示(避免双重 toast)。
 import type {
   WorklogData,
@@ -9,7 +9,6 @@ import type {
   WorklogRecordResponse,
   WorklogUpdateRequest,
   WorklogVersionCreateRequest,
-  WorklogRequirementCreateRequest,
 } from '@ai-task-flow/shared';
 import { http } from './http';
 
@@ -17,7 +16,7 @@ export const worklogApi = {
   /** 全树(读不缓存,每次操作后重拉) */
   getTree: () => http.get<WorklogData>('/worklog', true),
 
-  /** 新增条目到已存在的「版本 + 需求」(同 record_work) */
+  /** 新增条目到已存在的版本(同 record_work) */
   record: (data: WorklogRecordRequest) =>
     http.post<WorklogRecordResponse>('/worklog/entries', data, true),
 
@@ -50,25 +49,6 @@ export const worklogApi = {
 
   deleteVersion: (id: string) =>
     http.delete<{ ok: boolean }>(`/worklog/versions/${encodeURIComponent(id)}`, true),
-
-  // ------------------------------------------------------------------
-  // 需求
-  // ------------------------------------------------------------------
-  createRequirement: (data: WorklogRequirementCreateRequest) =>
-    http.post<{ id: string }>('/worklog/requirements', data, true),
-
-  renameRequirement: (versionId: string, id: string, newName: string) =>
-    http.post<{ ok: boolean }>(
-      `/worklog/requirements/${encodeURIComponent(id)}/rename`,
-      { versionId, newName },
-      true,
-    ),
-
-  deleteRequirement: (versionId: string, id: string) =>
-    http.delete<{ ok: boolean }>(
-      `/worklog/requirements/${encodeURIComponent(id)}?versionId=${encodeURIComponent(versionId)}`,
-      true,
-    ),
 
   // ------------------------------------------------------------------
   // 项目字典(路径归属与筛选;不再是树根)

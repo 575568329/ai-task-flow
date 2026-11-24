@@ -1,6 +1,6 @@
 // frontend/src/components/worklog/DeleteProgramDialog.tsx
 // 删除建设主题强确认弹窗:必须手工输入完整主题名才能启用「确认删除」。
-// 删除会级联该主题下全部版本、需求与条目(后端自动快照备份),项目字典不受影响。
+// 删除会级联该主题下全部版本与条目(后端自动快照备份),项目字典不受影响。
 // 实际删除动作由父组件通过 onConfirm 注入(便于复用统一刷新/选中回退逻辑)。
 import { useEffect, useState } from 'react';
 import {
@@ -55,7 +55,7 @@ export function DeleteProgramDialog({
         <DialogHeader>
           <DialogTitle>删除建设主题 · {programName}</DialogTitle>
           <DialogDescription>
-            删除会级联移除该主题下的全部版本、需求与条目；项目字典不受影响。
+            删除会级联移除该主题下的全部版本与条目；项目字典不受影响。
             删除前自动快照备份，不可撤销。请输入完整主题名以确认。
           </DialogDescription>
         </DialogHeader>

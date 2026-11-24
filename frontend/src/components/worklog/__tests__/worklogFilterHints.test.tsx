@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/__tests__/worklogFilterHints.test.tsx
-// 筛选完整性与提示:项目筛选下拉可叠加、需求范围外改动弱提示、record/update 的 warnings 走 info toast。
+// 筛选完整性与提示:项目筛选下拉可叠加、record/update 的 warnings 走 info toast。
 // 重依赖子组件打桩,只验证 WorklogView 的接线与渲染。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -27,11 +27,11 @@ vi.mock('@/stores/uiStore', () => ({
 
 vi.mock('../VersionRequirementTree', () => ({
   VersionRequirementTree: (props: {
-    onSelect: (sel: { versionId?: string; requirementId?: string }) => void;
+    onSelect: (sel: { versionId?: string }) => void;
   }) => (
     <div data-testid="tree">
-      <button type="button" onClick={() => props.onSelect({ versionId: 'v_1', requirementId: 'r_1' })}>
-        stub-select-requirement
+      <button type="button" onClick={() => props.onSelect({ versionId: 'v_1' })}>
+        stub-select-version
       </button>
     </div>
   ),
@@ -40,7 +40,6 @@ vi.mock('../VersionRequirementTree', () => ({
 vi.mock('../ProgramDialog', () => ({ ProgramDialog: () => null }));
 vi.mock('../DeleteProgramDialog', () => ({ DeleteProgramDialog: () => null }));
 vi.mock('../VersionDialog', () => ({ VersionDialog: () => null }));
-vi.mock('../RequirementDialog', () => ({ RequirementDialog: () => null }));
 vi.mock('../DeleteVersionDialog', () => ({ DeleteVersionDialog: () => null }));
 vi.mock('../ProjectDictionaryDialog', () => ({ ProjectDictionaryDialog: () => null }));
 vi.mock('../AiGuideView', () => ({ AiGuideView: () => null }));
@@ -63,13 +62,13 @@ vi.mock('../EntryItem', () => ({
 vi.mock('../NewEntryForm', () => ({
   NewEntryForm: ({ onCreate }: {
     onCreate: (input: {
-      versionId: string; requirementId: string; title: string; detail: string;
+      versionId: string; title: string; detail: string;
     }) => Promise<void>;
   }) => (
     <button
       type="button"
       onClick={() => void onCreate({
-        versionId: 'v_1', requirementId: 'r_1', title: '新条目', detail: '详情',
+        versionId: 'v_1', title: '新条目', detail: '详情',
       })}
     >
       stub-create-entry
@@ -90,13 +89,10 @@ const tree: WorklogData = {
   programs: [{ id: 'g_1', name: '建设主题', createdAt: 1 }],
   versions: [{
     id: 'v_1', name: 'V1', programId: 'g_1', createdAt: 1,
-    requirements: [{
-      id: 'r_1', title: '需求A', projects: ['项目A'], createdAt: 1,
-      entries: [
-        entry({ id: 'e_1', title: '条目A', project: '项目A', stage: 'dev', createdAt: 2 }),
-        entry({ id: 'e_2', title: '条目B', project: '项目B', stage: 'dev', createdAt: 1 }),
-      ],
-    }],
+    entries: [
+      entry({ id: 'e_1', title: '条目A', project: '项目A', stage: 'dev', createdAt: 2 }),
+      entry({ id: 'e_2', title: '条目B', project: '项目B', stage: 'dev', createdAt: 1 }),
+    ],
   }],
 };
 
@@ -114,21 +110,10 @@ afterEach(() => {
 });
 
 describe('WorklogView 筛选与提示', () => {
-  it('shows outside-scope projects when a requirement is selected', async () => {
+  it('stacks the project filter with the selected version', async () => {
     render(<WorklogView />);
     await screen.findByTestId('tree');
-    expect(screen.queryByText(/存在范围外改动/)).toBeNull();
-
-    fireEvent.click(screen.getByText('stub-select-requirement'));
-
-    // 需求计划项目只有「项目A」,条目实际改动了「项目B」
-    expect(await screen.findByText('存在范围外改动：项目B')).toBeInTheDocument();
-  });
-
-  it('stacks the project filter with the selected requirement', async () => {
-    render(<WorklogView />);
-    await screen.findByTestId('tree');
-    fireEvent.click(screen.getByText('stub-select-requirement'));
+    fireEvent.click(screen.getByText('stub-select-version'));
 
     await waitFor(() => expect(screen.getAllByTestId('entry-item')).toHaveLength(2));
 
@@ -142,7 +127,7 @@ describe('WorklogView 筛选与提示', () => {
   it('shows filter-empty hint instead of the "no records" hint when filters yield nothing', async () => {
     render(<WorklogView />);
     await screen.findByTestId('tree');
-    fireEvent.click(screen.getByText('stub-select-requirement'));
+    fireEvent.click(screen.getByText('stub-select-version'));
     await waitFor(() => expect(screen.getAllByTestId('entry-item')).toHaveLength(2));
 
     fireEvent.change(screen.getByLabelText('按项目筛选'), { target: { value: '项目C' } });
@@ -173,7 +158,7 @@ describe('WorklogView 筛选与提示', () => {
     });
     render(<WorklogView />);
     await screen.findByTestId('tree');
-    fireEvent.click(screen.getByText('stub-select-requirement'));
+    fireEvent.click(screen.getByText('stub-select-version'));
 
     fireEvent.click(await screen.findByText('stub-save-e_1'));
 

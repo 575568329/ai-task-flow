@@ -1,5 +1,5 @@
 // frontend/src/components/worklog/__tests__/worklogComponents.test.tsx
-// 工作记录页组件测试:partial 编辑保存(diff 不丢)、删除二次确认、AI 指南渲染 9 工具。
+// 工作记录页组件测试:partial 编辑保存(diff 不丢)、删除二次确认、AI 指南渲染全部工具。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { EntryItem } from '../EntryItem';
@@ -157,7 +157,7 @@ describe('EntryItem', () => {
 });
 
 describe('AiGuideView', () => {
-  it('should render all 9 tools from catalog with prompt examples', () => {
+  it('should render every catalog tool with prompt examples', () => {
     render(<AiGuideView />);
     for (const tool of WORKLOG_TOOL_CATALOG) {
       expect(screen.getByText(tool.name)).toBeInTheDocument();

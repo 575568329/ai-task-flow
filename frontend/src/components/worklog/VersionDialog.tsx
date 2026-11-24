@@ -108,7 +108,7 @@ export function VersionDialog({
         {createdId ? (
           <div className="space-y-3">
             <p className="text-sm">
-              版本「{name.trim()}」已创建。把下面的 ID 复制给 AI,或在树里右键该版本继续建需求。
+              版本「{name.trim()}」已创建。把下面的 ID 复制给 AI,让它用该 versionId 记录条目。
             </p>
             <div className="bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-muted-foreground shrink-0 text-xs">版本 ID</span>
