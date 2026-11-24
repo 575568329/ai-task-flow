@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `e844087`(feat(mcp): 新增 list_programs，版本输出主题；15 工具) |
-| 构建时间 | 2026-11-24 10:05 |
+| dist 构建来源 commit | `c450c62`(fix(mcp): 主题映射失败降级不拖垮 query_work；15 工具) |
+| 构建时间 | 2026-11-24 10:16 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
