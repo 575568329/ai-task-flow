@@ -46,13 +46,18 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
 
     if (entries.length === 0) return ok('未找到匹配的工作记录。');
 
-    // 版本名 → 主题名(新模型版本归属建设主题;取不到时该段省略)
-    const tree = await deps.worklogService.getTree();
-    const programNameById = new Map(tree.programs.map((p) => [p.id, p.name]));
+    // 版本名 → 主题名:主题名只是装饰信息,getTree 失败时降级为不展示,不能拖垮已查到的条目
     const programNameByVersion = new Map<string, string>();
-    for (const version of tree.versions) {
-      const programName = programNameById.get(version.programId);
-      if (programName) programNameByVersion.set(version.name, programName);
+    try {
+      const tree = await deps.worklogService.getTree();
+      const programNameById = new Map(tree.programs.map((p) => [p.id, p.name]));
+      for (const version of tree.versions) {
+        const programName = programNameById.get(version.programId);
+        if (programName) programNameByVersion.set(version.name, programName);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[mcp] query_work 构建版本主题映射失败,已降级为不展示主题名: ${message}`);
     }
 
     const lines = entries.map((e) => {

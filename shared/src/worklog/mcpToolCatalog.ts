@@ -62,7 +62,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
     name: 'record_work',
     description:
       '记录一条工作内容(版本 → 需求 → 功能点条目)。版本与需求必须由用户在页面创建,AI 只传 id;不要尝试创建或猜名称——id 不存在时会报错并列出可选值。' +
-      '记录前先调 list_versions / list_requirements 拿到 versionId 与 requirementId。' +
+      '记录前先调 list_programs 了解建设主题结构,再调 list_versions / list_requirements 拿到 versionId 与 requirementId。' +
       'files 从 git status/diff 取改动文件路径与行号,diff 附 git diff 原文;' +
       'project 传本次实际改动的项目名(可选,不传按路径归属);relatedProjects 传同时涉及的其他项目名;记录时自动带上当前工作目录用于路径归属。' +
       'detail 必须结构化分条,禁止大段流水账:Bug 修复按「### 问题(现象+报错)→### 原因→### 解决(1.2.3.分点)→### 验证」;' +
@@ -81,7 +81,7 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
       '回溯查询工作记录。entryId 按条目 id 精确查询(页面上复制的 e_xxx),传入时忽略其他过滤条件;' +
       '其余支持 versionId / requirementId 精确过滤(先 list_versions / list_requirements 获取)、项目(project)精确过滤、' +
       '关联项目(relatedProject)过滤、关键词模糊(标题/详情/文件路径,不区分大小写)、标签、阶段(stage)、日期范围(dateFrom/dateTo)。' +
-      '结果每条都带 ID:xxx 与所属版本名/需求名,可用于后续 update_work/delete_work。' +
+      '结果每条都带 ID:xxx 与所属主题名/版本名/需求名,可用于后续 update_work/delete_work。' +
       'diff 默认不返回,includeDiff:true 时携带。',
     whenToUse: '用户问"上次怎么改的/上周做了什么/某个 bug 怎么修的",或直接给出记录 id 时,先查记录再回答。',
     userPromptExample: '「查一下 V8.0.8 澳门底层数据建设需求下上周的改动记录」',

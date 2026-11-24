@@ -111,6 +111,27 @@ describe('worklog MCP tools', () => {
     expect(withDiff.content[0].text).toContain('diff --git a/x');
   });
 
+  it('query_work should still return entries without theme when program map fails', async () => {
+    const { versionId, requirementId } = await seedVersionRequirement('V8.0.8', 'R');
+    await deps.worklogService.record({
+      versionId, requirementId, title: '降级查询', detail: 'd', stage: 'dev',
+    });
+
+    const treeSpy = vi.spyOn(deps.worklogService, 'getTree').mockRejectedValueOnce(new Error('树读取失败'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await HANDLERS.query_work({ keyword: '降级查询' }, deps);
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0].text;
+      expect(text).toContain('降级查询'); // 条目照常返回
+      expect(text).not.toContain('主题:'); // 主题名降级省略
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('query_work 构建版本主题映射失败'));
+    } finally {
+      treeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it('query_work should filter by versionId and requirementId', async () => {
     const a = await seedVersionRequirement('V1', 'R1');
     const b = await seedVersionRequirement('V2', 'R2');
