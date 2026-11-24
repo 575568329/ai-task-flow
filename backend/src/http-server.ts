@@ -17,6 +17,7 @@ import { JsonConclusionRepository } from './infrastructure/persistence/JsonConcl
 import { ConclusionService } from './application/conclusion/ConclusionService.js';
 import { runProjectIdMigration, shouldSuggestPathBinding } from './application/migration/ProjectIdMigration.js';
 import {
+  runFlatEntriesMigration,
   runProgramLayerMigration,
   runVersionTreeMigration,
 } from './application/migration/VersionTreeMigration.js';
@@ -138,6 +139,20 @@ export async function startApp(options: StartAppOptions = {}) {
   } catch (error: unknown) {
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
     console.error(`[migration] 建设主题迁移失败,已跳过(不影响启动): ${detail}`);
+  }
+
+  // 一次性数据迁移(续):把需求下的条目提升到版本,移除需求层。
+  // 放在建设主题层之后(programId 已回填)、HTTP 启动之前;幂等,失败不阻塞启动。
+  try {
+    const fReport = await runFlatEntriesMigration({ dataDir, worklogRepo: worklogRepository });
+    if (!fReport.skipped && (fReport.entriesMerged || fReport.versionsFlattened)) {
+      console.log(
+        `[migration] 条目扁平化:${fReport.versionsFlattened} 个版本、${fReport.entriesMerged} 条条目`,
+      );
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`[migration] 条目扁平化失败,已跳过(不影响启动): ${detail}`);
   }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);

@@ -494,6 +494,8 @@ export class WorklogService {
         entry.sourcePath = sourcePath;
         if (!ownerProject) entry.pathUnmatched = true;
       }
+      // 防御旧数据(迁移未跑时版本可能没有 entries):归一为数组再写入,不静默丢条目
+      version.entries = version.entries ?? [];
       version.entries.push(entry);
 
       const warnings: string[] = [];
@@ -638,7 +640,8 @@ export class WorklogService {
       (data) => {
         const located = findEntryLocation(data, entryId);
         if (!located) throw new WorklogNotFoundError(`条目 ${entryId} 不存在`);
-        located.version.entries = located.version.entries.filter((e) => e.id !== entryId);
+        // 防御旧数据(迁移未跑时版本可能没有 entries)
+        located.version.entries = (located.version.entries ?? []).filter((e) => e.id !== entryId);
       },
       { backup: true },
     );

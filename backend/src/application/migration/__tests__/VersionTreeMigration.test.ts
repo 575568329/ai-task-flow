@@ -11,19 +11,35 @@ import type {
   WorklogData,
   WorklogEntry,
   WorklogProject,
-  WorklogRequirement,
+  WorklogVersion,
 } from '@ai-task-flow/shared';
 import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
 import {
   DEFAULT_PROGRAM_NAME,
   LEGACY_REQUIREMENT_TITLE,
   isProgramLayerMigrated,
+  migrateFlatEntries,
   migrateProgramLayer,
   migrateToVersionTree,
+  needsFlatEntriesMigration,
   needsProgramLayerMigration,
+  runFlatEntriesMigration,
   runProgramLayerMigration,
   runVersionTreeMigration,
 } from '../VersionTreeMigration.js';
+
+/** shared 已移除需求层,测试保留旧数据的「需求」形状只用于构造/断言迁移输入输出 */
+interface LegacyRequirement {
+  id: string;
+  title: string;
+  createdAt: number;
+  entries: WorklogEntry[];
+}
+
+/** 读取版本上的需求层(v1/v2 中间态);已扁平化的版本返回空数组 */
+function requirementsOf(version: unknown): LegacyRequirement[] {
+  return (version as WorklogVersion & { requirements?: LegacyRequirement[] }).requirements ?? [];
+}
 
 /** 旧结构里的项目内版本(name/createdAt/entries) */
 interface LegacyVersion {
@@ -53,7 +69,7 @@ function legacyData(projects: LegacyProject[]): WorklogData {
 }
 
 /** 需求夹具(迁移 v2 只关心标题与条目是否保留) */
-function requirement(id: string, title: string, entries: WorklogEntry[] = []): WorklogRequirement {
+function requirement(id: string, title: string, entries: WorklogEntry[] = []): LegacyRequirement {
   return { id, title, createdAt: 1, entries };
 }
 
@@ -61,7 +77,7 @@ function requirement(id: string, title: string, entries: WorklogEntry[] = []): W
 function unassignedVersion(
   id: string,
   name: string,
-  requirements: WorklogRequirement[],
+  requirements: LegacyRequirement[],
   createdAt = 1,
 ): Record<string, unknown> {
   return { id, name, createdAt, requirements };
@@ -87,22 +103,22 @@ describe('migrateToVersionTree', () => {
 
     expect(data.versions).toHaveLength(1);
     expect(data.versions[0].name).toBe('V8.0.8');
-    expect(data.versions[0].requirements).toHaveLength(1);
-    expect(data.versions[0].requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
-    expect(data.versions[0].requirements[0].entries).toHaveLength(3);
-    expect(data.versions[0].requirements[0].entries.map((e) => e.project)).toEqual([
+    expect(requirementsOf(data.versions[0])).toHaveLength(1);
+    expect(requirementsOf(data.versions[0])[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(requirementsOf(data.versions[0])[0].entries).toHaveLength(3);
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.project)).toEqual([
       '资源加工平台',
       '资源加工平台',
       '组卷',
     ]);
     // projectId 能映射时补上
-    expect(data.versions[0].requirements[0].entries.map((e) => e.projectId)).toEqual([
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.projectId)).toEqual([
       'p1',
       'p1',
       'p2',
     ]);
     // 条目原样保留(id 不丢)
-    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
     expect(report.entriesMoved).toBe(3);
     expect(report.versionsCreated).toBe(1);
     expect(report.requirementsCreated).toBe(1);
@@ -141,9 +157,9 @@ describe('migrateToVersionTree', () => {
 
     expect(data.versions.map((v) => v.name).sort()).toEqual(['v0.3.0', 'worklog-template']);
     for (const version of data.versions) {
-      expect(version.requirements).toHaveLength(1);
-      expect(version.requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
-      expect(version.requirements[0].entries).toHaveLength(1);
+      expect(requirementsOf(version)).toHaveLength(1);
+      expect(requirementsOf(version)[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+      expect(requirementsOf(version)[0].entries).toHaveLength(1);
     }
     expect(report.versionsCreated).toBe(2);
     expect(report.entriesMoved).toBe(2);
@@ -161,7 +177,7 @@ describe('migrateToVersionTree', () => {
 
     // 空 versions 不制造版本/需求,但项目本身保留
     expect(data.versions).toHaveLength(1);
-    expect(data.versions[0].requirements[0].entries).toHaveLength(1);
+    expect(requirementsOf(data.versions[0])[0].entries).toHaveLength(1);
     expect(data.projects.map((p) => p.name)).toEqual(['空项目', '组卷']);
     expect(report.versionsCreated).toBe(1);
     expect(report.entriesMoved).toBe(1);
@@ -169,7 +185,7 @@ describe('migrateToVersionTree', () => {
 
   it('merges legacy versions into an already-populated version tree', () => {
     // 混合态:新版本树已存在(另一进程先写了新结构),旧项目的 versions 还没清掉
-    const mixed: WorklogData = {
+    const mixed = {
       projects: [
         { id: 'p1', name: '资源加工平台', createdAt: 1, versions: [
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
@@ -187,18 +203,18 @@ describe('migrateToVersionTree', () => {
           ],
         },
       ],
-    };
+    } as unknown as WorklogData;
 
     const { data, report } = migrateToVersionTree(mixed);
 
     expect(data.versions).toHaveLength(1);
     expect(data.versions[0].id).toBe('v1');
     // 旧条目挂到同名的迁移需求下,不会混进已有需求
-    const legacyRequirement = data.versions[0].requirements.find(
+    const legacyRequirement = requirementsOf(data.versions[0]).find(
       (r) => r.title === LEGACY_REQUIREMENT_TITLE,
     )!;
     expect(legacyRequirement.entries.map((e) => e.id)).toEqual(['e_old']);
-    const existingRequirement = data.versions[0].requirements.find((r) => r.id === 'r1')!;
+    const existingRequirement = requirementsOf(data.versions[0]).find((r) => r.id === 'r1')!;
     expect(existingRequirement.entries.map((e) => e.id)).toEqual(['e_new']);
     expect(report.versionsCreated).toBe(0);
     expect(report.requirementsCreated).toBe(1);
@@ -207,7 +223,7 @@ describe('migrateToVersionTree', () => {
   });
 
   it('does not mutate its input: repeated calls on the same mixed object are stable', () => {
-    const mixed: WorklogData = {
+    const mixed = {
       projects: [
         { id: 'p1', name: '资源加工平台', createdAt: 1, versions: [
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
@@ -225,25 +241,25 @@ describe('migrateToVersionTree', () => {
           ],
         },
       ],
-    };
+    } as unknown as WorklogData;
 
     const first = migrateToVersionTree(mixed);
     const second = migrateToVersionTree(mixed);
 
     // 第二次结果与第一次完全一致,条目不会翻倍
     expect(second.data).toEqual(first.data);
-    expect(first.data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual([
+    expect(requirementsOf(first.data.versions[0])[0].entries.map((e) => e.id)).toEqual([
       'e_new',
       'e_old',
     ]);
     // 入参原对象未被就地改写(旧版本、已有需求都保持原样)
     expect((mixed.projects[0] as LegacyProject).versions[0].entries).toHaveLength(1);
-    expect(mixed.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e_new']);
-    expect(mixed.versions[0].requirements).toHaveLength(1);
+    expect(requirementsOf(mixed.versions[0])[0].entries.map((e) => e.id)).toEqual(['e_new']);
+    expect(requirementsOf(mixed.versions[0])).toHaveLength(1);
   });
 
   it('reuses the migration requirement when a version already has it', () => {
-    const mixed: WorklogData = {
+    const mixed = {
       projects: [
         { id: 'p1', name: '资源加工平台', createdAt: 1, versions: [
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
@@ -261,13 +277,13 @@ describe('migrateToVersionTree', () => {
           ],
         },
       ],
-    };
+    } as unknown as WorklogData;
 
     const { data, report } = migrateToVersionTree(mixed);
 
-    expect(data.versions[0].requirements).toHaveLength(1);
-    expect(data.versions[0].requirements[0].id).toBe('r1');
-    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e_old']);
+    expect(requirementsOf(data.versions[0])).toHaveLength(1);
+    expect(requirementsOf(data.versions[0])[0].id).toBe('r1');
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.id)).toEqual(['e_old']);
     expect(report.requirementsCreated).toBe(0);
   });
 });
@@ -309,7 +325,7 @@ describe('runVersionTreeMigration', () => {
 
     const data = await worklogRepo.load();
     expect(data.versions.map((v) => v.name).sort()).toEqual(['V8.0.8', 'worklog-template']);
-    const totalEntries = data.versions.flatMap((v) => v.requirements.flatMap((r) => r.entries));
+    const totalEntries = data.versions.flatMap((v) => requirementsOf(v).flatMap((r) => r.entries ?? []));
     expect(totalEntries).toHaveLength(4);
     expect(data.projects.every((p) => !('versions' in p))).toBe(true);
 
@@ -373,10 +389,10 @@ describe('migrateProgramLayer', () => {
     expect(data.programs[0].id).toMatch(/^g_/);
     expect(data.versions.every((v) => v.programId === data.programs[0].id)).toBe(true);
     // 需求/条目保留,标题不改
-    expect(data.versions[0].requirements).toHaveLength(1);
-    expect(data.versions[0].requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
-    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e1']);
-    expect(data.versions[1].requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(requirementsOf(data.versions[0])).toHaveLength(1);
+    expect(requirementsOf(data.versions[0])[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.id)).toEqual(['e1']);
+    expect(requirementsOf(data.versions[1])[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
     expect(report).toEqual({ programsCreated: 1, versionsAssigned: 2 });
 
     // 纯函数不改写入参(旧数据本来没有 programs / programId)
@@ -444,7 +460,7 @@ describe('migrateProgramLayer', () => {
     const defaultProgram = data.programs.find((p) => p.name === DEFAULT_PROGRAM_NAME)!;
     expect(data.versions[1].programId).toBe(defaultProgram.id);
     // 原需求原样保留
-    expect(data.versions[1].requirements.map((r) => r.title)).toEqual(['其他需求']);
+    expect(requirementsOf(data.versions[1]).map((r) => r.title)).toEqual(['其他需求']);
   });
 
   it('reuses an existing program with the same name instead of creating a duplicate', () => {
@@ -506,7 +522,7 @@ describe('migrateProgramLayer', () => {
 describe('needsProgramLayerMigration / isProgramLayerMigrated', () => {
   const program = { id: 'g_1', name: '澳门底层数据建设', createdAt: 1 };
   const version = (programId: string) =>
-    ({ id: 'v1', name: 'V1', programId, createdAt: 1, requirements: [] });
+    ({ id: 'v1', name: 'V1', programId, createdAt: 1, entries: [] });
 
   it('treats fully assigned data as migrated', () => {
     const data = {
@@ -606,8 +622,8 @@ describe('runProgramLayerMigration', () => {
     expect(data.programs[0].name).toBe(LEGACY_REQUIREMENT_TITLE);
     expect(data.versions.every((v) => v.programId === data.programs[0].id)).toBe(true);
     // 需求与条目一条不丢
-    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e1']);
-    expect(data.versions[1].requirements.map((r) => r.title)).toEqual([
+    expect(requirementsOf(data.versions[0])[0].entries.map((e) => e.id)).toEqual(['e1']);
+    expect(requirementsOf(data.versions[1]).map((r) => r.title)).toEqual([
       LEGACY_REQUIREMENT_TITLE,
       '其他需求',
     ]);
@@ -720,5 +736,248 @@ describe('runProgramLayerMigration', () => {
     expect(report.programsCreated).toBe(0);
     // 未写入任何 worklog 数据文件(不制造空主题)
     await expect(fs.access(path.join(freshDir, 'worklog.json'))).rejects.toThrow();
+  });
+});
+
+/** v2 形态:版本下挂需求、还没有 entries(迁移 v3 的输入) */
+function requirementTreeVersion(
+  id: string,
+  name: string,
+  requirements: LegacyRequirement[],
+  createdAt = 1,
+): Record<string, unknown> {
+  return { id, name, programId: 'g1', createdAt, requirements };
+}
+
+/** v2 形态的整体数据(主题已就位,版本仍带需求层) */
+function requirementTreeData(versions: Array<Record<string, unknown>>): WorklogData {
+  return {
+    projects: [],
+    programs: [{ id: 'g1', name: LEGACY_REQUIREMENT_TITLE, createdAt: 1 }],
+    versions,
+  } as unknown as WorklogData;
+}
+
+describe('migrateFlatEntries', () => {
+  it('merges requirement entries into version and drops requirements', () => {
+    const data = requirementTreeData([
+      requirementTreeVersion('v1', 'V1', [
+        requirement('r1', 'A', [entry('e1'), entry('e2')]),
+        requirement('r2', 'B', [entry('e3')]),
+      ]),
+    ]);
+
+    const { data: out, report } = migrateFlatEntries(data);
+
+    // 按需求顺序、需求内原顺序拼接
+    expect(out.versions[0].entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+    expect('requirements' in out.versions[0]).toBe(false);
+    expect(report).toEqual({ entriesMerged: 3, versionsFlattened: 1 });
+  });
+
+  it('conserves every entry (no drop, no duplication)', () => {
+    const source = requirementTreeData([
+      requirementTreeVersion('v1', 'V1', [
+        requirement('r1', 'A', [entry('e1'), entry('e2')]),
+        requirement('r2', 'B', [entry('e3'), entry('e4')]),
+      ]),
+      requirementTreeVersion('v2', 'V2', [requirement('r3', 'C', [entry('e5')])], 2),
+    ]);
+    const inputIds = requirementsOf(source.versions[0])
+      .concat(requirementsOf(source.versions[1]))
+      .flatMap((r) => r.entries.map((e) => e.id));
+
+    const { data: out, report } = migrateFlatEntries(source);
+    const outputIds = out.versions.flatMap((v) => v.entries.map((e) => e.id));
+
+    expect(outputIds.sort()).toEqual(inputIds.sort());
+    expect(outputIds).toHaveLength(5);
+    expect(report.entriesMerged).toBe(5);
+    expect(report.versionsFlattened).toBe(2);
+  });
+
+  it('is idempotent: second call returns the same object and zero counts', () => {
+    const source = requirementTreeData([
+      requirementTreeVersion('v1', 'V1', [requirement('r1', 'A', [entry('e1')])]),
+    ]);
+
+    const once = migrateFlatEntries(source);
+    const twice = migrateFlatEntries(once.data);
+
+    expect(twice.data).toBe(once.data); // 已是扁平结构:同一引用原样返回
+    expect(twice.report).toEqual({ entriesMerged: 0, versionsFlattened: 0 });
+  });
+
+  it('leaves already-flat data untouched (no requirements field)', () => {
+    const data: WorklogData = {
+      projects: [],
+      programs: [{ id: 'g1', name: '主题', createdAt: 1 }],
+      versions: [
+        { id: 'v1', name: 'V1', programId: 'g1', createdAt: 1, entries: [entry('e1')] },
+      ],
+    };
+
+    const result = migrateFlatEntries(data);
+
+    expect(result.data).toBe(data);
+    expect(result.report).toEqual({ entriesMerged: 0, versionsFlattened: 0 });
+    expect(needsFlatEntriesMigration(data)).toBe(false);
+  });
+
+  it('handles empty versions (no requirements) while migrating siblings', () => {
+    const empty = { id: 'v_empty', name: 'V-empty', programId: 'g1', createdAt: 3, entries: [] };
+    const source = {
+      projects: [],
+      programs: [{ id: 'g1', name: LEGACY_REQUIREMENT_TITLE, createdAt: 1 }],
+      versions: [
+        empty,
+        requirementTreeVersion('v1', 'V1', [requirement('r1', 'A', [entry('e1')])], 2),
+      ],
+    } as unknown as WorklogData;
+
+    const { data: out, report } = migrateFlatEntries(source);
+
+    // 空版本原样保留,不被写坏
+    expect(out.versions[0]).toBe(empty);
+    expect(out.versions[1].entries.map((e) => e.id)).toEqual(['e1']);
+    expect(report.versionsFlattened).toBe(1);
+  });
+
+  it('keeps pre-existing entries when a mixed version has both entries and requirements', () => {
+    const source = {
+      projects: [],
+      programs: [],
+      versions: [
+        {
+          id: 'v1',
+          name: 'V1',
+          programId: 'g1',
+          createdAt: 1,
+          entries: [entry('e_new')],
+          requirements: [requirement('r1', 'A', [entry('e_old')])],
+        },
+      ],
+    } as unknown as WorklogData;
+
+    const { data: out } = migrateFlatEntries(source);
+
+    // 混合态两边都保留,不静默丢条目
+    expect(out.versions[0].entries.map((e) => e.id)).toEqual(['e_new', 'e_old']);
+    expect('requirements' in out.versions[0]).toBe(false);
+  });
+});
+
+describe('runFlatEntriesMigration', () => {
+  let worklogRepo: JsonWorklogRepository;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = path.join(os.tmpdir(), `mig-fe-${nanoid()}`);
+    await fs.mkdir(dir, { recursive: true });
+    worklogRepo = new JsonWorklogRepository(path.join(dir, 'worklog.json'), path.join(dir, 'wb'));
+    // 旧数据:v1/v2 落盘的版本仍带需求层,没有 entries
+    await worklogRepo.mutate((d) => {
+      d.versions.push(
+        requirementTreeVersion('v1', 'V8.0.8', [
+          requirement('r1', LEGACY_REQUIREMENT_TITLE, [entry('e1'), entry('e2')]),
+          requirement('r2', '其他需求', [entry('e3')]),
+        ]) as never,
+        requirementTreeVersion('v2', 'V8.0.9', [
+          requirement('r3', LEGACY_REQUIREMENT_TITLE, [entry('e4')]),
+        ], 2) as never,
+      );
+    });
+  });
+
+  it('migrates the file, writes a marker and leaves a backup snapshot', async () => {
+    const report = await runFlatEntriesMigration({ dataDir: dir, worklogRepo });
+
+    expect(report.skipped).toBe(false);
+    expect(report.versionsFlattened).toBe(2);
+    expect(report.entriesMerged).toBe(4);
+
+    const data = await worklogRepo.load();
+    expect(data.versions[0].entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+    expect(data.versions[1].entries.map((e) => e.id)).toEqual(['e4']);
+    // requirements 字段已从落盘数据移除
+    const raw = JSON.parse(await fs.readFile(path.join(dir, 'worklog.json'), 'utf8')) as {
+      versions: Array<Record<string, unknown>>;
+    };
+    expect(raw.versions.every((v) => !('requirements' in v))).toBe(true);
+
+    // 标记文件(原子写产物)为版本 1
+    const marker = JSON.parse(
+      await fs.readFile(path.join(dir, '.migration-flat-entries.json'), 'utf8'),
+    ) as { version: number };
+    expect(marker.version).toBe(1);
+
+    // 破坏性写入必须留快照
+    expect((await fs.readdir(path.join(dir, 'wb'))).length).toBeGreaterThan(0);
+    // 锁已释放:目录里不残留锁文件
+    expect((await fs.readdir(dir)).some((name) => name.includes('.lock'))).toBe(false);
+  });
+
+  it('is idempotent at file level: second run skips and leaves the bytes unchanged', async () => {
+    const first = await runFlatEntriesMigration({ dataDir: dir, worklogRepo });
+    expect(first.skipped).toBe(false);
+
+    const worklogFile = path.join(dir, 'worklog.json');
+    const hash = async () => (await fs.readFile(worklogFile)).toString('base64');
+    const before = await hash();
+
+    const second = await runFlatEntriesMigration({ dataDir: dir, worklogRepo });
+
+    expect(second.skipped).toBe(true);
+    expect(second.entriesMerged).toBe(0);
+    expect(second.versionsFlattened).toBe(0);
+    expect(await hash()).toBe(before);
+  });
+
+  it('does nothing (and marks skipped) on already-flat data', async () => {
+    const freshDir = path.join(os.tmpdir(), `mig-fe-fresh-${nanoid()}`);
+    await fs.mkdir(freshDir, { recursive: true });
+    const repo = new JsonWorklogRepository(
+      path.join(freshDir, 'worklog.json'),
+      path.join(freshDir, 'wb'),
+    );
+
+    const report = await runFlatEntriesMigration({ dataDir: freshDir, worklogRepo: repo });
+
+    expect(report.skipped).toBe(true);
+    // 未写入任何 worklog 数据文件
+    await expect(fs.access(path.join(freshDir, 'worklog.json'))).rejects.toThrow();
+  });
+
+  it('load() normalizes missing entries without dropping requirements', async () => {
+    // Task 2 遗留防护:旧数据版本没有 entries 时,读侧归一为数组,
+    // 但 requirements 必须原样保留,交给迁移 v3 合并(不能静默丢失条目)。
+    const rawDir = path.join(os.tmpdir(), `mig-fe-raw-${nanoid()}`);
+    await fs.mkdir(rawDir, { recursive: true });
+    const rawFile = path.join(rawDir, 'worklog.json');
+    await fs.writeFile(
+      rawFile,
+      JSON.stringify({
+        projects: [],
+        programs: [{ id: 'g1', name: LEGACY_REQUIREMENT_TITLE, createdAt: 1 }],
+        versions: [
+          {
+            id: 'v1',
+            name: 'V1',
+            programId: 'g1',
+            createdAt: 1,
+            requirements: [requirement('r1', 'A', [entry('e1')])],
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const repo = new JsonWorklogRepository(rawFile, path.join(rawDir, 'wb'));
+
+    const loaded = await repo.load();
+
+    expect(loaded.versions[0].entries).toEqual([]);
+    expect(requirementsOf(loaded.versions[0]).flatMap((r) => r.entries.map((e) => e.id))).toEqual([
+      'e1',
+    ]);
   });
 });

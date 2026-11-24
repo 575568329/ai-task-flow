@@ -11,6 +11,9 @@
 // 幂等:数据里已没有旧版 versions 字段时原样返回(纯函数);执行器第二次运行直接 skipped,
 // 不写 worklog.json,哈希字节级不变。执行器风格与 ProjectIdMigration.ts 一致:
 // 数据目录互斥锁 + 标记文件(.migration-version-tree.json,原子写)+ mutate(..., { backup: true }) 留快照。
+//
+// 本文件串联三步一次性迁移:v1 版本归并、v2 建设主题层、v3 条目扁平化(移除需求层)。
+// v1/v2 保留需求中间态,v3 最后把需求下的条目提升到版本。
 import fs from 'node:fs/promises';
 import lockfile from 'proper-lockfile';
 import writeFileAtomic from 'write-file-atomic';
@@ -20,11 +23,12 @@ import type {
   WorklogEntry,
   WorklogProgram,
   WorklogProject,
-  WorklogRequirement,
   WorklogVersion,
 } from '@ai-task-flow/shared';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
 import {
+  flatEntriesMigrationLockTarget,
+  flatEntriesMigrationMarkerPath,
   programLayerMigrationLockTarget,
   programLayerMigrationMarkerPath,
   versionTreeMigrationLockTarget,
@@ -52,6 +56,30 @@ interface LegacyVersion {
 
 /** 旧结构项目:新模型 WorklogProject 上额外挂着 versions 字段 */
 type ProjectWithLegacyVersions = WorklogProject & { versions?: LegacyVersion[] };
+
+/**
+ * 迁移 v1/v2 中间态的需求形状。shared 已删除 WorklogRequirement(需求层被砍),
+ * 但真实旧数据里仍可能带着 requirements,迁移代码保留本形状只用于读取旧结构。
+ */
+interface LegacyRequirement {
+  id: string;
+  title: string;
+  createdAt: number;
+  entries?: WorklogEntry[];
+}
+
+/** 带需求层的版本:v1 产出、v2 输入/输出、v3 输入,entries 在 v3 之前可能缺省 */
+type VersionWithLegacyRequirements = WorklogVersion & {
+  requirements?: LegacyRequirement[];
+  entries?: WorklogEntry[];
+};
+
+/** 读取版本上的需求数组;字段不存在返回 undefined(幂等判定的依据) */
+function legacyRequirementsOf(version: WorklogVersion): LegacyRequirement[] | undefined {
+  const value = (version as VersionWithLegacyRequirements).requirements;
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value : [];
+}
 
 export interface VersionMigrationReport {
   /** 本次新建的顶层版本数 */
@@ -120,13 +148,14 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
   // 顶层版本按名称索引;混合态下复用已有版本(不新建、不改 id)。
   // 先浅拷贝 version/requirements/entries 数组:后续 push 只落在副本上,
   // 保证纯函数不就地改写入参(同一混合态对象重复调用结果稳定)。
-  const byName = new Map<string, WorklogVersion>();
+  const byName = new Map<string, VersionWithLegacyRequirements>();
   for (const version of data.versions ?? []) {
     byName.set(version.name, {
       ...version,
-      requirements: version.requirements.map((requirement) => ({
+      entries: [...(version.entries ?? [])],
+      requirements: (legacyRequirementsOf(version) ?? []).map((requirement) => ({
         ...requirement,
-        entries: [...requirement.entries],
+        entries: [...(requirement.entries ?? [])],
       })),
     });
   }
@@ -150,6 +179,7 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
           programId: '',
           // 尽量沿用旧版本的创建时间,便于追溯
           createdAt: legacy.createdAt ?? Date.now(),
+          entries: [],
           requirements: [],
         };
         byName.set(legacy.name, version);
@@ -157,7 +187,9 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
       }
 
       // 每个版本下唯一一个迁移需求;混合态下复用已有的同名需求
-      let requirement = version.requirements.find((r) => r.title === LEGACY_REQUIREMENT_TITLE);
+      const requirements = version.requirements ?? [];
+      version.requirements = requirements;
+      let requirement = requirements.find((r) => r.title === LEGACY_REQUIREMENT_TITLE);
       if (!requirement) {
         requirement = {
           id: `r_${nanoid(8)}`,
@@ -165,10 +197,11 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
           createdAt: Date.now(),
           entries: [],
         };
-        version.requirements.push(requirement);
+        requirements.push(requirement);
         report.requirementsCreated += 1;
       }
 
+      requirement.entries = requirement.entries ?? [];
       for (const legacyEntry of legacy.entries ?? []) {
         // 复制而非复用旧对象,避免调用方原始数据被就地改写
         const entry: WorklogEntry = { ...legacyEntry, project: project.name };
@@ -192,8 +225,9 @@ export function migrateToVersionTree(data: WorklogData): VersionTreeMigrationRes
       projects: data.projects.map(stripLegacyVersions),
       // 主题字段原样保留(旧数据没有;迁移 v2 负责建主题与回填 programId)
       programs: data.programs ?? [],
-      // 按名称排序,保证同一份旧数据得到稳定结果
-      versions: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      // 按名称排序,保证同一份旧数据得到稳定结果。
+      // v1 产出仍是「版本 → 需求」中间态(需求由 v2 提升主题、v3 扁平化),按中间态交出。
+      versions: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)) as WorklogVersion[],
     },
     report,
   };
@@ -333,8 +367,9 @@ export function needsProgramLayerMigration(data: WorklogData): boolean {
 /** 主题名:该版本「澳门底层数据建设」需求标题;没有则默认「未分类建设」 */
 function programNameOf(version: WorklogVersion): string {
   return (
-    (version.requirements ?? []).find((requirement) => requirement.title === LEGACY_REQUIREMENT_TITLE)
-      ?.title ?? DEFAULT_PROGRAM_NAME
+    (legacyRequirementsOf(version) ?? []).find(
+      (requirement) => requirement.title === LEGACY_REQUIREMENT_TITLE,
+    )?.title ?? DEFAULT_PROGRAM_NAME
   );
 }
 
@@ -437,6 +472,144 @@ export async function runProgramLayerMigration(
 
     // 最后落标记(原子写):中途失败不会留半截标记,下次启动会重做(迁移本身幂等)
     await ensureProgramMarker(deps.dataDir);
+    return { ...report, skipped: false };
+  } finally {
+    await release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 迁移 v3:把需求下的条目提升到版本(移除需求层)
+//
+// 为什么需要:需求层(版本 → 需求 → 条目)只剩一个自动生成的「澳门底层数据建设」分组,
+// 对页面检索和 MCP 写入都只是多一跳。新模型版本直接持有条目。
+// 迁移规则:
+//   1) 每个版本把 requirements[].entries 按需求顺序、需求内原顺序拼接为 version.entries;
+//   2) 移除 requirements 字段;
+//   3) 极端混合态(版本上既有 entries 又有 requirements)两边都保留:先既有 entries,再需求条目;
+//   4) 条目不删除、不改 id(条目数守恒)。
+//
+// 幂等:版本上没有 requirements 字段时原样返回(纯函数);执行器第二次运行 skipped,
+// 不写 worklog.json(字节级不变)。执行器与前两步同风格:数据目录互斥锁 + 标记文件
+// (.migration-flat-entries.json,原子写)+ mutate(..., { backup: true }) 留快照。
+// ---------------------------------------------------------------------------
+
+/** 条目扁平化迁移版本号;标记文件独立 */
+const FLAT_ENTRY_MIGRATION_VERSION = 1;
+
+export interface FlatEntryReport {
+  /** 本次从需求合并到版本的条目数(不新造、不丢失) */
+  entriesMerged: number;
+  /** 本次移除需求层(requirements 字段)的版本数 */
+  versionsFlattened: number;
+}
+
+export interface FlatEntryMigrationResult {
+  data: WorklogData;
+  report: FlatEntryReport;
+}
+
+/** 执行器依赖与前两步相同:数据目录 + worklog 仓储 */
+export type FlatEntryMigrationDeps = VersionMigrationDeps;
+
+export type FlatEntryMigrationRunResult = FlatEntryReport & {
+  /** 数据无需迁移(版本已是扁平结构 / 空数据 / 另一进程已完成) */
+  skipped: boolean;
+};
+
+function emptyFlatEntryReport(): FlatEntryReport {
+  return { entriesMerged: 0, versionsFlattened: 0 };
+}
+
+/** 数据是否还带需求层:任一版本上有 requirements 字段 */
+export function needsFlatEntriesMigration(data: WorklogData): boolean {
+  return (data.versions ?? []).some((version) => legacyRequirementsOf(version) !== undefined);
+}
+
+/**
+ * 纯函数:需求条目提升到版本并移除 requirements。
+ * 没有 requirements 字段时原样返回,保证幂等。
+ */
+export function migrateFlatEntries(data: WorklogData): FlatEntryMigrationResult {
+  const report = emptyFlatEntryReport();
+  let changed = false;
+  const versions = (data.versions ?? []).map((version) => {
+    const legacy = legacyRequirementsOf(version);
+    if (legacy === undefined) return version; // 已是扁平结构:原样保留
+
+    changed = true;
+    report.versionsFlattened += 1;
+    const merged = legacy.flatMap((requirement) => requirement.entries ?? []);
+    report.entriesMerged += merged.length;
+
+    // 解构 rest 排除 requirements;TypeScript 对带 rest 的解构不报未使用变量
+    const { requirements: _drop, ...rest } = version as VersionWithLegacyRequirements;
+    // 混合态下既有 entries 也保留,绝不因迁移丢条目
+    return { ...rest, entries: [...(rest.entries ?? []), ...merged] } as WorklogVersion;
+  });
+
+  return changed ? { data: { ...data, versions }, report } : { data, report };
+}
+
+/** 读取条目扁平化标记文件版本号;文件不存在/损坏一律视为未迁移(0) */
+async function readFlatEntryMarker(dataDir: string): Promise<number> {
+  try {
+    const raw = await fs.readFile(flatEntriesMigrationMarkerPath(dataDir), 'utf8');
+    return (JSON.parse(raw) as { version?: number }).version ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 已到当前迁移版本时不重复写标记(保证第二次运行的目录字节不变) */
+async function ensureFlatEntryMarker(dataDir: string): Promise<void> {
+  if ((await readFlatEntryMarker(dataDir)) >= FLAT_ENTRY_MIGRATION_VERSION) return;
+  await writeFileAtomic(
+    flatEntriesMigrationMarkerPath(dataDir),
+    JSON.stringify({ version: FLAT_ENTRY_MIGRATION_VERSION, at: new Date().toISOString() }, null, 2),
+  );
+}
+
+/**
+ * 一次性迁移执行器,HTTP 启动时调用(v2 主题层之后;异常由调用方兜住,不阻塞启动)。
+ * 幂等:版本已是扁平结构(或空数据)直接 skipped,不写 worklog.json、不留新快照。
+ */
+export async function runFlatEntriesMigration(
+  deps: FlatEntryMigrationDeps,
+): Promise<FlatEntryMigrationRunResult> {
+  await fs.mkdir(deps.dataDir, { recursive: true });
+
+  // 快路径:先读一次判断,避免每次启动都抢锁/写备份
+  const before = await deps.worklogRepo.load();
+  if (!needsFlatEntriesMigration(before)) {
+    await ensureFlatEntryMarker(deps.dataDir);
+    return { ...emptyFlatEntryReport(), skipped: true };
+  }
+
+  const release = await lockfile.lock(flatEntriesMigrationLockTarget(deps.dataDir), {
+    stale: LOCK_STALE_MS,
+    retries: LOCK_RETRIES,
+  });
+  try {
+    // 锁内二次检查:等锁期间另一个进程可能已完成迁移
+    const fresh = await deps.worklogRepo.load();
+    if (!needsFlatEntriesMigration(fresh)) {
+      await ensureFlatEntryMarker(deps.dataDir);
+      return { ...emptyFlatEntryReport(), skipped: true };
+    }
+
+    const report = await deps.worklogRepo.mutate(
+      (data) => {
+        const migrated = migrateFlatEntries(data);
+        // mutate 提交的是同一个 data 对象:原地替换为迁移结果
+        data.versions = migrated.data.versions;
+        return migrated.report;
+      },
+      { backup: true },
+    );
+
+    // 最后落标记(原子写):中途失败不会留半截标记,下次启动会重做(迁移本身幂等)
+    await ensureFlatEntryMarker(deps.dataDir);
     return { ...report, skipped: false };
   } finally {
     await release();

@@ -44,10 +44,16 @@ export class JsonWorklogRepository extends JsonRepository implements WorklogRepo
     const parsed = JSON.parse(raw) as WorklogData;
     // 顶层字段缺省容错:迁移前的旧文件没有 versions/programs,由迁移服务补齐;
     // 此处归一为空数组,避免服务层读旧文件时 data.versions.find / data.programs 崩溃。
+    const versions = (parsed.versions ?? []).map((version) => {
+      // 旧数据(需求层尚未迁移)的版本可能没有 entries,只有 requirements。
+      // 这里只归一 entries 为数组,requirements 原样保留给迁移 v3 合并——不能静默丢弃。
+      if (Array.isArray(version.entries)) return version;
+      return { ...version, entries: [] };
+    });
     return {
       projects: parsed.projects ?? [],
       programs: parsed.programs ?? [],
-      versions: parsed.versions ?? [],
+      versions,
     };
   }
 

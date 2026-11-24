@@ -200,3 +200,14 @@ export function programLayerMigrationMarkerPath(dataDir?: string): string {
 export function programLayerMigrationLockTarget(dataDir?: string): string {
   return resolveDataDir(dataDir);
 }
+
+/** 条目扁平化(需求层移除)一次性迁移的版本标记文件,保证幂等 */
+export function flatEntriesMigrationMarkerPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), '.migration-flat-entries.json');
+}
+
+/** 条目扁平化迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移。
+ *  与 v1/v2 共用锁目标,保证跨进程三步迁移串行,不会各自基于旧快照互相覆盖。 */
+export function flatEntriesMigrationLockTarget(dataDir?: string): string {
+  return resolveDataDir(dataDir);
+}
