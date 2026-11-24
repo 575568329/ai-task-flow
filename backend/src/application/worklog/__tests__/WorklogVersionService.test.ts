@@ -18,6 +18,8 @@ describe('WorklogService version/requirement CRUD', () => {
   let backupsDir: string;
   let repo: JsonWorklogRepository;
   let service: WorklogService;
+  /** 版本必须归属主题:预置一个,避免 service.createProgram 的备份影响「纯新增不备份」断言 */
+  let programId: string;
 
   beforeEach(async () => {
     const { nanoid } = await import('nanoid');
@@ -25,6 +27,11 @@ describe('WorklogService version/requirement CRUD', () => {
     backupsDir = path.join(tmpDir, 'worklog-backups');
     repo = new JsonWorklogRepository(path.join(tmpDir, 'worklog.json'), backupsDir);
     service = new WorklogService(repo);
+    programId = await repo.mutate((data) => {
+      const id = 'g_test';
+      data.programs.push({ id, name: '测试主题', createdAt: Date.now() });
+      return id;
+    });
   });
 
   afterEach(async () => {
@@ -52,7 +59,7 @@ describe('WorklogService version/requirement CRUD', () => {
   // ---------------------------------------------------------------
   describe('createVersion', () => {
     it('creates a version with v_ id and persists description', async () => {
-      const v = await service.createVersion({ name: ' V8.0.8 ', description: '澳门迭代' });
+      const v = await service.createVersion({ name: ' V8.0.8 ', programId, description: '澳门迭代' });
       expect(v.id).toMatch(/^v_/);
 
       const tree = await service.getTree();
@@ -63,20 +70,20 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('rejects duplicate version name globally', async () => {
-      await service.createVersion({ name: 'V1' });
-      await expect(service.createVersion({ name: 'V1' }))
+      await service.createVersion({ name: 'V1', programId });
+      await expect(service.createVersion({ name: 'V1', programId }))
         .rejects.toBeInstanceOf(WorklogConflictError);
       expect((await service.getTree()).versions).toHaveLength(1);
     });
 
     it('rejects empty / slash-containing / overlong names', async () => {
-      await expect(service.createVersion({ name: '   ' })).rejects.toThrow(/版本名不能为空/);
-      await expect(service.createVersion({ name: 'a/b' })).rejects.toThrow(/不能包含/);
-      await expect(service.createVersion({ name: 'x'.repeat(61) })).rejects.toThrow(/长度不能超过/);
+      await expect(service.createVersion({ name: '   ', programId })).rejects.toThrow(/版本名不能为空/);
+      await expect(service.createVersion({ name: 'a/b', programId })).rejects.toThrow(/不能包含/);
+      await expect(service.createVersion({ name: 'x'.repeat(61), programId })).rejects.toThrow(/长度不能超过/);
     });
 
     it('does not back up pure create operations', async () => {
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       await seedProject('题库');
       await service.createRequirement({ versionId: v.id, title: 'R', projects: ['题库'] });
       expect(await listBackups()).toHaveLength(0);
@@ -89,7 +96,7 @@ describe('WorklogService version/requirement CRUD', () => {
   describe('createRequirement', () => {
     it('creates a requirement with r_ id and project snapshots', async () => {
       const projectId = await seedProject('题库');
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
 
       const r = await service.createRequirement({
         versionId: v.id, title: '澳门底层数据建设', description: '说明', projects: ['题库'],
@@ -115,8 +122,8 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('rejects duplicate title within the same version only', async () => {
-      const v1 = await service.createVersion({ name: 'V1' });
-      const v2 = await service.createVersion({ name: 'V2' });
+      const v1 = await service.createVersion({ name: 'V1', programId });
+      const v2 = await service.createVersion({ name: 'V2', programId });
       await service.createRequirement({ versionId: v1.id, title: 'R' });
 
       await expect(service.createRequirement({ versionId: v1.id, title: 'R' }))
@@ -128,7 +135,7 @@ describe('WorklogService version/requirement CRUD', () => {
 
     it('rejects unknown project and dedupes repeated names', async () => {
       await seedProject('题库');
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
 
       await expect(service.createRequirement({ versionId: v.id, title: 'R', projects: ['不存在'] }))
         .rejects.toThrow(/项目不存在:不存在/);
@@ -141,7 +148,7 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('allows slashes in requirement titles but rejects empty/overlong ones', async () => {
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       await expect(service.createRequirement({ versionId: v.id, title: '登录/白屏修复' }))
         .resolves.toHaveProperty('id');
       await expect(service.createRequirement({ versionId: v.id, title: ' ' }))
@@ -152,7 +159,7 @@ describe('WorklogService version/requirement CRUD', () => {
 
     it('skips projects without stable id instead of writing undefined projectIds', async () => {
       await seedProject('无id项目', { id: null });
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       const r = await service.createRequirement({
         versionId: v.id, title: 'R', projects: ['无id项目'],
       });
@@ -163,7 +170,7 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('lists existing versions as candidates when version is unknown', async () => {
-      const existing = await service.createVersion({ name: 'V8.0.7' });
+      const existing = await service.createVersion({ name: 'V8.0.7', programId });
       await expect(service.createRequirement({ versionId: 'v_nope', title: 'R' }))
         .rejects.toThrow(new RegExp(`现有版本：V8\\.0\\.7\\(${existing.id}\\)`));
     });
@@ -174,7 +181,7 @@ describe('WorklogService version/requirement CRUD', () => {
   // ---------------------------------------------------------------
   describe('renameVersion / deleteVersion', () => {
     it('renames a version by id and keeps its requirements/entries', async () => {
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       const r = await service.createRequirement({ versionId: v.id, title: 'R' });
       await service.record({ versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev' });
       const before = (await listBackups()).length;
@@ -188,8 +195,8 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('rejects unknown id and duplicate target name', async () => {
-      const v1 = await service.createVersion({ name: 'V1' });
-      await service.createVersion({ name: 'V2' });
+      const v1 = await service.createVersion({ name: 'V1', programId });
+      await service.createVersion({ name: 'V2', programId });
 
       await expect(service.renameVersion('v_nope', 'V3')).rejects.toBeInstanceOf(WorklogNotFoundError);
       await expect(service.renameVersion(v1.id, 'V2')).rejects.toBeInstanceOf(WorklogConflictError);
@@ -199,8 +206,8 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('deletes a version with its requirements and entries', async () => {
-      const v1 = await service.createVersion({ name: 'V1' });
-      const v2 = await service.createVersion({ name: 'V2' });
+      const v1 = await service.createVersion({ name: 'V1', programId });
+      const v2 = await service.createVersion({ name: 'V2', programId });
       const r = await service.createRequirement({ versionId: v1.id, title: 'R' });
       await service.record({ versionId: v1.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev' });
       const before = (await listBackups()).length;
@@ -223,7 +230,7 @@ describe('WorklogService version/requirement CRUD', () => {
   // ---------------------------------------------------------------
   describe('renameRequirement / deleteRequirement', () => {
     it('renames a requirement and rejects duplicates within the version', async () => {
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       const r1 = await service.createRequirement({ versionId: v.id, title: 'R1' });
       await service.createRequirement({ versionId: v.id, title: 'R2' });
       const before = (await listBackups()).length;
@@ -238,8 +245,8 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('rejects requirement that does not belong to the version', async () => {
-      const v1 = await service.createVersion({ name: 'V1' });
-      const v2 = await service.createVersion({ name: 'V2' });
+      const v1 = await service.createVersion({ name: 'V1', programId });
+      const v2 = await service.createVersion({ name: 'V2', programId });
       const r1 = await service.createRequirement({ versionId: v1.id, title: 'R' });
 
       await expect(service.renameRequirement(v2.id, r1.id, 'X')).rejects.toThrow(/不属于该版本/);
@@ -256,7 +263,7 @@ describe('WorklogService version/requirement CRUD', () => {
     });
 
     it('deletes a requirement with its entries but keeps siblings', async () => {
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId });
       const r1 = await service.createRequirement({ versionId: v.id, title: 'R1' });
       const r2 = await service.createRequirement({ versionId: v.id, title: 'R2' });
       await service.record({ versionId: v.id, requirementId: r1.id, title: 'a', detail: 'd', stage: 'dev' });
@@ -276,9 +283,9 @@ describe('WorklogService version/requirement CRUD', () => {
   // 版本名唯一性(跨版本树),不是项目内唯一
   // ---------------------------------------------------------------
   it('enforces version name uniqueness across the whole tree', async () => {
-    const v1 = await service.createVersion({ name: 'V1' });
-    const v2 = await service.createVersion({ name: 'V2' });
-    await expect(service.createVersion({ name: 'V2' })).rejects.toBeInstanceOf(WorklogConflictError);
+    const v1 = await service.createVersion({ name: 'V1', programId });
+    const v2 = await service.createVersion({ name: 'V2', programId });
+    await expect(service.createVersion({ name: 'V2', programId })).rejects.toBeInstanceOf(WorklogConflictError);
     expect((await service.getTree()).versions.map((v) => v.id)).toEqual([v1.id, v2.id]);
   });
 });

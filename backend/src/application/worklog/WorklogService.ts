@@ -22,6 +22,8 @@ import type {
   WorklogUpdateRequest,
   WorklogVersionCreateRequest,
   WorklogRequirementCreateRequest,
+  WorklogProgramCreateRequest,
+  WorklogProgramSummary,
   WorkStage,
 } from '@ai-task-flow/shared';
 import type { WorklogRepository } from '../../domain/worklog/repositories/WorklogRepository.js';
@@ -36,6 +38,11 @@ import {
   findRequirement,
   findVersion,
 } from '../../domain/worklog/WorklogTree.js';
+import {
+  assertProgramNameFree,
+  findProgram,
+  versionsOfProgram,
+} from '../../domain/worklog/WorklogProgramTree.js';
 
 /** 版本/项目名约束:trim 后非空、不含路径分隔符(参与展示路径/路由参数)、长度上限 */
 const NAME_MAX_LEN = 60;
@@ -72,6 +79,10 @@ function versionCandidates(data: WorklogData): Array<{ id: string; label: string
 
 function requirementCandidates(version: WorklogVersion): Array<{ id: string; label: string }> {
   return version.requirements.map((r) => ({ id: r.id, label: r.title }));
+}
+
+function programCandidates(data: WorklogData): Array<{ id: string; label: string }> {
+  return (data.programs ?? []).map((p) => ({ id: p.id, label: p.name }));
 }
 
 function projectCandidates(data: WorklogData): Array<{ id: string; label: string }> {
@@ -192,6 +203,8 @@ export class WorklogService {
   /** 全树(工作记录页一次拉取;读最新,不缓存)+ 每个项目失效路径标记(前端据此标红) */
   async getTree(): Promise<WorklogData> {
     const data = await this.repo.load();
+    // 旧数据可能缺 programs 字段(仓储已归一,这里再兜底):调用方按数组使用
+    if (!data.programs) data.programs = [];
     // 项目数量少,直接 access 探测可接受;missingPaths 仅为读时计算结果,不持久化
     for (const project of data.projects) {
       const missing: string[] = [];
@@ -221,18 +234,97 @@ export class WorklogService {
   }
 
   // ------------------------------------------------------------------
+  // 建设主题 CRUD(顶层;版本通过 programId 归属)
+  // ------------------------------------------------------------------
+
+  /** 新建建设主题;主题名全局唯一(备份) */
+  async createProgram(input: WorklogProgramCreateRequest): Promise<{ id: string }> {
+    const name = validateName(input.name, '主题名');
+    return this.repo.mutate((data) => {
+      if (!data.programs) data.programs = [];
+      assertProgramNameFree(data, name);
+      const id = `g_${nanoid(8)}`;
+      data.programs.push({
+        id,
+        name,
+        ...(input.description ? { description: input.description } : {}),
+        createdAt: Date.now(),
+      });
+      return { id };
+    }, { backup: true });
+  }
+
+  /** 重命名建设主题;新名与既有主题重名则报错不改(备份) */
+  async renameProgram(id: string, newName: string): Promise<void> {
+    const programId = id?.trim() ?? '';
+    const target = validateName(newName, '新主题名');
+    await this.repo.mutate((data) => {
+      const program = findProgram(data, programId);
+      if (!program) {
+        throw new WorklogNotFoundError(
+          `主题 ${programId} 不存在；现有主题：${candidateText(programCandidates(data))}`,
+        );
+      }
+      assertProgramNameFree(data, target, programId);
+      program.name = target;
+    }, { backup: true });
+  }
+
+  /** 删整个建设主题:级联删除其下全部版本(含需求与条目),不删项目字典(备份) */
+  async deleteProgram(id: string): Promise<void> {
+    const programId = id?.trim() ?? '';
+    await this.repo.mutate((data) => {
+      if (!findProgram(data, programId)) {
+        throw new WorklogNotFoundError(
+          `主题 ${programId} 不存在；现有主题：${candidateText(programCandidates(data))}`,
+        );
+      }
+      const versionIds = new Set(versionsOfProgram(data, programId).map((v) => v.id));
+      data.versions = data.versions.filter((v) => !versionIds.has(v.id));
+      data.programs = (data.programs ?? []).filter((p) => p.id !== programId);
+    }, { backup: true });
+  }
+
+  /** 主题摘要列表(供 MCP list_programs):版本数与条目数汇总 */
+  async listPrograms(): Promise<WorklogProgramSummary[]> {
+    const data = await this.repo.load();
+    return (data.programs ?? []).map((program) => {
+      const versions = versionsOfProgram(data, program.id);
+      const entryCount = versions.reduce(
+        (sum, version) => sum
+          + version.requirements.reduce((inner, requirement) => inner + requirement.entries.length, 0),
+        0,
+      );
+      return {
+        id: program.id,
+        name: program.name,
+        versionCount: versions.length,
+        entryCount,
+      };
+    });
+  }
+
+  // ------------------------------------------------------------------
   // 版本 CRUD(仅页面/HTTP 使用;不提供 MCP 写接口)
   // ------------------------------------------------------------------
 
-  /** 新建版本;版本名全局唯一(纯新增,不写备份) */
+  /** 新建版本;版本名全局唯一,必须归属已存在的主题(纯新增,不写备份) */
   async createVersion(input: WorklogVersionCreateRequest): Promise<{ id: string }> {
     const name = validateName(input.name, '版本名');
     return this.repo.mutate((data) => {
+      const programId = typeof input.programId === 'string' ? input.programId.trim() : '';
+      // 版本 programId 不允许悬空:不存在即报错并列出候选主题,由用户先建主题
+      if (!findProgram(data, programId)) {
+        throw new WorklogNotFoundError(
+          `主题 ${programId || '（空）'} 不存在；现有主题：${candidateText(programCandidates(data))}`,
+        );
+      }
       assertVersionNameFree(data, name);
       const id = `v_${nanoid(8)}`;
       data.versions.push({
         id,
         name,
+        programId,
         ...(input.description ? { description: input.description } : {}),
         createdAt: Date.now(),
         requirements: [],

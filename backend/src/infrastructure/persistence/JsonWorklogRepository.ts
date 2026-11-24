@@ -40,11 +40,15 @@ export class JsonWorklogRepository extends JsonRepository implements WorklogRepo
   /** 读最新数据(不缓存)。文件不存在/空 → 空结构。 */
   async load(): Promise<WorklogData> {
     const raw = await this.read();
-    if (!raw || !raw.trim()) return { projects: [], versions: [] };
+    if (!raw || !raw.trim()) return { projects: [], programs: [], versions: [] };
     const parsed = JSON.parse(raw) as WorklogData;
-    // versions 缺省容错:迁移前的旧文件没有顶层 versions,由迁移服务补齐;
-    // 此处归一为空数组,避免服务层读旧文件时 data.versions.find 崩溃。
-    return { projects: parsed.projects ?? [], versions: parsed.versions ?? [] };
+    // 顶层字段缺省容错:迁移前的旧文件没有 versions/programs,由迁移服务补齐;
+    // 此处归一为空数组,避免服务层读旧文件时 data.versions.find / data.programs 崩溃。
+    return {
+      projects: parsed.projects ?? [],
+      programs: parsed.programs ?? [],
+      versions: parsed.versions ?? [],
+    };
   }
 
   async mutate<T>(

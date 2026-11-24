@@ -6,8 +6,9 @@ describe('worklog types', () => {
   it('supports version → requirement → entry shape', () => {
     const data: WorklogData = {
       projects: [{ id: 'p_1', name: 'A', createdAt: 1 }],
+      programs: [{ id: 'g_1', name: '澳门底层数据建设', createdAt: 1 }],
       versions: [{
-        id: 'v_1', name: 'V8.0.8', createdAt: 1,
+        id: 'v_1', name: 'V8.0.8', programId: 'g_1', createdAt: 1,
         requirements: [{
           id: 'r_1', title: '澳门底层数据建设', createdAt: 1,
           entries: [{

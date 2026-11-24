@@ -28,6 +28,18 @@ describe('WorklogService', () => {
   let backupsDir: string;
   let repo: JsonWorklogRepository;
   let service: WorklogService;
+  /** 版本必须归属主题:首次需要时直写仓储预置(避免 createProgram 的备份噪声) */
+  let cachedProgramId: string | undefined;
+
+  async function ensureProgram(): Promise<string> {
+    if (cachedProgramId) return cachedProgramId;
+    cachedProgramId = await repo.mutate((data) => {
+      const id = 'g_test';
+      data.programs.push({ id, name: '测试主题', createdAt: Date.now() });
+      return id;
+    });
+    return cachedProgramId;
+  }
 
   beforeEach(async () => {
     const { nanoid } = await import('nanoid');
@@ -36,6 +48,7 @@ describe('WorklogService', () => {
     backupsDir = path.join(tmpDir, 'worklog-backups');
     repo = new JsonWorklogRepository(filePath, backupsDir);
     service = new WorklogService(repo);
+    cachedProgramId = undefined;
   });
 
   afterEach(async () => {
@@ -72,7 +85,7 @@ describe('WorklogService', () => {
 
   /** 建「版本 + 需求」组合(record 的前置条件) */
   async function seedVersionRequirement(versionName = 'V1', requirementTitle = 'R') {
-    const version = await service.createVersion({ name: versionName });
+    const version = await service.createVersion({ name: versionName, programId: await ensureProgram() });
     const requirement = await service.createRequirement({ versionId: version.id, title: requirementTitle });
     return { versionId: version.id, requirementId: requirement.id };
   }
@@ -117,7 +130,7 @@ describe('WorklogService', () => {
 
     it('should not append migration hint when versions already exist', async () => {
       // 已有版本时 id 写错属于普通输入错误,不应误导用户去「迁移数据」
-      await service.createVersion({ name: 'V1' });
+      await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       await expect(service.record({
         versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.not.toThrow(/如从旧版本升级/);
@@ -133,15 +146,15 @@ describe('WorklogService', () => {
     });
 
     it('should reject unknown requirement id with actionable message', async () => {
-      const version = await service.createVersion({ name: 'V1' });
+      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       await expect(service.record({
         versionId: version.id, requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.toThrow(/需求 r_nope 不存在/);
     });
 
     it('should reject a requirement that does not belong to the given version', async () => {
-      const v1 = await service.createVersion({ name: 'V1' });
-      const v2 = await service.createVersion({ name: 'V2' });
+      const v1 = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
+      const v2 = await service.createVersion({ name: 'V2', programId: await ensureProgram() });
       const r1 = await service.createRequirement({ versionId: v1.id, title: 'R' });
       await expect(service.record({
         versionId: v2.id, requirementId: r1.id, title: 't', detail: 'd', stage: 'dev',
@@ -174,7 +187,7 @@ describe('WorklogService', () => {
     });
 
     it('should list existing versions/requirements as candidates in error messages', async () => {
-      const version = await service.createVersion({ name: 'V8.0.7' });
+      const version = await service.createVersion({ name: 'V8.0.7', programId: await ensureProgram() });
       const requirement = await service.createRequirement({ versionId: version.id, title: 'R1' });
 
       await expect(service.record({
@@ -429,7 +442,7 @@ describe('WorklogService', () => {
     });
 
     it('should reject rename to existing name without modifying data', async () => {
-      await service.createVersion({ name: 'v2' });
+      await service.createVersion({ name: 'v2', programId: await ensureProgram() });
       await expect(service.renameVersion(versionId, 'v2')).rejects.toThrow(/已存在/);
       await expect(service.renameProject('p', 'p')).rejects.toThrow(/已存在/);
       const tree = await service.getTree();
@@ -470,7 +483,7 @@ describe('WorklogService', () => {
       expect(refs).toContainEqual({ id, name: '新项目', paths: [projectPath] });
 
       // 建出的项目可直接用于 record 的显式 project(不再依赖迁移)
-      const v = await service.createVersion({ name: 'V1' });
+      const v = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       const r = await service.createRequirement({ versionId: v.id, title: 'R' });
       const res = await service.record({
         versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev', project: '新项目',
@@ -843,7 +856,7 @@ describe('WorklogService', () => {
   describe('rename project snapshots', () => {
     it('should sync entry.project and requirement.projects on rename', async () => {
       const projectId = await seedProject('A');
-      const version = await service.createVersion({ name: 'V1' });
+      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       const requirement = await service.createRequirement({
         versionId: version.id, title: 'R', projects: ['A'],
       });
@@ -875,7 +888,7 @@ describe('WorklogService', () => {
     it('should keep requirement projects aligned when projectIds exist', async () => {
       await seedProject('A');
       await seedProject('B');
-      const version = await service.createVersion({ name: 'V1' });
+      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       const requirement = await service.createRequirement({
         versionId: version.id, title: 'R', projects: ['A', 'B'],
       });
@@ -897,7 +910,7 @@ describe('WorklogService', () => {
       versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
     })).rejects.toThrow(/不存在/);
 
-    const v = await service.createVersion({ name: 'V1' });
+    const v = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
     const r = await service.createRequirement({ versionId: v.id, title: 'R' });
     await expect(service.record({
       versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev',

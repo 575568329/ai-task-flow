@@ -4,8 +4,9 @@ import { findEntryLocation, assertVersionNameFree } from '../WorklogTree.js';
 
 const data: WorklogData = {
   projects: [],
+  programs: [{ id: 'g1', name: '测试主题', createdAt: 1 }],
   versions: [
-    { id: 'v1', name: 'V8.0.8', createdAt: 1, requirements: [
+    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 1, requirements: [
       { id: 'r1', title: '需求A', createdAt: 1, entries: [
         { id: 'e1', title: 't', detail: 'd', date: 'd', createdAt: 1, updatedAt: 1 },
       ] },
