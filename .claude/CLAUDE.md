@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目定位与现状
 
-个人 AI 工作记录中枢 + 个人工具集。核心闭环：终端里的 AI 改完代码 → 通过 MCP `record_work` 记录为「版本 → 需求 → 条目」（项目是条目属性，含 git diff 与文件行号）→ 在 Web 工作记录页按版本/需求/项目/关键字回溯，支持人工增删改。**版本与需求只能由用户在页面创建；AI 先用 `list_versions`/`list_requirements` 取 id，再按 `versionId`/`requirementId` 写入，不猜名称、不自动建层。**
+个人 AI 工作记录中枢 + 个人工具集。核心闭环：终端里的 AI 改完代码 → 通过 MCP `record_work` 记录为「建设主题 → 版本 → 需求 → 条目」（项目是条目属性，含 git diff 与文件行号）→ 在 Web 工作记录页按主题/版本/需求/项目/关键字回溯，支持人工增删改。**建设主题、版本与需求只能由用户在页面创建；AI 先用 `list_programs`/`list_versions`/`list_requirements` 取 id，再按 `versionId`/`requirementId` 写入，不猜名称、不自动建层。**
 
 **2026-11 转型**：任务编排看板、AI 聊天、任务文档、用量统计已整体砍除（代码在 git 历史，旧数据保留在 `~/.ai-task-flow/`）。不要再按「看板 / 派发 / worktree / Task 聚合根 / 四态机」理解本项目；`.claude/2026-06-05-*` 与 `docs/plans/` 里的旧任务文档只是历史归档。当前形态以 `README.md` 为准。
 
@@ -73,8 +73,9 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 - 所有路径走 `backend/src/config/dataDir.ts` 的 `resolveDataDir()`，优先级：显式参数 > `AI_TASK_FLOW_DATA_DIR` > WSL 自探测 Windows home > `~/.ai-task-flow`。**禁止散用 `os.homedir()` / `~` / `$HOME`**。
 - 主要数据文件：`worklog.json`、`conclusions.json`、`mindmaps.json`、`knowledge/`、`llm-config.json`、`claude-profiles.json`、`uploads/`；破坏性操作前快照到 `worklog-backups/`（滚动保留 10 份）、`conclusion-backups/`（改信息/删除前快照，滚动保留 10 份）。
 - `.migration-project-id.json` 是项目 id 迁移标记（记录迁移版本）；**删除该文件可重跑「结论卡按项目名绑定」**，而项目补 id 每次启动都会自愈，不依赖该标记。
-- **worklog 数据模型**：`worklog.json` 顶层为 `{ projects, versions }`。`versions` 是「版本 → 需求 → 条目」主树：版本名全局唯一、需求标题版本内唯一，条目带 `project`/`projectId` 属性（原项目归属）；`projects` 是字典数组（`id`/`name`/`paths`/`createdAt`），只用于路径归属与项目筛选，不再承载版本。版本/需求只能由页面创建，MCP 只传 id。
+- **worklog 数据模型**：`worklog.json` 顶层为 `{ projects, programs, versions }`。`programs` 是建设主题（`id` 形如 `g_xxx`、`name`、`description?`、`createdAt`），位于版本之上；`versions` 通过 `programId` 归属主题，构成「建设主题 → 版本 → 需求 → 条目」主树（版本名全局唯一、需求标题版本内唯一）；条目带 `project`/`projectId` 属性（原项目归属）；`projects` 是字典数组（`id`/`name`/`paths`/`createdAt`），只用于路径归属与项目筛选。建设主题、版本/需求只能由页面创建（主题无 MCP 创建入口），MCP 只传 id。
 - `.migration-version-tree.json` 是「项目 → 版本 → 条目」一次性归并迁移标记（记录版本与时间）。迁移在 HTTP 启动时执行、幂等：数据已无旧版 `versions` 字段即跳过，不写文件、哈希不变；迁移前快照留在 `worklog-backups/`（滚动 10 份）。**回滚约束**：新代码启动即自动迁移，删标记不能回退到旧结构；必须同时换回旧版本代码并用迁移前快照覆盖 `worklog.json`。
+- `.migration-program-layer.json` 是建设主题层迁移标记（v1）。规则：取版本内标题为「澳门底层数据建设」的需求名建主题（无则归默认主题「未分类建设」），按主题名聚合、只回填版本 `programId`，不删需求/条目。是否需要迁移看**数据形态**（有版本且未全部归属现有主题才执行），标记只记录版本、不作跳过条件；已是目标形态时不写盘，与版本树标记独立。
 - **项目路径身份字段**：项目有稳定 `id` 与 `paths`（本地绝对路径，可多个，页面绑定）；工作记录条目有 `sourcePath`（MCP 取 `process.cwd()`，按最长前缀归属项目）；工作记录与结论卡用 `relatedProjectIds` 存关联项目稳定引用、`relatedProjects` 存名称快照（改名后靠 id 映射显示新名称）。旧数据由 HTTP 启动时一次性迁移补 `id` 并按名称绑定结论卡（幂等）。
 - worklog 写协议：进程内 promise-chain mutex + proper-lockfile 跨进程锁 + write-file-atomic。HTTP 与 MCP 是两个进程并发写，新增持久化写入必须沿用此模式，勿直接 `fs.writeFile`。
 - 前端靠文件轮询刷新，不是实时推送；MCP 回写后等几秒再看页面。
