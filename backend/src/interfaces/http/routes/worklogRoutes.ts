@@ -1,12 +1,11 @@
 // backend/src/interfaces/http/routes/worklogRoutes.ts
 // worklog REST API(与 MCP 工具共享同一 WorklogService,业务规则单点;写协议见 JsonWorklogRepository)。
-// 新模型:「主题 → 版本 → 需求 → 条目」,项目降为字典(路径归属/筛选);主题/版本/需求只能由页面显式创建。
+// 新模型:「主题 → 版本 → 条目」,项目降为字典(路径归属/筛选);主题/版本只能由页面显式创建。
 import { FastifyInstance } from 'fastify';
 import type {
   WorklogRecordRequest,
   WorklogUpdateRequest,
   WorklogVersionCreateRequest,
-  WorklogRequirementCreateRequest,
   WorklogProgramCreateRequest,
 } from '@ai-task-flow/shared';
 import type { WorklogService } from '../../../application/worklog/WorklogService.js';
@@ -185,7 +184,7 @@ export async function registerWorklogRoutes(
     },
   );
 
-  // DELETE /api/worklog/versions/:id - 删整个版本(级联需求与条目,自动备份)
+  // DELETE /api/worklog/versions/:id - 删整个版本(级联条目,自动备份)
   fastify.delete<{ Params: { id: string } }>(
     '/api/worklog/versions/:id',
     async (request, reply) => {
@@ -200,89 +199,10 @@ export async function registerWorklogRoutes(
   );
 
   // ------------------------------------------------------------------
-  // 需求:创建 / 重命名 / 删除(标题版本内唯一)
-  // ------------------------------------------------------------------
-
-  // POST /api/worklog/requirements - 新建需求(body 含 versionId)
-  fastify.post<{ Body: WorklogRequirementCreateRequest }>(
-    '/api/worklog/requirements',
-    async (request, reply) => {
-      const versionId = readRequiredString(request.body, 'versionId');
-      const title = readRequiredString(request.body, 'title');
-      if (!versionId || !title) {
-        return reply.status(400).send({ error: 'versionId 与 title 必须为非空字符串' });
-      }
-      // projects 只接受字符串数组;非数组/元素非字符串直接 400,避免服务层按字符串逐字符迭代
-      const rawProjects = isPlainObject(request.body) ? request.body.projects : undefined;
-      if (
-        rawProjects !== undefined &&
-        (!Array.isArray(rawProjects) || rawProjects.some((item) => typeof item !== 'string'))
-      ) {
-        return reply.status(400).send({ error: 'projects 必须为字符串数组' });
-      }
-      try {
-        const result = await worklogService.createRequirement({
-          versionId,
-          title,
-          description: readOptionalString(request.body, 'description'),
-          projects: rawProjects as string[] | undefined,
-        });
-        return reply.status(201).send(result);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return reply.status(statusForError(err)).send({ error: message });
-      }
-    },
-  );
-
-  // POST /api/worklog/requirements/:id/rename - 重命名需求(body 含 versionId)
-  fastify.post<{ Params: { id: string }; Body: { versionId?: string; newName?: string } }>(
-    '/api/worklog/requirements/:id/rename',
-    async (request, reply) => {
-      const versionId = readRequiredString(request.body, 'versionId');
-      const newName = readRequiredString(request.body, 'newName');
-      if (!versionId || !newName) {
-        return reply.status(400).send({ error: 'versionId 与 newName 必须为非空字符串' });
-      }
-      try {
-        await worklogService.renameRequirement(versionId, request.params.id, newName);
-        return { ok: true };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return reply.status(statusForError(err)).send({ error: message });
-      }
-    },
-  );
-
-  // DELETE /api/worklog/requirements/:id?versionId=... - 删单个需求(级联条目,自动备份)
-  // DELETE 请求体兼容性参差,版本优先取 query,其次 body。
-  fastify.delete<{ Params: { id: string }; Querystring: { versionId?: string } }>(
-    '/api/worklog/requirements/:id',
-    async (request, reply) => {
-      const bodyVersionId = readRequiredString(request.body, 'versionId');
-      // 重复 query 参数(?versionId=a&versionId=b)时 Fastify 给数组,直接 trim 会 TypeError → 500;
-      // 非字符串一律视为无效,回落 body 的 versionId;两者都无效 → 400。
-      const rawQueryVersionId: unknown = request.query.versionId;
-      const queryVersionId = typeof rawQueryVersionId === 'string' ? rawQueryVersionId : undefined;
-      const versionId = queryVersionId ?? bodyVersionId;
-      if (!versionId) {
-        return reply.status(400).send({ error: 'versionId 必填(query 或 body,且必须为字符串)' });
-      }
-      try {
-        await worklogService.deleteRequirement(versionId, request.params.id);
-        return { ok: true };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return reply.status(statusForError(err)).send({ error: message });
-      }
-    },
-  );
-
-  // ------------------------------------------------------------------
   // 条目:记录 / 更新 / 删除
   // ------------------------------------------------------------------
 
-  // POST /api/worklog/entries - 记录条目到已存在的「版本 + 需求」(同 record_work)
+  // POST /api/worklog/entries - 记录条目到已存在的版本(同 record_work)
   fastify.post<{ Body: WorklogRecordRequest }>(
     '/api/worklog/entries',
     async (request, reply) => {

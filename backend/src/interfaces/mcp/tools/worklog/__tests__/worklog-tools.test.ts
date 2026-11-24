@@ -1,7 +1,7 @@
 // backend/src/interfaces/mcp/tools/worklog/__tests__/worklog-tools.test.ts
 // worklog MCP 工具测试:真实 Service+临时目录;catalog 一致性断言(单一来源守护)。
-// 新模型:版本/需求由用户在页面创建(测试里用 service.createVersion/createRequirement 播种),
-// 项目是字典(createProject 播种),AI 只传 id。
+// 新模型:主题 → 版本 → 条目;版本由用户在页面创建(测试里用 service.createVersion 播种),
+// 项目是字典(createProject 播种),AI 只传 versionId。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,14 +19,10 @@ describe('worklog MCP tools', () => {
   let programId: string;
   const PROGRAM_NAME = '澳门底层数据建设';
 
-  /** 建「版本 + 需求」组合(record 的前置条件) */
-  async function seedVersionRequirement(versionName = 'V1', requirementTitle = 'R') {
+  /** 建版本(record 的前置条件,版本必须归属已存在的主题) */
+  async function seedVersion(versionName = 'V1') {
     const version = await deps.worklogService.createVersion({ name: versionName, programId });
-    const requirement = await deps.worklogService.createRequirement({
-      versionId: version.id,
-      title: requirementTitle,
-    });
-    return { versionId: version.id, requirementId: requirement.id };
+    return version.id;
   }
 
   beforeEach(async () => {
@@ -52,8 +48,8 @@ describe('worklog MCP tools', () => {
 
   it('registered tools should match catalog names/descriptions (single source of truth)', () => {
     const registered = new Map(ALL_TOOLS.map((t) => [t.name, t.description]));
-    expect(registered.size).toBe(15); // 12 worklog + 2 conclusion + save_to_knowledge
-    expect(WORKLOG_TOOL_CATALOG).toHaveLength(12);
+    expect(registered.size).toBe(14); // 11 worklog + 2 conclusion + save_to_knowledge
+    expect(WORKLOG_TOOL_CATALOG).toHaveLength(11);
     for (const meta of WORKLOG_TOOL_CATALOG) {
       expect(registered.has(meta.name)).toBe(true);
       expect(registered.get(meta.name)).toBe(meta.description);
@@ -63,51 +59,49 @@ describe('worklog MCP tools', () => {
 
   it('record_work should reject unknown version id with actionable message', async () => {
     const result = await HANDLERS.record_work(
-      { versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev' }, deps,
+      { versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev' }, deps,
     );
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('请让用户在页面创建并复制 id');
   });
 
-  it('record_work should require versionId/requirementId/stage', async () => {
+  it('record_work should require versionId/stage', async () => {
     const missingIds = await HANDLERS.record_work({ title: 't', detail: 'd', stage: 'dev' }, deps);
     expect(missingIds.isError).toBe(true);
-    expect(missingIds.content[0].text).toContain('versionId 与 requirementId 必填');
+    expect(missingIds.content[0].text).toContain('versionId 必填');
 
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const missingStage = await HANDLERS.record_work(
-      { versionId, requirementId, title: 't', detail: 'd' }, deps,
+      { versionId, title: 't', detail: 'd' }, deps,
     );
     expect(missingStage.isError).toBe(true);
     expect(missingStage.content[0].text).toContain('stage 必填');
   });
 
-  it('record_work should record into given ids and echo version/requirement', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+  it('record_work should record into given version and echo it', async () => {
+    const versionId = await seedVersion('V1');
     const result = await HANDLERS.record_work(
-      { versionId, requirementId, title: 't', detail: 'd', stage: 'dev' }, deps,
+      { versionId, title: 't', detail: 'd', stage: 'dev' }, deps,
     );
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain('✅ 已记录');
     expect(result.content[0].text).toContain('V1');
-    expect(result.content[0].text).toContain('R');
     expect(result.content[0].text).toMatch(/e_[0-9a-f]{8}/);
 
     const tree = await deps.worklogService.getTree();
     expect(tree.versions).toHaveLength(1);
-    expect(tree.versions[0].requirements[0].entries).toHaveLength(1);
+    expect(tree.versions[0].entries).toHaveLength(1);
   });
 
-  it('query_work should honor includeDiff switch and render version/requirement', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement('V8.0.8', '澳门底层数据建设');
+  it('query_work should honor includeDiff switch and render version', async () => {
+    const versionId = await seedVersion('V8.0.8');
     await HANDLERS.record_work({
-      versionId, requirementId, title: '修复白屏', detail: 'ENOENT 容错', diff: 'diff --git a/x', stage: 'dev',
+      versionId, title: '修复白屏', detail: 'ENOENT 容错', diff: 'diff --git a/x', stage: 'dev',
     }, deps);
 
     const plain = await HANDLERS.query_work({ keyword: '白屏' }, deps);
     expect(plain.content[0].text).not.toContain('diff --git');
     expect(plain.content[0].text).toContain('V8.0.8');
-    expect(plain.content[0].text).toContain('澳门底层数据建设');
     expect(plain.content[0].text).toContain(`主题:${PROGRAM_NAME}`);
 
     const withDiff = await HANDLERS.query_work({ keyword: '白屏', includeDiff: true }, deps);
@@ -115,9 +109,9 @@ describe('worklog MCP tools', () => {
   });
 
   it('query_work should still return entries without theme when program map fails', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement('V8.0.8', 'R');
+    const versionId = await seedVersion('V8.0.8');
     await deps.worklogService.record({
-      versionId, requirementId, title: '降级查询', detail: 'd', stage: 'dev',
+      versionId, title: '降级查询', detail: 'd', stage: 'dev',
     });
 
     const treeSpy = vi.spyOn(deps.worklogService, 'getTree').mockRejectedValueOnce(new Error('树读取失败'));
@@ -135,26 +129,22 @@ describe('worklog MCP tools', () => {
     }
   });
 
-  it('query_work should filter by versionId and requirementId', async () => {
-    const a = await seedVersionRequirement('V1', 'R1');
-    const b = await seedVersionRequirement('V2', 'R2');
-    await deps.worklogService.record({ ...a, title: '甲', detail: 'd', stage: 'dev' });
-    await deps.worklogService.record({ ...b, title: '乙', detail: 'd', stage: 'dev' });
+  it('query_work should filter by versionId', async () => {
+    const versionA = await seedVersion('V1');
+    const versionB = await seedVersion('V2');
+    await deps.worklogService.record({ versionId: versionA, title: '甲', detail: 'd', stage: 'dev' });
+    await deps.worklogService.record({ versionId: versionB, title: '乙', detail: 'd', stage: 'dev' });
 
-    const byVersion = await HANDLERS.query_work({ versionId: b.versionId }, deps);
+    const byVersion = await HANDLERS.query_work({ versionId: versionB }, deps);
     expect(byVersion.content[0].text).toContain('乙');
     expect(byVersion.content[0].text).not.toContain('甲');
-
-    const byRequirement = await HANDLERS.query_work({ requirementId: a.requirementId }, deps);
-    expect(byRequirement.content[0].text).toContain('甲');
-    expect(byRequirement.content[0].text).not.toContain('乙');
   });
 
   it('delete_work should snapshot before deletion', async () => {
     await deps.worklogService.createProject({ name: 'p' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const rec = await deps.worklogService.record({
-      versionId, requirementId, project: 'p', title: 't', detail: 'd', stage: 'dev',
+      versionId, project: 'p', title: 't', detail: 'd', stage: 'dev',
     });
     const countBackups = async () =>
       (await fs.readdir(path.join(tmpDir, 'backups'))).filter((n) => n.startsWith('backup-')).length;
@@ -175,7 +165,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('delete_version should delete by versionId', async () => {
-    const { versionId } = await seedVersionRequirement('V-del', 'R');
+    const versionId = await seedVersion('V-del');
     const result = await HANDLERS.delete_version({ versionId }, deps);
     expect(result.content[0].text).toContain('✅');
     expect((await deps.worklogService.getTree()).versions).toHaveLength(0);
@@ -183,9 +173,9 @@ describe('worklog MCP tools', () => {
 
   it('list_projects should render project dict with id and entry count', async () => {
     await deps.worklogService.createProject({ name: 'p' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     await deps.worklogService.record({
-      versionId, requirementId, project: 'p', title: 'a', detail: 'd', stage: 'dev',
+      versionId, project: 'p', title: 'a', detail: 'd', stage: 'dev',
     });
     const result = await HANDLERS.list_projects({}, deps);
     const text = result.content[0].text;
@@ -197,11 +187,11 @@ describe('worklog MCP tools', () => {
   it('record_work should auto-fill cwd as sourcePath and surface warnings', async () => {
     // 先让某个项目绑定路径(且 cwd 落在范围外):此时未命中才是配置异常,service 才会告警
     await deps.worklogService.createProject({ name: 'A', paths: [path.resolve('x-other-project')] });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
 
     const spy = vi.spyOn(deps.worklogService, 'record');
     const result = await HANDLERS.record_work(
-      { versionId, requirementId, project: 'A', title: 't', detail: 'd', stage: 'dev' }, deps,
+      { versionId, project: 'A', title: 't', detail: 'd', stage: 'dev' }, deps,
     );
     expect(result.isError).toBeUndefined();
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ sourcePath: process.cwd() }));
@@ -214,26 +204,26 @@ describe('worklog MCP tools', () => {
   it('record_work should pass relatedProjects and warn on unknown names', async () => {
     await deps.worklogService.createProject({ name: 'A' });
     await deps.worklogService.createProject({ name: 'B' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const result = await HANDLERS.record_work({
-      versionId, requirementId, project: 'A', title: 't', detail: 'd',
+      versionId, project: 'A', title: 't', detail: 'd',
       relatedProjects: ['B', '拼错的'], stage: 'dev',
     }, deps);
     expect(result.content[0].text).toContain('拼错的');
     const tree = await deps.worklogService.getTree();
-    const entry = tree.versions[0].requirements[0].entries[0];
+    const entry = tree.versions[0].entries[0];
     expect(entry.relatedProjects).toEqual(['B']);
   });
 
   it('query_work should filter by relatedProject and render 关联 meta', async () => {
     await deps.worklogService.createProject({ name: 'A' });
     await deps.worklogService.createProject({ name: 'B' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     await deps.worklogService.record({
-      versionId, requirementId, project: 'A', title: '跨项目', detail: 'd', relatedProjects: ['B'], stage: 'dev',
+      versionId, project: 'A', title: '跨项目', detail: 'd', relatedProjects: ['B'], stage: 'dev',
     });
     await deps.worklogService.record({
-      versionId, requirementId, project: 'A', title: '普通改动', detail: 'd', stage: 'dev',
+      versionId, project: 'A', title: '普通改动', detail: 'd', stage: 'dev',
     });
     const result = await HANDLERS.query_work({ relatedProject: 'B' }, deps);
     expect(result.content[0].text).toContain('共 1 条');
@@ -242,8 +232,8 @@ describe('worklog MCP tools', () => {
   });
 
   it('query_work should mark entries recorded from an unmatched path', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement();
-    await HANDLERS.record_work({ versionId, requirementId, title: '路径记录', detail: 'd', stage: 'dev' }, deps);
+    const versionId = await seedVersion();
+    await HANDLERS.record_work({ versionId, title: '路径记录', detail: 'd', stage: 'dev' }, deps);
     const result = await HANDLERS.query_work({ keyword: '路径记录' }, deps);
     expect(result.content[0].text).toContain('路径未归属');
   });
@@ -281,34 +271,28 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_versions should list versions with ids and counts', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
-    const requirement = await deps.worklogService.createRequirement({
-      versionId: version.id, title: 'R',
-    });
+    const versionId = await seedVersion('V8.0.8');
     await deps.worklogService.record({
-      versionId: version.id, requirementId: requirement.id, title: 't', detail: 'd', stage: 'dev',
+      versionId, title: 't', detail: 'd', stage: 'dev',
     });
 
     const result = await HANDLERS.list_versions({}, deps);
     const text = result.content[0].text;
     expect(text).toContain('V8.0.8');
-    expect(text).toContain(version.id);
+    expect(text).toContain(versionId);
     expect(text).toContain(PROGRAM_NAME); // 每行带所属主题名
-    expect(text).toContain('需求 1');
     expect(text).toContain('条目 1');
+    expect(text).not.toContain('需求');
   });
 
   it('list_programs should list programs with ids and counts', async () => {
     const other = await deps.worklogService.createProgram({ name: '大陆建设' });
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
-    const requirement = await deps.worklogService.createRequirement({
-      versionId: version.id, title: 'R',
+    const versionId = await seedVersion('V8.0.8');
+    await deps.worklogService.record({
+      versionId, title: 'a', detail: 'd', stage: 'dev',
     });
     await deps.worklogService.record({
-      versionId: version.id, requirementId: requirement.id, title: 'a', detail: 'd', stage: 'dev',
-    });
-    await deps.worklogService.record({
-      versionId: version.id, requirementId: requirement.id, title: 'b', detail: 'd', stage: 'dev',
+      versionId, title: 'b', detail: 'd', stage: 'dev',
     });
 
     const text = (await HANDLERS.list_programs({}, deps)).content[0].text;
@@ -366,32 +350,10 @@ describe('worklog MCP tools', () => {
     expect(result.content[0].text).toContain('请让用户在页面新建主题并复制 id');
   });
 
-  it('list_requirements should list requirements for a version', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
-    const requirement = await deps.worklogService.createRequirement({
-      versionId: version.id, title: '澳门底层数据建设',
-    });
-
-    const text = (await HANDLERS.list_requirements({ versionId: version.id }, deps)).content[0].text;
-    expect(text).toContain('澳门底层数据建设');
-    expect(text).toContain(requirement.id);
-    expect(text).toContain(version.id);
-    expect(text).toContain('关联: 无');
-    expect(text).toContain('条目 0');
-  });
-
-  it('list_requirements should reject unknown version id with candidates', async () => {
-    await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
-    const result = await HANDLERS.list_requirements({ versionId: 'v_nope' }, deps);
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('V8.0.8');
-    expect(result.content[0].text).toContain('请让用户在页面创建并复制 id');
-  });
-
   it('record_work should ignore non-array tags/relatedProjects/files with a notice', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const result = await HANDLERS.record_work({
-      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+      versionId, title: 't', detail: 'd', stage: 'dev',
       tags: 'feat', relatedProjects: 'A', files: 'x',
     }, deps);
     expect(result.isError).toBeUndefined();
@@ -400,7 +362,7 @@ describe('worklog MCP tools', () => {
     expect(text).toContain('relatedProjects 不是字符串数组,已忽略');
     expect(text).toContain('files 不是数组,已忽略');
 
-    const entry = (await deps.worklogService.getTree()).versions[0].requirements[0].entries[0];
+    const entry = (await deps.worklogService.getTree()).versions[0].entries[0];
     expect(entry.tags).toBeUndefined();
     expect(entry.relatedProjects).toBeUndefined();
     expect(entry.files).toBeUndefined();
@@ -408,24 +370,24 @@ describe('worklog MCP tools', () => {
 
   it('record_work should drop non-string array items but keep valid ones', async () => {
     await deps.worklogService.createProject({ name: 'A' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const result = await HANDLERS.record_work({
-      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+      versionId, title: 't', detail: 'd', stage: 'dev',
       tags: ['feat', 1], relatedProjects: ['A', 2],
     }, deps);
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).toContain('tags 中有 1 个非字符串项,已忽略');
     expect(result.content[0].text).toContain('relatedProjects 中有 1 个非字符串项,已忽略');
 
-    const entry = (await deps.worklogService.getTree()).versions[0].requirements[0].entries[0];
+    const entry = (await deps.worklogService.getTree()).versions[0].entries[0];
     expect(entry.tags).toEqual(['feat']);
     expect(entry.relatedProjects).toEqual(['A']);
   });
 
   it('update_work should ignore non-array tags/relatedProjects/files with a notice', async () => {
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const rec = await deps.worklogService.record({
-      versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+      versionId, title: 't', detail: 'd', stage: 'dev',
     });
     const result = await HANDLERS.update_work({
       entryId: rec.entryId, tags: 'fix', relatedProjects: 'A', files: 'x',
@@ -439,9 +401,9 @@ describe('worklog MCP tools', () => {
 
   it('delete_project should only remove the dictionary entry and say entries are kept', async () => {
     await deps.worklogService.createProject({ name: 'A' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     await deps.worklogService.record({
-      versionId, requirementId, project: 'A', title: 't', detail: 'd', stage: 'dev',
+      versionId, project: 'A', title: 't', detail: 'd', stage: 'dev',
     });
 
     const result = await HANDLERS.delete_project({ project: 'A' }, deps);
@@ -454,14 +416,14 @@ describe('worklog MCP tools', () => {
     // 实现与文案一致:字典清空,历史条目与项目名快照仍在
     const tree = await deps.worklogService.getTree();
     expect(tree.projects).toHaveLength(0);
-    expect(tree.versions[0].requirements[0].entries[0].project).toBe('A');
+    expect(tree.versions[0].entries[0].project).toBe('A');
   });
 
   it('record_work should list existing projects when explicit project is unknown', async () => {
     await deps.worklogService.createProject({ name: '资源加工平台' });
-    const { versionId, requirementId } = await seedVersionRequirement();
+    const versionId = await seedVersion();
     const result = await HANDLERS.record_work({
-      versionId, requirementId, project: '拼错的', title: 't', detail: 'd', stage: 'dev',
+      versionId, project: '拼错的', title: 't', detail: 'd', stage: 'dev',
     }, deps);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('现有项目');

@@ -25,19 +25,16 @@ function programCandidates(programs: WorklogProgram[]): string {
   return programs.slice(0, 5).map((p) => `${p.name}(${p.id})`).join('、');
 }
 
-/** 版本条目数 + 首末日期(仅统计该版本下全部需求的条目) */
+/** 版本条目数 + 首末日期(版本直接持有条目) */
 function summarize(version: WorklogVersion): { entryCount: number; firstDate?: string; lastDate?: string } {
   const dates: string[] = [];
-  let entryCount = 0;
-  for (const requirement of version.requirements) {
-    for (const entry of requirement.entries) {
-      entryCount++;
-      if (entry.date) dates.push(entry.date);
-    }
+  const entries = version.entries ?? [];
+  for (const entry of entries) {
+    if (entry.date) dates.push(entry.date);
   }
   dates.sort();
   return {
-    entryCount,
+    entryCount: entries.length,
     ...(dates.length ? { firstDate: dates[0], lastDate: dates[dates.length - 1] } : {}),
   };
 }
@@ -70,7 +67,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       const range = firstDate ? ` · ${firstDate}~${lastDate}` : '';
       // 悬空归属(指向已不存在的主题)与前端同一文案,便于对照页面排查
       const programName = programNameById.get(version.programId) ?? '未归属主题';
-      return `- ${version.name} (${version.id ?? '未迁移'}) · ${programName} · 需求 ${version.requirements.length} · 条目 ${entryCount}${range}`;
+      return `- ${version.name} (${version.id ?? '未迁移'}) · ${programName} · 条目 ${entryCount}${range}`;
     });
     return ok([
       `版本(共 ${versions.length} 个):`,

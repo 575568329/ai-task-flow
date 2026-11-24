@@ -1,5 +1,5 @@
 // backend/src/interfaces/mcp/tools/worklog/record-work.ts
-// 新模型:版本/需求由用户在页面创建,AI 只传 id;不存在时报服务层的可操作错误(含候选)。
+// 新模型:版本由用户在页面创建,AI 只传 versionId;不存在时报服务层的可操作错误(含候选)。
 import { isWorkStage, type WorkStage } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { STAGE_SCHEMA } from '../stageSchema.js';
@@ -12,7 +12,6 @@ export const toolDef = {
     type: 'object' as const,
     properties: {
       versionId: { type: 'string' as const, description: '版本 id(如 v_ab12cd34),由用户在页面创建后复制;先 list_versions 获取' },
-      requirementId: { type: 'string' as const, description: '需求 id(如 r_ab12cd34),由用户在页面创建后复制;先 list_requirements 获取' },
       title: { type: 'string' as const, description: '一句话功能点' },
       detail: { type: 'string' as const, description: 'markdown 详细改动说明:改了什么/为什么/影响面' },
       project: { type: 'string' as const, description: '本次实际改动的项目名(可选,不传按路径归属;项目须已存在)' },
@@ -41,7 +40,7 @@ export const toolDef = {
       },
       stage: STAGE_SCHEMA,
     },
-    required: ['versionId', 'requirementId', 'title', 'detail', 'stage'],
+    required: ['versionId', 'title', 'detail', 'stage'],
   },
 };
 
@@ -49,11 +48,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
   args ??= {};
   try {
     const versionId = String(args.versionId ?? '').trim();
-    const requirementId = String(args.requirementId ?? '').trim();
-    if (!versionId || !requirementId) {
-      return fail(new Error(
-        'versionId 与 requirementId 必填:请先 list_versions / list_requirements 获取 id,并让用户确认',
-      ));
+    if (!versionId) {
+      return fail(new Error('versionId 必填:请先 list_versions 获取版本 id,并让用户确认'));
     }
     if (!isWorkStage(args.stage)) {
       return fail(new Error(
@@ -70,7 +66,6 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
 
     const result = await deps.worklogService.record({
       versionId,
-      requirementId,
       title: String(args.title ?? ''),
       detail: String(args.detail ?? ''),
       project,

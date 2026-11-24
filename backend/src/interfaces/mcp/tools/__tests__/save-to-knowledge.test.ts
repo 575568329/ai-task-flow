@@ -38,17 +38,12 @@ describe('save_to_knowledge MCP tool', () => {
     const project = await deps.worklogService.createProject({ name: 'ai-task-flow' });
     const program = await deps.worklogService.createProgram({ name: '建设主题' });
     const version = await deps.worklogService.createVersion({ name: 'V1', programId: program.id });
-    const requirement = await deps.worklogService.createRequirement({
-      versionId: version.id,
-      title: '需求A',
-    });
 
     const result = await HANDLERS.save_to_knowledge(
       {
         title: '设计',
         content: '# 正文',
         versionId: version.id,
-        requirementId: requirement.id,
         projectId: project.id,
         stage: 'design',
       },
@@ -63,7 +58,6 @@ describe('save_to_knowledge MCP tool', () => {
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
     expect(doc.frontmatter).toEqual({
       versionId: version.id,
-      requirementId: requirement.id,
       projectId: project.id,
       stage: 'design',
     });

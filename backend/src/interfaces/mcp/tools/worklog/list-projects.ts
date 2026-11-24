@@ -1,6 +1,6 @@
 // backend/src/interfaces/mcp/tools/worklog/list-projects.ts
 // 新模型:项目降为字典(条目属性 + 路径归属),不再承载版本树。
-// 输出只给 id、名称、路径尾段(隐私红线)与关联条目数;版本/需求请用 list_versions / list_requirements。
+// 输出只给 id、名称、路径尾段(隐私红线)与关联条目数;版本请用 list_versions。
 import type { WorklogData, WorklogProject } from '@ai-task-flow/shared';
 import type { ToolDeps } from '../types.js';
 import { CATALOG, ok, fail } from './_shared.js';
@@ -29,11 +29,9 @@ function pathTail(p?: string): string {
 function countEntries(data: WorklogData, project: WorklogProject): number {
   let count = 0;
   for (const version of data.versions) {
-    for (const requirement of version.requirements) {
-      for (const entry of requirement.entries) {
-        if (entry.projectId === project.id) count++;
-        else if (!entry.projectId && entry.project === project.name) count++;
-      }
+    for (const entry of version.entries ?? []) {
+      if (entry.projectId === project.id) count++;
+      else if (!entry.projectId && entry.project === project.name) count++;
     }
   }
   return count;
@@ -57,7 +55,7 @@ export async function handle(_args: Record<string, unknown> | undefined, deps: T
       '',
       ...lines,
       '',
-      '版本/需求请用 list_versions / list_requirements 获取 id;记录时请使用上述已有名称(精确匹配)。',
+      '版本请用 list_versions 获取 id;记录时请使用上述已有名称(精确匹配)。',
       'ID 与路径绑定请在页面操作(本工具只读,不修改绑定)。',
     ].join('\n'));
   } catch (err) {

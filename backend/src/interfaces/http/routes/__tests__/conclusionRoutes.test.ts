@@ -41,11 +41,10 @@ describe('conclusionRoutes', () => {
   async function seedProjects(...names: string[]): Promise<void> {
     const program = await worklogService.createProgram({ name: '测试主题' });
     const version = await worklogService.createVersion({ name: 'v1', programId: program.id });
-    const requirement = await worklogService.createRequirement({ versionId: version.id, title: 'R' });
     for (const name of names) {
       await worklogService.createProject({ name });
       await worklogService.record({
-        versionId: version.id, requirementId: requirement.id,
+        versionId: version.id,
         title: 't', detail: 'd', stage: 'dev', project: name,
       });
     }

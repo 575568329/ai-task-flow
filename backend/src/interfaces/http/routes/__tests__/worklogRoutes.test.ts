@@ -1,7 +1,7 @@
 // backend/src/interfaces/http/routes/__tests__/worklogRoutes.test.ts
-// worklog HTTP API 集成测试(新模型 主题 → 版本 → 需求 → 条目):
-// 版本/需求 CRUD 按 id、条目 record/update/delete、项目创建与路径校验、partial 语义(diff 不丢)、
-// rename 冲突 409、删除产生备份。
+// worklog HTTP API 集成测试(新模型 主题 → 版本 → 条目):
+// 版本 CRUD 按 id、条目 record/update/delete、项目创建与路径校验、partial 语义(diff 不丢)、
+// rename 冲突 409、删除产生备份;需求端点已移除应 404。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import fs from 'node:fs/promises';
@@ -55,26 +55,17 @@ describe('worklogRoutes', () => {
     return JSON.parse(res.body).id as string;
   }
 
-  async function createRequirement(versionId: string, title: string): Promise<string> {
-    const res = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements', payload: { versionId, title },
-    });
-    expect(res.statusCode).toBe(201);
-    return JSON.parse(res.body).id as string;
-  }
-
-  async function recordEntry(versionId: string, requirementId: string, over: Record<string, unknown> = {}) {
+  async function recordEntry(versionId: string, over: Record<string, unknown> = {}) {
     return app.inject({
       method: 'POST', url: '/api/worklog/entries',
-      payload: { versionId, requirementId, title: '标题', detail: '详情', ...over },
+      payload: { versionId, title: '标题', detail: '详情', ...over },
     });
   }
 
-  it('GET /api/worklog should return version → requirement → entry tree', async () => {
+  it('GET /api/worklog should return version → entry tree', async () => {
     await createProject('p');
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, '需求A');
-    const rec = await recordEntry(versionId, requirementId, { project: 'p' });
+    const rec = await recordEntry(versionId, { project: 'p' });
     expect(rec.statusCode).toBe(201);
 
     const res = await app.inject({ method: 'GET', url: '/api/worklog' });
@@ -83,25 +74,23 @@ describe('worklogRoutes', () => {
     expect(data.projects).toHaveLength(1);
     expect(data.versions).toHaveLength(1);
     expect(data.versions[0].name).toBe('v1');
-    expect(data.versions[0].requirements[0].title).toBe('需求A');
-    expect(data.versions[0].requirements[0].entries[0].title).toBe('标题');
-    expect(data.versions[0].requirements[0].entries[0].project).toBe('p');
+    expect(data.versions[0].entries[0].title).toBe('标题');
+    expect(data.versions[0].entries[0].project).toBe('p');
   });
 
-  it('POST entries should record into existing ids and echo compat flags false', async () => {
+  it('POST entries should record into existing version and echo compat flags false', async () => {
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
 
-    const res = await recordEntry(versionId, requirementId, { tags: ['feat'], stage: 'dev' });
+    const res = await recordEntry(versionId, { tags: ['feat'], stage: 'dev' });
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
     expect(body.entryId).toBeTruthy();
     expect(body.createdProject).toBe(false);
     expect(body.createdVersion).toBe(false);
-    expect(body.path).toBe(`v1/R/${body.entryId}`);
+    expect(body.path).toBe(`v1/${body.entryId}`);
 
-    // 版本/需求不存在 → 404(不再自动建层;文案提示页面复制 id)
-    const unknown = await recordEntry('v_nope', 'r_nope');
+    // 版本不存在 → 404(不再自动建层;文案提示页面复制 id)
+    const unknown = await recordEntry('v_nope');
     expect(unknown.statusCode).toBe(404);
     expect(JSON.parse(unknown.body).error).toContain('请让用户在页面创建并复制 id');
 
@@ -112,8 +101,7 @@ describe('worklogRoutes', () => {
 
   it('PUT partial update should keep diff/files when only title sent', async () => {
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
-    const created = await recordEntry(versionId, requirementId, {
+    const created = await recordEntry(versionId, {
       title: '旧标题', diff: 'diff --git a', files: [{ path: 'a.ts' }],
     });
     const { entryId } = JSON.parse(created.body);
@@ -125,7 +113,7 @@ describe('worklogRoutes', () => {
     expect(res.statusCode).toBe(200);
 
     const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
-    const entry = tree.json().versions[0].requirements[0].entries[0];
+    const entry = tree.json().versions[0].entries[0];
     expect(entry.title).toBe('新标题');
     expect(entry.diff).toBe('diff --git a'); // partial:diff 不丢(红灯守护)
     expect(entry.files).toEqual([{ path: 'a.ts' }]);
@@ -140,15 +128,14 @@ describe('worklogRoutes', () => {
 
   it('DELETE entry should remove it and produce a backup snapshot', async () => {
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
-    const created = await recordEntry(versionId, requirementId);
+    const created = await recordEntry(versionId);
     const { entryId } = JSON.parse(created.body);
 
     const del = await app.inject({ method: 'DELETE', url: `/api/worklog/entries/${entryId}` });
     expect(del.statusCode).toBe(200);
 
     const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
-    expect(tree.json().versions[0].requirements[0].entries).toHaveLength(0);
+    expect(tree.json().versions[0].entries).toHaveLength(0);
 
     const backups = await fs.readdir(path.join(tmpDir, 'worklog-backups'));
     expect(backups.filter((n) => n.startsWith('backup-'))).toHaveLength(1);
@@ -268,58 +255,25 @@ describe('worklogRoutes', () => {
     ).toBe(404);
   });
 
-  it('requirement CRUD should require versionId and map conflicts/unknown to 409/404', async () => {
-    const v1 = await createVersion('v1');
-    const r1 = await createRequirement(v1, 'R1');
-    const r2 = await createRequirement(v1, 'R2');
+  it('removed requirement endpoints should return 404', async () => {
+    const versionId = await createVersion('v1');
 
-    // 同版本重名 → 409;未知版本 → 404
-    const dup = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements', payload: { versionId: v1, title: 'R1' },
+    // 需求层已移除:旧端点不再注册,Fastify 统一 404
+    const created = await app.inject({
+      method: 'POST', url: '/api/worklog/requirements', payload: { versionId, title: 'R1' },
     });
-    expect(dup.statusCode).toBe(409);
+    expect(created.statusCode).toBe(404);
 
-    const noVersion = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements', payload: { versionId: 'v_nope', title: 'R3' },
+    const renamed = await app.inject({
+      method: 'POST', url: '/api/worklog/requirements/r_any/rename',
+      payload: { versionId, newName: 'R2' },
     });
-    expect(noVersion.statusCode).toBe(404);
+    expect(renamed.statusCode).toBe(404);
 
-    // 改名:缺 versionId/newName → 400;重名 → 409;正常 → 200
-    const badRename = await app.inject({
-      method: 'POST', url: `/api/worklog/requirements/${r1}/rename`, payload: { newName: 'R2' },
+    const deleted = await app.inject({
+      method: 'DELETE', url: `/api/worklog/requirements/r_any?versionId=${versionId}`,
     });
-    expect(badRename.statusCode).toBe(400);
-
-    const conflict = await app.inject({
-      method: 'POST', url: `/api/worklog/requirements/${r1}/rename`,
-      payload: { versionId: v1, newName: 'R2' },
-    });
-    expect(conflict.statusCode).toBe(409);
-
-    const ok = await app.inject({
-      method: 'POST', url: `/api/worklog/requirements/${r1}/rename`,
-      payload: { versionId: v1, newName: 'R1.0' },
-    });
-    expect(ok.statusCode).toBe(200);
-
-    // 删除:缺 versionId → 400;未知需求 → 404;正常 → 200
-    const noVid = await app.inject({ method: 'DELETE', url: `/api/worklog/requirements/${r2}` });
-    expect(noVid.statusCode).toBe(400);
-
-    const unknown = await app.inject({
-      method: 'DELETE', url: `/api/worklog/requirements/r_nope?versionId=${v1}`,
-    });
-    expect(unknown.statusCode).toBe(404);
-
-    const del = await app.inject({
-      method: 'DELETE', url: `/api/worklog/requirements/${r2}?versionId=${v1}`,
-    });
-    expect(del.statusCode).toBe(200);
-
-    const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
-    expect(
-      tree.json().versions[0].requirements.map((r: { title: string }) => r.title),
-    ).toEqual(['R1.0']);
+    expect(deleted.statusCode).toBe(404);
   });
 
   it('POST projects should validate body/paths and reject duplicate names', async () => {
@@ -393,35 +347,16 @@ describe('worklogRoutes', () => {
 
   it('string fields should reject non-string values with 400 (not 500)', async () => {
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
 
     const badVersionName = await app.inject({
       method: 'POST', url: '/api/worklog/versions', payload: { name: 123 },
     });
     expect(badVersionName.statusCode).toBe(400);
 
-    const badRequirementVersion = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements',
-      payload: { versionId: 123, title: 'R2' },
-    });
-    expect(badRequirementVersion.statusCode).toBe(400);
-
-    const badRequirementTitle = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements',
-      payload: { versionId, title: 123 },
-    });
-    expect(badRequirementTitle.statusCode).toBe(400);
-
     const badVersionRename = await app.inject({
       method: 'POST', url: `/api/worklog/versions/${versionId}/rename`, payload: { newName: 123 },
     });
     expect(badVersionRename.statusCode).toBe(400);
-
-    const badRequirementRename = await app.inject({
-      method: 'POST', url: `/api/worklog/requirements/${requirementId}/rename`,
-      payload: { versionId, newName: 123 },
-    });
-    expect(badRequirementRename.statusCode).toBe(400);
 
     // 无 body 的 record:必填校验 → 400,不得因读 undefined.title 变 500
     const noBody = await app.inject({ method: 'POST', url: '/api/worklog/entries' });
@@ -430,13 +365,13 @@ describe('worklogRoutes', () => {
     // record 的 title/detail 同样做类型守卫:{title:123} 不得在 validateTitle.trim() 炸成 500
     const badEntryTitle = await app.inject({
       method: 'POST', url: '/api/worklog/entries',
-      payload: { versionId, requirementId, title: 123, detail: 'd' },
+      payload: { versionId, title: 123, detail: 'd' },
     });
     expect(badEntryTitle.statusCode).toBe(400);
 
     const badEntryDetail = await app.inject({
       method: 'POST', url: '/api/worklog/entries',
-      payload: { versionId, requirementId, title: 't', detail: 123 },
+      payload: { versionId, title: 't', detail: 123 },
     });
     expect(badEntryDetail.statusCode).toBe(400);
 
@@ -448,30 +383,10 @@ describe('worklogRoutes', () => {
     expect(badProjectRename.statusCode).toBe(400);
   });
 
-  it('DELETE requirement should treat duplicated query versionId as invalid and fall back to body', async () => {
-    const versionId = await createVersion('v1');
-    const r1 = await createRequirement(versionId, 'R1');
-    const r2 = await createRequirement(versionId, 'R2');
-
-    // 重复 query → Fastify 给数组:视为无效,回落 body;body 有效则正常删除
-    const withBody = await app.inject({
-      method: 'DELETE', url: `/api/worklog/requirements/${r1}?versionId=a&versionId=b`,
-      payload: { versionId },
-    });
-    expect(withBody.statusCode).toBe(200);
-
-    // 重复 query 且无 body → 400(不得 500)
-    const noBody = await app.inject({
-      method: 'DELETE', url: `/api/worklog/requirements/${r2}?versionId=a&versionId=b`,
-    });
-    expect(noBody.statusCode).toBe(400);
-  });
-
   it('DELETE project should only remove the dictionary entry and keep entries', async () => {
     await createProject('p');
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
-    await recordEntry(versionId, requirementId, { project: 'p' });
+    await recordEntry(versionId, { project: 'p' });
 
     const del = await app.inject({ method: 'DELETE', url: '/api/worklog/projects/p' });
     expect(del.statusCode).toBe(200);
@@ -480,8 +395,8 @@ describe('worklogRoutes', () => {
     const data = tree.json();
     expect(data.projects).toHaveLength(0);
     // 条目属历史数据:项目名称快照保留,条目不被级联删除
-    expect(data.versions[0].requirements[0].entries).toHaveLength(1);
-    expect(data.versions[0].requirements[0].entries[0].project).toBe('p');
+    expect(data.versions[0].entries).toHaveLength(1);
+    expect(data.versions[0].entries[0].project).toBe('p');
   });
 
   it('bind/unbind unknown project should map to 404', async () => {
@@ -499,21 +414,20 @@ describe('worklogRoutes', () => {
 
   it('entry record/update should reject wrong field types with 400 (not 500)', async () => {
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
 
     // POST:project/sourcePath 非字符串、tags/relatedProjects 非字符串数组
-    expect((await recordEntry(versionId, requirementId, { project: 123 })).statusCode).toBe(400);
-    expect((await recordEntry(versionId, requirementId, { sourcePath: 123 })).statusCode).toBe(400);
-    expect((await recordEntry(versionId, requirementId, { tags: 'feat' })).statusCode).toBe(400);
-    expect((await recordEntry(versionId, requirementId, { tags: ['feat', 1] })).statusCode).toBe(400);
-    expect((await recordEntry(versionId, requirementId, { relatedProjects: 'x' })).statusCode).toBe(400);
-    expect((await recordEntry(versionId, requirementId, { diff: 123 })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { project: 123 })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { sourcePath: 123 })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { tags: 'feat' })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { tags: ['feat', 1] })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { relatedProjects: 'x' })).statusCode).toBe(400);
+    expect((await recordEntry(versionId, { diff: 123 })).statusCode).toBe(400);
 
     // 以上 400 均不得落库
     const tree = await app.inject({ method: 'GET', url: '/api/worklog' });
-    expect(tree.json().versions[0].requirements[0].entries).toHaveLength(0);
+    expect(tree.json().versions[0].entries).toHaveLength(0);
 
-    const created = await recordEntry(versionId, requirementId, { title: 'ok', detail: 'd' });
+    const created = await recordEntry(versionId, { title: 'ok', detail: 'd' });
     const { entryId } = JSON.parse(created.body);
 
     // PUT:title/tags/relatedProjects/diff 类型不对同样 400
@@ -536,7 +450,7 @@ describe('worklogRoutes', () => {
     expect(arrayBody.statusCode).toBe(400);
 
     const after = await app.inject({ method: 'GET', url: '/api/worklog' });
-    const entry = after.json().versions[0].requirements[0].entries[0];
+    const entry = after.json().versions[0].entries[0];
     expect(entry.title).toBe('ok'); // 400 均未改动条目
     expect(entry.tags).toBeUndefined();
   });
@@ -545,26 +459,15 @@ describe('worklogRoutes', () => {
     await createProject('甲项目');
     await createProject('乙项目');
     const versionId = await createVersion('v1');
-    const requirementId = await createRequirement(versionId, 'R');
 
-    // record 显式项目不存在 → 400 并列出候选(与版本/需求候选风格一致)
-    const rec = await recordEntry(versionId, requirementId, { project: '拼错的' });
+    // record 显式项目不存在 → 400 并列出候选
+    const rec = await recordEntry(versionId, { project: '拼错的' });
     expect(rec.statusCode).toBe(400);
     const recError = JSON.parse(rec.body).error as string;
     expect(recError).toContain('项目不存在:拼错的');
     expect(recError).toContain('现有项目');
     expect(recError).toContain('甲项目(');
     expect(recError).toContain('乙项目(');
-
-    // createRequirement 关联项目不存在 → 同样列出候选
-    const req = await app.inject({
-      method: 'POST', url: '/api/worklog/requirements',
-      payload: { versionId, title: 'R2', projects: ['拼错的'] },
-    });
-    expect(req.statusCode).toBe(400);
-    const reqError = JSON.parse(req.body).error as string;
-    expect(reqError).toContain('现有项目');
-    expect(reqError).toContain('甲项目(');
   });
 
   it('project rename/delete endpoints should keep working', async () => {

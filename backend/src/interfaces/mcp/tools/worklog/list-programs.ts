@@ -27,7 +27,7 @@ export async function handle(_args: Record<string, unknown> | undefined, deps: T
       '',
       ...lines,
       '',
-      '版本/需求请用 list_versions / list_requirements 获取 id;主题只能由用户在页面创建,AI 不得创建或猜名称(本工具只读)。',
+      '版本请用 list_versions 获取 id;主题只能由用户在页面创建,AI 不得创建或猜名称(本工具只读)。',
     ].join('\n'));
   } catch (err) {
     return fail(err);

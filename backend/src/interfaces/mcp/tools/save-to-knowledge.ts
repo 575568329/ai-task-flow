@@ -1,5 +1,5 @@
 // backend/src/interfaces/mcp/tools/save-to-knowledge.ts
-// 知识库写入工具:创建新文档,可选写入版本/需求/项目/阶段软关联。
+// 知识库写入工具:创建新文档,可选写入版本/项目/阶段软关联。
 // 关联 id 不存在时降级为不写该字段并提示,不阻断文档保存(设计 §8)。
 import { WORK_STAGE_IDS, isWorkStage } from '@ai-task-flow/shared';
 import type { WorklogData } from '@ai-task-flow/shared';
@@ -39,7 +39,7 @@ export const toolDef = {
       },
       requirementId: {
         type: 'string' as const,
-        description: '可选需求 id(如 r_ab12cd34),用于按需求归类;先 list_requirements 获取,id 不存在则降级为不关联',
+        description: '兼容参数(需求层已移除):传入会被忽略并提示,请改用 versionId',
       },
       projectId: {
         type: 'string' as const,
@@ -91,7 +91,7 @@ async function resolveRefs(
     }
   }
 
-  const needsTree = Boolean(requested.versionId || requested.requirementId || requested.projectId);
+  const needsTree = Boolean(requested.versionId || requested.projectId);
   if (!needsTree) return { meta, warnings };
 
   let tree: WorklogData;
@@ -123,21 +123,11 @@ async function resolveRefs(
     }
   }
 
+  // 需求层已移除:任何 requirementId 都无法再解析,统一降级为不关联并提示改用 versionId
   if (requested.requirementId) {
-    const owner = versions.find((v) =>
-      (v?.requirements ?? []).some((r) => r?.id === requested.requirementId),
+    warnings.push(
+      `需求 id "${requested.requirementId}" 不存在,已降级为不关联(需求层已移除,可改用 versionId)`,
     );
-    if (!owner) {
-      warnings.push(
-        `需求 id "${requested.requirementId}" 不存在,已降级为不关联(可先 list_requirements 获取)`,
-      );
-    } else if (meta.versionId && owner.id !== meta.versionId) {
-      warnings.push(
-        `需求 "${requested.requirementId}" 不属于版本 "${meta.versionId}",需求关联已降级为不关联`,
-      );
-    } else {
-      meta.requirementId = requested.requirementId;
-    }
   }
 
   return { meta, warnings };
