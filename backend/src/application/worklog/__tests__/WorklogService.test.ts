@@ -1,7 +1,7 @@
 // backend/src/application/worklog/__tests__/WorklogService.test.ts
 // WorklogService + JsonWorklogRepository 集成测试(真文件,临时目录隔离)。
-// 模型:版本 → 需求 → 条目;项目为条目属性与路径归属字典。
-// 覆盖:record 写入既有版本/需求、id 错误路径、查询过滤、partial 更新、
+// 模型:主题 → 版本 → 条目;项目为条目属性与路径归属字典。
+// 覆盖:record 写入既有版本、id 错误路径、查询过滤、partial 更新、
 //       删除级联与备份滚动、项目路径绑定、路径归属与告警降噪、关联项目、stage、双实例并发。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
@@ -83,48 +83,47 @@ describe('WorklogService', () => {
     });
   }
 
-  /** 建「版本 + 需求」组合(record 的前置条件) */
-  async function seedVersionRequirement(versionName = 'V1', requirementTitle = 'R') {
+  /** 建版本(record 的前置条件;版本必须归属主题) */
+  async function seedVersion(versionName = 'V1') {
     const version = await service.createVersion({ name: versionName, programId: await ensureProgram() });
-    const requirement = await service.createRequirement({ versionId: version.id, title: requirementTitle });
-    return { versionId: version.id, requirementId: requirement.id };
+    return { versionId: version.id };
   }
 
   // ---------------------------------------------------------------
   // record
   // ---------------------------------------------------------------
   describe('record', () => {
-    it('should record into an existing version and requirement', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement('V8.0.8', '澳门底层数据建设');
+    it('should record into an existing version', async () => {
+      const { versionId } = await seedVersion('V8.0.8');
       const res = await service.record({
-        versionId, requirementId, title: '改动', detail: 'd', stage: 'dev',
+        versionId, title: '改动', detail: 'd', stage: 'dev',
       });
 
       expect(res.entryId).toMatch(/^e_/);
-      expect(res.path).toBe(`V8.0.8/澳门底层数据建设/${res.entryId}`);
-      // 版本/需求不再自动创建,兼容字段恒 false
+      expect(res.path).toBe(`V8.0.8/${res.entryId}`);
+      // 版本不再自动创建,兼容字段恒 false
       expect(res.createdProject).toBe(false);
       expect(res.createdVersion).toBe(false);
 
       const tree = await service.getTree();
       expect(tree.projects).toHaveLength(0); // record 不再创建项目
       expect(tree.versions).toHaveLength(1);
-      expect(tree.versions[0].requirements[0].entries).toHaveLength(1);
+      expect(tree.versions[0].entries).toHaveLength(1);
     });
 
     it('should reject unknown version id with actionable message', async () => {
       await expect(service.record({
-        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+        versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.toThrow(/版本 v_nope 不存在/);
       await expect(service.record({
-        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+        versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.toThrow(/请让用户在页面创建并复制 id/);
     });
 
     it('should append migration hint when no versions exist yet', async () => {
       // 旧库未迁移时 versions 为空:提示先启动 Web 服务完成迁移,而不是只让用户创建版本
       await expect(service.record({
-        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+        versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.toThrow(/如从旧版本升级.*npm start.*完成数据迁移/);
     });
 
@@ -132,47 +131,31 @@ describe('WorklogService', () => {
       // 已有版本时 id 写错属于普通输入错误,不应误导用户去「迁移数据」
       await service.createVersion({ name: 'V1', programId: await ensureProgram() });
       await expect(service.record({
-        versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+        versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.not.toThrow(/如从旧版本升级/);
     });
 
     it('should record without stage as unlabelled', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
-      const res = await service.record({ versionId, requirementId, title: '未标注', detail: 'd' });
+      const { versionId } = await seedVersion();
+      const res = await service.record({ versionId, title: '未标注', detail: 'd' });
 
       const [entry] = await service.query({ entryId: res.entryId });
       expect(entry.title).toBe('未标注');
       expect(entry.stage).toBeUndefined();
     });
 
-    it('should reject unknown requirement id with actionable message', async () => {
-      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-      await expect(service.record({
-        versionId: version.id, requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
-      })).rejects.toThrow(/需求 r_nope 不存在/);
-    });
-
-    it('should reject a requirement that does not belong to the given version', async () => {
-      const v1 = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-      const v2 = await service.createVersion({ name: 'V2', programId: await ensureProgram() });
-      const r1 = await service.createRequirement({ versionId: v1.id, title: 'R' });
-      await expect(service.record({
-        versionId: v2.id, requirementId: r1.id, title: 't', detail: 'd', stage: 'dev',
-      })).rejects.toThrow(/不属于该版本/);
-    });
-
     it('should reject an explicit project that does not exist', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
+      const { versionId } = await seedVersion();
       await expect(service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev', project: '不存在',
+        versionId, title: 't', detail: 'd', stage: 'dev', project: '不存在',
       })).rejects.toThrow(/项目不存在:不存在/);
     });
 
     it('should allow slashes in entry titles and trim project names', async () => {
       await seedProject('A');
-      const { versionId, requirementId } = await seedVersionRequirement();
+      const { versionId } = await seedVersion();
       const r = await service.record({
-        versionId, requirementId, title: '修复 A/B 白屏', detail: 'd', stage: 'dev', project: '  A  ',
+        versionId, title: '修复 A/B 白屏', detail: 'd', stage: 'dev', project: '  A  ',
       });
       const [entry] = await service.query({ entryId: r.entryId });
       expect(entry.title).toBe('修复 A/B 白屏');
@@ -180,51 +163,46 @@ describe('WorklogService', () => {
     });
 
     it('should reject an explicitly empty project name', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
+      const { versionId } = await seedVersion();
       await expect(service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev', project: '   ',
+        versionId, title: 't', detail: 'd', stage: 'dev', project: '   ',
       })).rejects.toThrow(/项目名不能为空/);
     });
 
-    it('should list existing versions/requirements as candidates in error messages', async () => {
+    it('should list existing versions as candidates in error messages', async () => {
       const version = await service.createVersion({ name: 'V8.0.7', programId: await ensureProgram() });
-      const requirement = await service.createRequirement({ versionId: version.id, title: 'R1' });
 
       await expect(service.record({
-        versionId: 'v_nope', requirementId: requirement.id, title: 't', detail: 'd', stage: 'dev',
+        versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
       })).rejects.toThrow(new RegExp(`现有版本：V8\\.0\\.7\\(${version.id}\\)`));
-
-      await expect(service.record({
-        versionId: version.id, requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
-      })).rejects.toThrow(new RegExp(`现有需求：R1\\(${requirement.id}\\)`));
     });
 
     it('should validate title/detail/stage/files', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
+      const { versionId } = await seedVersion();
       await expect(service.record({
-        versionId, requirementId, title: ' ', detail: 'd', stage: 'dev',
+        versionId, title: ' ', detail: 'd', stage: 'dev',
       })).rejects.toThrow(/标题不能为空/);
       await expect(service.record({
-        versionId, requirementId, title: 't', detail: '  ', stage: 'dev',
+        versionId, title: 't', detail: '  ', stage: 'dev',
       })).rejects.toThrow(/详细说明不能为空/);
       await expect(service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'bad' as never,
+        versionId, title: 't', detail: 'd', stage: 'bad' as never,
       })).rejects.toThrow(/stage 非法/);
       await expect(service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev', files: [{ nope: 1 }] as never,
+        versionId, title: 't', detail: 'd', stage: 'dev', files: [{ nope: 1 }] as never,
       })).rejects.toThrow(/files 必须为/);
     });
 
     it('should generate unique ids and local date; keep entry without project', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
-      const r1 = await service.record({ versionId, requirementId, title: 'a', detail: 'd', stage: 'dev' });
-      const r2 = await service.record({ versionId, requirementId, title: 'b', detail: 'd', stage: 'dev' });
+      const { versionId } = await seedVersion();
+      const r1 = await service.record({ versionId, title: 'a', detail: 'd', stage: 'dev' });
+      const r2 = await service.record({ versionId, title: 'b', detail: 'd', stage: 'dev' });
       expect(r1.entryId).not.toBe(r2.entryId);
 
       const results = await service.query({ versionId });
       expect(results.every((e) => e.date === today())).toBe(true);
       expect(results.every((e) => e.project === undefined)).toBe(true);
-      expect(results.every((e) => e.versionName === 'V1' && e.requirementTitle === 'R')).toBe(true);
+      expect(results.every((e) => e.versionName === 'V1')).toBe(true);
     });
   });
 
@@ -232,38 +210,35 @@ describe('WorklogService', () => {
   // query
   // ---------------------------------------------------------------
   describe('query', () => {
-    let v1: { versionId: string; requirementId: string };
-    let v2: { versionId: string; requirementId: string };
+    let v1: { versionId: string };
+    let v2: { versionId: string };
 
     beforeEach(async () => {
       await seedProject('ai-task-flow');
       await seedProject('other-proj');
-      v1 = await seedVersionRequirement('V1', 'R1');
-      v2 = await seedVersionRequirement('V2', 'R2');
+      v1 = await seedVersion('V1');
+      v2 = await seedVersion('V2');
 
       await service.record({
-        versionId: v1.versionId, requirementId: v1.requirementId, project: 'ai-task-flow',
+        versionId: v1.versionId, project: 'ai-task-flow',
         title: '登录页加记住密码', detail: '修改 LoginForm 组件', tags: ['feat'], stage: 'dev',
         files: [{ path: 'frontend/src/LoginForm.tsx', startLine: 10, endLine: 40 }],
       });
       await service.record({
-        versionId: v1.versionId, requirementId: v1.requirementId, project: 'ai-task-flow',
+        versionId: v1.versionId, project: 'ai-task-flow',
         title: '修复白屏 bug', detail: 'KnowledgeScanner 容错 ENOENT', tags: ['fix'], stage: 'review',
         diff: 'diff --git a/x',
       });
       await service.record({
-        versionId: v2.versionId, requirementId: v2.requirementId, project: 'other-proj',
+        versionId: v2.versionId, project: 'other-proj',
         title: 'LOGIN refactor', detail: '重构登录', tags: ['refactor'], stage: 'dev',
       });
     });
 
-    it('should filter by versionId / requirementId / version name / project', async () => {
+    it('should filter by versionId / version name / project', async () => {
       const byVersion = await service.query({ versionId: v1.versionId });
       expect(byVersion).toHaveLength(2);
       expect(byVersion.every((e) => e.versionName === 'V1')).toBe(true);
-
-      const byRequirement = await service.query({ requirementId: v2.requirementId });
-      expect(byRequirement.map((e) => e.title)).toEqual(['LOGIN refactor']);
 
       const byVersionName = await service.query({ version: 'V1' });
       expect(byVersionName).toHaveLength(2);
@@ -308,11 +283,10 @@ describe('WorklogService', () => {
       expect(withDiff[0].diff).toBe('diff --git a/x');
     });
 
-    it('should return files as path list and version/requirement names', async () => {
+    it('should return files as path list and version name', async () => {
       const results = await service.query({ keyword: '记住密码' });
       expect(results[0].files).toEqual(['frontend/src/LoginForm.tsx']);
       expect(results[0].versionName).toBe('V1');
-      expect(results[0].requirementTitle).toBe('R1');
     });
 
     it('should query exactly by entryId and ignore other filters', async () => {
@@ -340,13 +314,13 @@ describe('WorklogService', () => {
   // ---------------------------------------------------------------
   describe('update', () => {
     it('should only patch provided fields and keep diff/files intact', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
+      const { versionId } = await seedVersion();
       const r = await service.record({
-        versionId, requirementId, title: '原标题', detail: '原详情',
+        versionId, title: '原标题', detail: '原详情',
         stage: 'dev', diff: 'diff --git', files: [{ path: 'a.ts' }],
       });
       const updated = await service.update(r.entryId, { title: '新标题' });
-      expect(updated.path).toBe(`V1/R/${r.entryId}`);
+      expect(updated.path).toBe(`V1/${r.entryId}`);
 
       const [entry] = await service.query({ keyword: '新标题', includeDiff: true });
       expect(entry.title).toBe('新标题');
@@ -357,16 +331,16 @@ describe('WorklogService', () => {
     });
 
     it('should update stage and reject invalid values', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
-      const r = await service.record({ versionId, requirementId, title: 't', detail: 'd', stage: 'dev' });
+      const { versionId } = await seedVersion();
+      const r = await service.record({ versionId, title: 't', detail: 'd', stage: 'dev' });
       await service.update(r.entryId, { stage: 'review' });
       expect((await service.query({ entryId: r.entryId }))[0].stage).toBe('review');
       await expect(service.update(r.entryId, { stage: 'bad' as never })).rejects.toThrow(/stage 非法/);
     });
 
     it('should validate date format', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement();
-      const r = await service.record({ versionId, requirementId, title: 't', detail: 'd', stage: 'dev' });
+      const { versionId } = await seedVersion();
+      const r = await service.record({ versionId, title: 't', detail: 'd', stage: 'dev' });
       await expect(service.update(r.entryId, { date: '2026/11/23' })).rejects.toThrow(/YYYY-MM-DD/);
       await service.update(r.entryId, { date: '2026-11-20' });
       expect((await service.query({ entryId: r.entryId }))[0].date).toBe('2026-11-20');
@@ -382,15 +356,13 @@ describe('WorklogService', () => {
   // ---------------------------------------------------------------
   describe('delete & rename with backup', () => {
     let versionId: string;
-    let requirementId: string;
 
     beforeEach(async () => {
       await seedProject('p');
-      const seeded = await seedVersionRequirement('v1', 'R');
+      const seeded = await seedVersion('v1');
       versionId = seeded.versionId;
-      requirementId = seeded.requirementId;
-      await service.record({ versionId, requirementId, title: 'a', detail: 'd', stage: 'dev' });
-      await service.record({ versionId, requirementId, title: 'b', detail: 'd', stage: 'dev' });
+      await service.record({ versionId, title: 'a', detail: 'd', stage: 'dev' });
+      await service.record({ versionId, title: 'b', detail: 'd', stage: 'dev' });
     });
 
     it('should backup before deleteEntry/deleteVersion/deleteProject', async () => {
@@ -401,12 +373,12 @@ describe('WorklogService', () => {
 
       await service.deleteVersion(versionId);
       expect((await listBackups()).length).toBe(before + 2);
-      // 删版本级联删除其需求与条目
+      // 删版本级联删除其条目
       expect((await service.getTree()).versions).toHaveLength(0);
 
-      const seeded = await seedVersionRequirement('v2', 'R');
+      const seeded = await seedVersion('v2');
       await service.record({
-        versionId: seeded.versionId, requirementId: seeded.requirementId,
+        versionId: seeded.versionId,
         title: 'x', detail: 'd', stage: 'dev', project: 'p',
       });
       const beforeDeleteProject = (await listBackups()).length;
@@ -415,21 +387,7 @@ describe('WorklogService', () => {
       // 删项目只移除字典项,历史条目保留(项目名称快照仍在)
       const tree = await service.getTree();
       expect(tree.projects).toHaveLength(0);
-      expect(tree.versions[0].requirements[0].entries[0].project).toBe('p');
-    });
-
-    it('should delete a single requirement without touching siblings', async () => {
-      const other = await service.createRequirement({ versionId, title: 'R-other' });
-      await service.record({ versionId, requirementId: other.id, title: 'c', detail: 'd', stage: 'dev' });
-      const before = (await listBackups()).length;
-
-      await service.deleteRequirement(versionId, requirementId);
-      expect((await listBackups()).length).toBe(before + 1);
-
-      const tree = await service.getTree();
-      const version = tree.versions.find((v) => v.id === versionId)!;
-      expect(version.requirements.map((r) => r.title)).toEqual(['R-other']);
-      expect(version.requirements[0].entries).toHaveLength(1);
+      expect(tree.versions[0].entries[0].project).toBe('p');
     });
 
     it('should backup before rename and keep entries', async () => {
@@ -438,7 +396,7 @@ describe('WorklogService', () => {
       expect((await listBackups()).length).toBe(before + 1);
       const version = (await service.getTree()).versions[0];
       expect(version.name).toBe('v1.0');
-      expect(version.requirements[0].entries).toHaveLength(2); // 条目随版本保留
+      expect(version.entries).toHaveLength(2); // 条目随版本保留
     });
 
     it('should reject rename to existing name without modifying data', async () => {
@@ -452,7 +410,7 @@ describe('WorklogService', () => {
     it('should keep at most 10 rolling backups', async () => {
       for (let i = 0; i < 12; i++) {
         const r = await service.record({
-          versionId, requirementId, title: `t${i}`, detail: 'd', stage: 'dev',
+          versionId, title: `t${i}`, detail: 'd', stage: 'dev',
         });
         await service.deleteEntry(r.entryId);
       }
@@ -461,8 +419,8 @@ describe('WorklogService', () => {
 
     it('should not collide when two backups happen within same millisecond', async () => {
       // 连续两次删除,快照文件名含随机后缀,不会互覆
-      const r1 = await service.record({ versionId, requirementId, title: 'x1', detail: 'd', stage: 'dev' });
-      const r2 = await service.record({ versionId, requirementId, title: 'x2', detail: 'd', stage: 'dev' });
+      const r1 = await service.record({ versionId, title: 'x1', detail: 'd', stage: 'dev' });
+      const r2 = await service.record({ versionId, title: 'x2', detail: 'd', stage: 'dev' });
       const before = (await listBackups()).length;
       await Promise.all([service.deleteEntry(r1.entryId), service.deleteEntry(r2.entryId)]);
       expect((await listBackups()).length).toBe(before + 2);
@@ -484,9 +442,8 @@ describe('WorklogService', () => {
 
       // 建出的项目可直接用于 record 的显式 project(不再依赖迁移)
       const v = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-      const r = await service.createRequirement({ versionId: v.id, title: 'R' });
       const res = await service.record({
-        versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev', project: '新项目',
+        versionId: v.id, title: 't', detail: 'd', stage: 'dev', project: '新项目',
       });
       expect((await service.query({ entryId: res.entryId }))[0].project).toBe('新项目');
     });
@@ -639,12 +596,12 @@ describe('WorklogService', () => {
       await seedProject('搜题平台');
       await service.bindProjectPaths('资源加工平台', [parentPath]);
       await service.bindProjectPaths('搜题平台', [childPath]);
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
 
       const sourcePath = path.join(childPath, '前端', 'x');
       // 显式传入的既有项目名在路径命中时被忽略(归属项目优先)
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: '资源加工平台', sourcePath,
       });
 
@@ -652,7 +609,7 @@ describe('WorklogService', () => {
       const tree = await service.getTree();
       const owner = tree.projects.find((p) => p.id === r.projectId)!;
       expect(owner.name).toBe('搜题平台'); // 长前缀优先于父项目
-      const entry = tree.versions[0].requirements[0].entries.find((e) => e.id === r.entryId)!;
+      const entry = tree.versions[0].entries.find((e) => e.id === r.entryId)!;
       expect(entry.project).toBe('搜题平台');
       expect(entry.sourcePath).toBe(sourcePath); // 保留用户原始写法
       expect(entry.pathUnmatched).toBeUndefined();
@@ -660,15 +617,15 @@ describe('WorklogService', () => {
 
     it('should fall back to given project name when path matches nothing', async () => {
       await seedProject('Demo');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
       const unmatchedPath = path.join(base, 'nowhere', 'x');
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: 'Demo', sourcePath: unmatchedPath,
       });
 
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries[0];
+      const entry = tree.versions[0].entries[0];
       expect(entry.pathUnmatched).toBe(true);
       expect(entry.sourcePath).toBe(unmatchedPath); // 未命中也要留痕,便于后续重新归属
       expect(entry.project).toBe('Demo');
@@ -681,10 +638,10 @@ describe('WorklogService', () => {
       await seedProject('A');
       await seedProject('B');
       await service.bindProjectPaths('A', [parentPath]);
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
 
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: 'B', sourcePath: path.join(base, 'nowhere', 'x'),
       });
       // 有绑定却落在绑定范围外 = 配置异常信号,必须告警
@@ -695,10 +652,10 @@ describe('WorklogService', () => {
       await seedProject('A');
       await seedProject('B');
       await service.bindProjectPaths('A', [parentPath]);
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
 
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: 'B', sourcePath: path.join(parentPath, 'backend'),
       });
       expect(r.warnings).toBeUndefined();
@@ -713,17 +670,17 @@ describe('WorklogService', () => {
         data.projects.push({ id: 'p_with_id', name: '有id项目', createdAt: 1 });
       });
       await seedProject('新项目');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
 
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: '新项目',
         sourcePath: path.join(parentPath, 'src'),
         relatedProjects: ['无id项目', '有id项目'],
       });
 
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries[0];
+      const entry = tree.versions[0].entries[0];
       // 路径命中的项目无 id → 不归属(不得把 undefined 当 projectId),退回传入项目名
       expect(entry.project).toBe('新项目');
       expect(entry.projectId).toBe(tree.projects.find((p) => p.name === '新项目')!.id);
@@ -735,11 +692,11 @@ describe('WorklogService', () => {
     });
 
     it('should keep legacy behavior when sourcePath is absent', async () => {
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
-      const r = await service.record({ versionId, requirementId, title: 't', detail: 'd', stage: 'dev' });
+      const { versionId } = await seedVersion('V1');
+      const r = await service.record({ versionId, title: 't', detail: 'd', stage: 'dev' });
       expect(r.warnings).toBeUndefined();
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries[0];
+      const entry = tree.versions[0].entries[0];
       expect(entry.sourcePath).toBeUndefined();
       expect(entry.pathUnmatched).toBeUndefined();
       expect(entry.project).toBeUndefined();
@@ -754,16 +711,16 @@ describe('WorklogService', () => {
     it('should resolve related projects and ignore unknown names with warning', async () => {
       await seedProject('A');
       await seedProject('B');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
 
       const r = await service.record({
-        versionId, requirementId, title: '跨项目', detail: 'd', stage: 'dev',
+        versionId, title: '跨项目', detail: 'd', stage: 'dev',
         project: 'A', relatedProjects: ['B', '拼错的'],
       });
       expect(r.warnings?.some((w) => w.includes('拼错的'))).toBe(true);
 
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries.find((e) => e.title === '跨项目')!;
+      const entry = tree.versions[0].entries.find((e) => e.title === '跨项目')!;
       expect(entry.relatedProjects).toEqual(['B']);
       expect(entry.relatedProjectIds).toEqual([
         tree.projects.find((p) => p.name === 'B')!.id,
@@ -772,14 +729,14 @@ describe('WorklogService', () => {
 
     it('should not write related fields when no name resolves', async () => {
       await seedProject('A');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
       const r = await service.record({
-        versionId, requirementId, title: 'x', detail: 'd', stage: 'dev',
+        versionId, title: 'x', detail: 'd', stage: 'dev',
         project: 'A', relatedProjects: ['  ', '不存在'],
       });
       expect(r.warnings?.some((w) => w.includes('不存在'))).toBe(true);
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries.find((e) => e.title === 'x')!;
+      const entry = tree.versions[0].entries.find((e) => e.title === 'x')!;
       expect(entry.relatedProjects).toBeUndefined();
       expect(entry.relatedProjectIds).toBeUndefined();
     });
@@ -787,15 +744,15 @@ describe('WorklogService', () => {
     it('should sync related project name snapshot on rename', async () => {
       await seedProject('A');
       await seedProject('B');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
       await service.record({
-        versionId, requirementId, title: 'x', detail: 'd', stage: 'dev',
+        versionId, title: 'x', detail: 'd', stage: 'dev',
         project: 'A', relatedProjects: ['B'],
       });
 
       await service.renameProject('B', 'B2');
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries.find((e) => e.title === 'x')!;
+      const entry = tree.versions[0].entries.find((e) => e.title === 'x')!;
       expect(entry.relatedProjects).toEqual(['B2']);
       // id 引用不随改名变化
       expect(entry.relatedProjectIds).toEqual([
@@ -807,8 +764,8 @@ describe('WorklogService', () => {
       await seedProject('B');
       await seedProject('C');
       await seedProject('A');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
-      const r = await service.record({ versionId, requirementId, title: 't', detail: 'd', stage: 'dev' });
+      const { versionId } = await seedVersion('V1');
+      const r = await service.record({ versionId, title: 't', detail: 'd', stage: 'dev' });
 
       // 设置:未知名称忽略并告警
       const u1 = await service.update(r.entryId, { relatedProjects: ['B', '不存在'] });
@@ -828,7 +785,7 @@ describe('WorklogService', () => {
       const cleared = (await service.query({ entryId: r.entryId }))[0];
       expect(cleared.relatedProjects).toBeUndefined();
       const tree = await service.getTree();
-      const entry = tree.versions[0].requirements[0].entries.find((e) => e.id === r.entryId)!;
+      const entry = tree.versions[0].entries.find((e) => e.id === r.entryId)!;
       expect(entry.relatedProjectIds).toBeUndefined();
     });
 
@@ -836,9 +793,9 @@ describe('WorklogService', () => {
       await seedProject('A');
       await seedProject('B');
       await seedProject('C');
-      const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
+      const { versionId } = await seedVersion('V1');
       const r = await service.record({
-        versionId, requirementId, title: 't', detail: 'd', stage: 'dev',
+        versionId, title: 't', detail: 'd', stage: 'dev',
         project: 'A', relatedProjects: ['B'],
       });
 
@@ -851,22 +808,18 @@ describe('WorklogService', () => {
   });
 
   // ---------------------------------------------------------------
-  // 项目改名:名称快照同步(条目实际项目 + 需求计划范围)
+  // 项目改名:条目名称快照同步
   // ---------------------------------------------------------------
   describe('rename project snapshots', () => {
-    it('should sync entry.project and requirement.projects on rename', async () => {
-      const projectId = await seedProject('A');
-      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-      const requirement = await service.createRequirement({
-        versionId: version.id, title: 'R', projects: ['A'],
-      });
+    it('should sync entry.project snapshot on rename', async () => {
+      await seedProject('A');
+      const { versionId } = await seedVersion('V1');
       const r = await service.record({
-        versionId: version.id, requirementId: requirement.id,
-        title: 't', detail: 'd', stage: 'dev', project: 'A',
+        versionId, title: 't', detail: 'd', stage: 'dev', project: 'A',
       });
       // 迁移前无 id 的旧条目快照:按旧名兜底同步
       await repo.mutate((data) => {
-        data.versions[0].requirements[0].entries.push({
+        data.versions[0].entries.push({
           id: 'e_legacy', title: 'legacy', detail: 'd', date: '2026-01-01',
           createdAt: 1, updatedAt: 1, project: 'A',
         });
@@ -875,29 +828,12 @@ describe('WorklogService', () => {
       await service.renameProject('A', 'A2');
 
       const tree = await service.getTree();
-      const req = tree.versions[0].requirements[0];
+      const entries = tree.versions[0].entries;
       expect(tree.projects.map((p) => p.name)).toEqual(['A2']);
-      expect(req.projects).toEqual(['A2']);
-      expect(req.projectIds).toEqual([projectId]);
-      expect(req.entries.find((e) => e.id === r.entryId)!.project).toBe('A2');
-      expect(req.entries.find((e) => e.id === 'e_legacy')!.project).toBe('A2');
+      expect(entries.find((e) => e.id === r.entryId)!.project).toBe('A2');
+      expect(entries.find((e) => e.id === 'e_legacy')!.project).toBe('A2');
       // 按新名过滤能查到旧条目
       expect((await service.query({ project: 'A2' })).map((e) => e.id)).toContain(r.entryId);
-    });
-
-    it('should keep requirement projects aligned when projectIds exist', async () => {
-      await seedProject('A');
-      await seedProject('B');
-      const version = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-      const requirement = await service.createRequirement({
-        versionId: version.id, title: 'R', projects: ['A', 'B'],
-      });
-
-      await service.renameProject('A', 'A2');
-      const req = (await service.getTree()).versions[0].requirements
-        .find((item) => item.id === requirement.id)!;
-      expect(req.projects).toEqual(['A2', 'B']);
-      expect(req.projectIds).toEqual(['p_A', 'p_B']);
     });
   });
 
@@ -907,13 +843,12 @@ describe('WorklogService', () => {
   it('should release the file lock after a failed first transaction', async () => {
     // 新库文件尚不存在:首次事务(未知 id)失败后,后续写入不得被残留锁阻塞
     await expect(service.record({
-      versionId: 'v_nope', requirementId: 'r_nope', title: 't', detail: 'd', stage: 'dev',
+      versionId: 'v_nope', title: 't', detail: 'd', stage: 'dev',
     })).rejects.toThrow(/不存在/);
 
     const v = await service.createVersion({ name: 'V1', programId: await ensureProgram() });
-    const r = await service.createRequirement({ versionId: v.id, title: 'R' });
     await expect(service.record({
-      versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev',
+      versionId: v.id, title: 't', detail: 'd', stage: 'dev',
     })).resolves.toHaveProperty('entryId');
   });
 
@@ -922,12 +857,12 @@ describe('WorklogService', () => {
   // ---------------------------------------------------------------
   it('should not lose updates across two repository instances', async () => {
     const serviceB = new WorklogService(new JsonWorklogRepository(filePath, backupsDir));
-    const { versionId, requirementId } = await seedVersionRequirement('V1', 'R');
-    // 同版本同需求并发写 20 条,两实例各 10
+    const { versionId } = await seedVersion('V1');
+    // 同版本并发写 20 条,两实例各 10
     await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         (i % 2 === 0 ? service : serviceB).record({
-          versionId, requirementId, title: `entry-${i}`, detail: 'd', stage: 'dev',
+          versionId, title: `entry-${i}`, detail: 'd', stage: 'dev',
         }),
       ),
     );

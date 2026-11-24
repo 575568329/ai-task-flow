@@ -1,6 +1,6 @@
 // backend/src/application/worklog/__tests__/WorklogProgram.test.ts
 // 建设主题(顶层)CRUD 与版本归属测试:主题名唯一、版本 programId 校验、
-// 级联删除(版本/需求/条目)、备份与主题汇总。
+// 级联删除(版本/条目)、备份与主题汇总。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +10,6 @@ import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonW
 import {
   WorklogConflictError,
   WorklogNotFoundError,
-  WorklogValidationError,
 } from '../../../domain/worklog/errors.js';
 
 describe('WorklogService program CRUD', () => {
@@ -131,11 +130,10 @@ describe('WorklogService program CRUD', () => {
   // deleteProgram
   // ---------------------------------------------------------------
   describe('deleteProgram', () => {
-    it('deletes program with its versions, requirements and entries, and backs up', async () => {
+    it('deletes program with its versions and entries, and backs up', async () => {
       const g = await service.createProgram({ name: 'G' });
       const v = await service.createVersion({ name: 'V', programId: g.id });
-      const r = await service.createRequirement({ versionId: v.id, title: 'R' });
-      await service.record({ versionId: v.id, requirementId: r.id, title: 't', detail: 'd', stage: 'dev' });
+      await service.record({ versionId: v.id, title: 't', detail: 'd', stage: 'dev' });
       const before = (await listBackups()).length;
 
       await service.deleteProgram(g.id);
@@ -151,16 +149,15 @@ describe('WorklogService program CRUD', () => {
       const g2 = await service.createProgram({ name: 'G2' });
       const v1 = await service.createVersion({ name: 'V1', programId: g1.id });
       const v2 = await service.createVersion({ name: 'V2', programId: g2.id });
-      const r2 = await service.createRequirement({ versionId: v2.id, title: 'R2' });
-      await service.record({ versionId: v2.id, requirementId: r2.id, title: 't', detail: 'd', stage: 'dev' });
+      await service.record({ versionId: v2.id, title: 't', detail: 'd', stage: 'dev' });
 
       await service.deleteProgram(g1.id);
 
       const tree = await service.getTree();
       expect(tree.programs.map((p) => p.id)).toEqual([g2.id]);
       expect(tree.versions.map((x) => x.id)).toEqual([v2.id]);
-      // 其他主题的需求与条目不受影响
-      expect(tree.versions[0].requirements[0].entries).toHaveLength(1);
+      // 其他主题的条目不受影响
+      expect(tree.versions[0].entries).toHaveLength(1);
       void v1;
     });
 
@@ -181,11 +178,9 @@ describe('WorklogService program CRUD', () => {
       const v2 = await service.createVersion({ name: 'V2', programId: g1.id });
       await service.createVersion({ name: 'V3', programId: g2.id });
 
-      const r1 = await service.createRequirement({ versionId: v1.id, title: 'R1' });
-      await service.record({ versionId: v1.id, requirementId: r1.id, title: 'a', detail: 'd', stage: 'dev' });
-      await service.record({ versionId: v1.id, requirementId: r1.id, title: 'b', detail: 'd', stage: 'dev' });
-      const r2 = await service.createRequirement({ versionId: v2.id, title: 'R2' });
-      await service.record({ versionId: v2.id, requirementId: r2.id, title: 'c', detail: 'd', stage: 'dev' });
+      await service.record({ versionId: v1.id, title: 'a', detail: 'd', stage: 'dev' });
+      await service.record({ versionId: v1.id, title: 'b', detail: 'd', stage: 'dev' });
+      await service.record({ versionId: v2.id, title: 'c', detail: 'd', stage: 'dev' });
 
       const summaries = await service.listPrograms();
       expect(summaries).toEqual([

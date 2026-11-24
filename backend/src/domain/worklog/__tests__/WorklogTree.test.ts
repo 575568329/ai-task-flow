@@ -6,19 +6,17 @@ const data: WorklogData = {
   projects: [],
   programs: [{ id: 'g1', name: '测试主题', createdAt: 1 }],
   versions: [
-    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 1, requirements: [
-      { id: 'r1', title: '需求A', createdAt: 1, entries: [
-        { id: 'e1', title: 't', detail: 'd', date: 'd', createdAt: 1, updatedAt: 1 },
-      ] },
+    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 1, entries: [
+      { id: 'e1', title: 't', detail: 'd', date: 'd', createdAt: 1, updatedAt: 1 },
     ] },
   ],
 };
 
 describe('WorklogTree', () => {
-  it('finds entry with its version and requirement', () => {
+  it('finds entry with its version', () => {
     const found = findEntryLocation(data, 'e1');
     expect(found?.version.id).toBe('v1');
-    expect(found?.requirement.id).toBe('r1');
+    expect(found?.entry.id).toBe('e1');
   });
   it('returns undefined for unknown entry', () => {
     expect(findEntryLocation(data, 'nope')).toBeUndefined();

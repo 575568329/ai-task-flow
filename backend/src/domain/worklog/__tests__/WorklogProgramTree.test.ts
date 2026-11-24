@@ -10,9 +10,9 @@ const data: WorklogData = {
     { id: 'g2', name: '大陆数据建设', createdAt: 2 },
   ],
   versions: [
-    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 1, requirements: [] },
-    { id: 'v2', name: 'V8.0.9', programId: 'g1', createdAt: 2, requirements: [] },
-    { id: 'v3', name: 'V1.0.0', programId: 'g2', createdAt: 3, requirements: [] },
+    { id: 'v1', name: 'V8.0.8', programId: 'g1', createdAt: 1, entries: [] },
+    { id: 'v2', name: 'V8.0.9', programId: 'g1', createdAt: 2, entries: [] },
+    { id: 'v3', name: 'V1.0.0', programId: 'g2', createdAt: 3, entries: [] },
   ],
 };
 

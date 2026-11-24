@@ -134,10 +134,10 @@ export interface WorklogProgramSummary {
   entryCount: number;
 }
 
-/** record 响应:版本/需求不再自动创建,createdXxx 为兼容旧客户端保留(恒 false) */
+/** record 响应:版本不再自动创建,createdXxx 为兼容旧客户端保留(恒 false) */
 export interface WorklogRecordResponse {
   entryId: string;
-  /** 展示用路径:版本名/需求名/entryId */
+  /** 展示用路径:版本名/entryId */
   path: string;
   /** 兼容保留,恒 false */
   createdProject: boolean;
