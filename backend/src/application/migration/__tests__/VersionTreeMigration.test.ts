@@ -382,6 +382,51 @@ describe('migrateProgramLayer', () => {
     expect((migrated.versions[0] as { programId?: string }).programId).toBeUndefined();
   });
 
+  it('assigns versions whose programId is an empty string (v1 intermediate state)', () => {
+    // 迁移 v1 新建版本时写 programId: ''(占位),v2 必须把它归入主题
+    const source = {
+      projects: [],
+      programs: [],
+      versions: [
+        {
+          ...unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
+          programId: '',
+        },
+      ],
+    } as unknown as WorklogData;
+
+    const { data, report } = migrateProgramLayer(source);
+
+    expect(data.programs).toHaveLength(1);
+    expect(data.programs[0].name).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(data.versions[0].programId).toBe(data.programs[0].id);
+    expect(report).toEqual({ programsCreated: 1, versionsAssigned: 1 });
+  });
+
+  it('reassigns a version whose programId points to a missing program (dangling)', () => {
+    const source = {
+      projects: [],
+      programs: [{ id: 'g_gone', name: '旧主题', createdAt: 1 }],
+      versions: [
+        {
+          ...unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
+          // 指向不存在的主题(programs 里只有 g_gone),属于悬空归属
+          programId: 'g_missing',
+        },
+      ],
+    } as unknown as WorklogData;
+
+    const { data, report } = migrateProgramLayer(source);
+
+    // 悬空 programId 不算已归属:按需求标题重新建主题并归属
+    const target = data.programs.find((p) => p.name === LEGACY_REQUIREMENT_TITLE)!;
+    expect(target).toBeDefined();
+    expect(data.versions[0].programId).toBe(target.id);
+    // 既有主题不删除
+    expect(data.programs.some((p) => p.id === 'g_gone')).toBe(true);
+    expect(report).toEqual({ programsCreated: 1, versionsAssigned: 1 });
+  });
+
   it('assigns versions without the legacy requirement to 未分类建设', () => {
     const source = unassignedData([
       unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
@@ -525,6 +570,34 @@ describe('runProgramLayerMigration', () => {
     expect(second.programsCreated).toBe(0);
     expect(second.versionsAssigned).toBe(0);
     expect(await hash()).toBe(before);
+  });
+
+  it('fills programId for data written by v1 (programId: empty string)', async () => {
+    // 最高风险路径:v1 落盘的版本 programId 为空串,执行器必须识别为未迁移并回填
+    const chainedDir = path.join(os.tmpdir(), `mig-pl-v1-${nanoid()}`);
+    await fs.mkdir(chainedDir, { recursive: true });
+    const repo = new JsonWorklogRepository(
+      path.join(chainedDir, 'worklog.json'),
+      path.join(chainedDir, 'wb'),
+    );
+    await repo.mutate((d) => {
+      d.versions.push({
+        id: 'v1',
+        name: 'V8.0.8',
+        programId: '',
+        createdAt: 1,
+        requirements: [requirement('r1', LEGACY_REQUIREMENT_TITLE)],
+      } as never);
+    });
+
+    const report = await runProgramLayerMigration({ dataDir: chainedDir, worklogRepo: repo });
+
+    expect(report.skipped).toBe(false);
+    expect(report.programsCreated).toBe(1);
+    expect(report.versionsAssigned).toBe(1);
+    const data = await repo.load();
+    expect(data.programs).toHaveLength(1);
+    expect(data.versions[0].programId).toBe(data.programs[0].id);
   });
 
   it('does nothing (and marks skipped) on a data dir without versions', async () => {
