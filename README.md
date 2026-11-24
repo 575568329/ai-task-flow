@@ -21,7 +21,7 @@
    · diff 折叠查看 · 人工增删改/重命名(内联编辑,零弹窗)
 ```
 
-删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 11 个工具的示例话术)。
+删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 12 个工具的示例话术)。
 
 长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。默认**一对话一卡**,跨对话续写需显式允许。工作记录/结论卡都带**唯一阶段标签**（获取需求→设计→开发→自测→代码评审→覆盖度→上线→复盘;缺陷修改用 `fix` 标签）。
 
@@ -42,9 +42,9 @@ cd frontend && npm run dev  # 前端 :5678(vite,代理 /api → 后端)
 cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端配置无需改
 ```
 
-工具(14):`record_work` / `query_work` / `list_projects` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
+工具(15):`record_work` / `query_work` / `list_projects` / `list_programs` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
 
-`record_work` 的 `versionId` / `requirementId` 必须来自 `list_versions` / `list_requirements`;版本与需求只能由用户在页面创建。
+`record_work` 的 `versionId` / `requirementId` 必须来自 `list_versions` / `list_requirements`;建设主题、版本与需求只能由用户在页面创建。
 
 注册清单、当前版本与更新 SOP 见 **[docs/mcp-registration.md](docs/mcp-registration.md)**。
 

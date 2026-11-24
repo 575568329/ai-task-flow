@@ -46,14 +46,25 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
 
     if (entries.length === 0) return ok('未找到匹配的工作记录。');
 
+    // 版本名 → 主题名(新模型版本归属建设主题;取不到时该段省略)
+    const tree = await deps.worklogService.getTree();
+    const programNameById = new Map(tree.programs.map((p) => [p.id, p.name]));
+    const programNameByVersion = new Map<string, string>();
+    for (const version of tree.versions) {
+      const programName = programNameById.get(version.programId);
+      if (programName) programNameByVersion.set(version.name, programName);
+    }
+
     const lines = entries.map((e) => {
       const head = `### ${e.title}`;
       const stage = e.stage ? WORK_STAGE_LABELS[e.stage] : '未标注';
       const related = e.relatedProjects?.length ? [`关联:${e.relatedProjects.join(',')}`] : [];
       const project = e.project ? [`项目:${e.project}`] : [];
-      // 新模型:展示版本名/需求名,让 AI 知道条目落在哪一层
+      const programName = programNameByVersion.get(e.versionName);
+      const program = programName ? [`主题:${programName}`] : [];
+      // 新模型:展示主题名/版本名/需求名,让 AI 知道条目落在哪一层
       const meta = [
-        `ID:${e.id}`, `${e.versionName} / ${e.requirementTitle}`, e.date, `阶段:${stage}`,
+        `ID:${e.id}`, ...program, `${e.versionName} / ${e.requirementTitle}`, e.date, `阶段:${stage}`,
         ...project, ...related, ...(e.tags ?? []),
       ].join(' · ');
       const files = e.files?.length ? `\n文件: ${e.files.join(', ')}` : '';

@@ -82,8 +82,8 @@ knowledge-base/  MCP save_to_knowledge 的写入产物
 ## MCP Server
 
 - stdio transport，入口 `backend/src/interfaces/mcp/server.ts`，产物 `backend/dist/interfaces/mcp/server.js`。
-- 14 个工具：`record_work` / `query_work` / `list_projects` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
-- **创建规则**：版本与需求只能由用户在页面创建；`record_work` 的 `versionId`/`requirementId` 必须来自 `list_versions`/`list_requirements`（id 不存在时报错并列出可选值），AI 不得创建或猜名称。`list_projects` 只管项目字典（id/名称/路径），不再返回版本树。
+- 15 个工具：`record_work` / `query_work` / `list_projects` / `list_programs` / `list_versions` / `list_requirements` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`。
+- **创建规则**：建设主题、版本与需求只能由用户在页面创建；`record_work` 的 `versionId`/`requirementId` 必须来自 `list_versions`/`list_requirements`（id 不存在时报错并列出可选值），AI 不得创建或猜名称。`list_programs` 输出主题 id/规模，`list_versions` 可按 `programId` 过滤并输出主题名；`list_projects` 只管项目字典（id/名称/路径），不再返回版本树。
 - **worklog 工具**的描述与 detail 写作模板**单一来源**是 `shared/src/worklog/mcpToolCatalog.ts`（MCP 注册、前端 AI 指南、工具描述三端同源），改文案只改这里；conclusion 两个工具的定义就近在 `backend/src/interfaces/mcp/tools/conclusion/`。
 - 注册点：ZCode `~/.zcode/cli/config.json`、Claude Code `~/.claude.json`（均全局）+ 仓库 `.mcp.json`（相对路径，随仓库分发），全部指向同一份 dist。
 - 改完 MCP 代码必须 `cd backend && npm run build`；已打开的会话需重启。之后回写 `docs/mcp-registration.md` 的「当前版本」（commit + 构建时间）。

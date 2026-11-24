@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const SERVER_PATH = fileURLToPath(new URL('../../backend/dist/interfaces/mcp/server.js', import.meta.url));
 const REQUEST_TIMEOUT_MS = 20_000;
-const EXPECTED_TOOL_COUNT = 14;
+const EXPECTED_TOOL_COUNT = 15;
 const PROJECT = 'mcp-stdio-proj';
 const DECISION = '决策：stdio 链路可通过 MCP 写入并读回。';
 
@@ -148,12 +148,12 @@ try {
   client.notify('notifications/initialized');
   log(`initialized (protocol ${init.protocolVersion})`);
 
-  // 4. tools/list:14 个工具 + 两个结论工具 + 互相点名
+  // 4. tools/list:15 个工具 + 两个结论工具 + 互相点名
   const { tools } = await client.request('tools/list', {});
   assert(Array.isArray(tools), 'tools/list 应返回 tools 数组');
   assert(tools.length === EXPECTED_TOOL_COUNT, `工具数应为 ${EXPECTED_TOOL_COUNT}，实际 ${tools.length}`);
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  for (const name of ['record_conclusion', 'query_conclusions']) {
+  for (const name of ['record_conclusion', 'query_conclusions', 'list_programs']) {
     assert(byName.has(name), `tools/list 缺少 ${name}`);
   }
   assert(

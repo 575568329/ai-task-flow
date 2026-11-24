@@ -10,7 +10,7 @@
 | 名称 | `ai-task-flow` |
 | 产物 | `D:/Study/ai-task-flow/backend/dist/interfaces/mcp/server.js`(由 `cd backend && npm run build` 生成) |
 | Transport | stdio(本地单用户;远程部署时切换 Streamable HTTP,见 docs/plans/2026-11-17-worklog-slim-design.md §10) |
-| 工具(14) | record_work / query_work / list_projects / list_versions / list_requirements / update_work / delete_work / delete_version / delete_project / rename_version / rename_project / record_conclusion / query_conclusions / save_to_knowledge |
+| 工具(15) | record_work / query_work / list_projects / list_programs / list_versions / list_requirements / update_work / delete_work / delete_version / delete_project / rename_version / rename_project / record_conclusion / query_conclusions / save_to_knowledge |
 | 数据 | `~/.ai-task-flow/worklog.json`(备份 `~/.ai-task-flow/worklog-backups/`,滚动 10 份);`~/.ai-task-flow/conclusions.json`(备份 `~/.ai-task-flow/conclusion-backups/`,滚动 10 份) |
 
 ## 当前版本

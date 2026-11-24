@@ -13,6 +13,7 @@ export const CATALOG = {
   record_work: CATALOG_BY_NAME.record_work,
   query_work: CATALOG_BY_NAME.query_work,
   list_projects: CATALOG_BY_NAME.list_projects,
+  list_programs: CATALOG_BY_NAME.list_programs,
   list_versions: CATALOG_BY_NAME.list_versions,
   list_requirements: CATALOG_BY_NAME.list_requirements,
   update_work: CATALOG_BY_NAME.update_work,

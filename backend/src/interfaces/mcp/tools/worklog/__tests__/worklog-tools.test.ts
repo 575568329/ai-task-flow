@@ -15,10 +15,12 @@ import type { ToolDeps } from '../../types.js';
 describe('worklog MCP tools', () => {
   let tmpDir: string;
   let deps: ToolDeps;
+  let programId: string;
+  const PROGRAM_NAME = '澳门底层数据建设';
 
   /** 建「版本 + 需求」组合(record 的前置条件) */
   async function seedVersionRequirement(versionName = 'V1', requirementTitle = 'R') {
-    const version = await deps.worklogService.createVersion({ name: versionName, programId: '' });
+    const version = await deps.worklogService.createVersion({ name: versionName, programId });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id,
       title: requirementTitle,
@@ -37,6 +39,8 @@ describe('worklog MCP tools', () => {
       conclusionService: {} as ToolDeps['conclusionService'],
       mcpSource: { tool: 'manual' },
     };
+    // 版本必须归属已存在的主题:每个用例先播种一个,供 createVersion 使用
+    programId = (await deps.worklogService.createProgram({ name: PROGRAM_NAME })).id;
   });
 
   afterEach(async () => {
@@ -45,8 +49,8 @@ describe('worklog MCP tools', () => {
 
   it('registered tools should match catalog names/descriptions (single source of truth)', () => {
     const registered = new Map(ALL_TOOLS.map((t) => [t.name, t.description]));
-    expect(registered.size).toBe(14); // 11 worklog + 2 conclusion + save_to_knowledge
-    expect(WORKLOG_TOOL_CATALOG).toHaveLength(11);
+    expect(registered.size).toBe(15); // 12 worklog + 2 conclusion + save_to_knowledge
+    expect(WORKLOG_TOOL_CATALOG).toHaveLength(12);
     for (const meta of WORKLOG_TOOL_CATALOG) {
       expect(registered.has(meta.name)).toBe(true);
       expect(registered.get(meta.name)).toBe(meta.description);
@@ -101,6 +105,7 @@ describe('worklog MCP tools', () => {
     expect(plain.content[0].text).not.toContain('diff --git');
     expect(plain.content[0].text).toContain('V8.0.8');
     expect(plain.content[0].text).toContain('澳门底层数据建设');
+    expect(plain.content[0].text).toContain(`主题:${PROGRAM_NAME}`);
 
     const withDiff = await HANDLERS.query_work({ keyword: '白屏', includeDiff: true }, deps);
     expect(withDiff.content[0].text).toContain('diff --git a/x');
@@ -137,9 +142,9 @@ describe('worklog MCP tools', () => {
 
   it('rename_version conflict should fail with isError and not modify', async () => {
     // 新签名按 versionId 操作:两个版本建好后,把 v1 改成已存在的 v2 名应冲突
-    await deps.worklogService.createVersion({ name: 'V1', programId: '' });
+    await deps.worklogService.createVersion({ name: 'V1', programId });
     const v1 = (await deps.worklogService.getTree()).versions.find((v) => v.name === 'V1')!;
-    await deps.worklogService.createVersion({ name: 'V2', programId: '' });
+    await deps.worklogService.createVersion({ name: 'V2', programId });
     const result = await HANDLERS.rename_version({ versionId: v1.id, newName: 'V2' }, deps);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('已存在');
@@ -252,7 +257,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_versions should list versions with ids and counts', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
+    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id, title: 'R',
     });
@@ -264,12 +269,66 @@ describe('worklog MCP tools', () => {
     const text = result.content[0].text;
     expect(text).toContain('V8.0.8');
     expect(text).toContain(version.id);
+    expect(text).toContain(PROGRAM_NAME); // 每行带所属主题名
     expect(text).toContain('需求 1');
     expect(text).toContain('条目 1');
   });
 
+  it('list_programs should list programs with ids and counts', async () => {
+    const other = await deps.worklogService.createProgram({ name: '大陆建设' });
+    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
+    const requirement = await deps.worklogService.createRequirement({
+      versionId: version.id, title: 'R',
+    });
+    await deps.worklogService.record({
+      versionId: version.id, requirementId: requirement.id, title: 'a', detail: 'd', stage: 'dev',
+    });
+    await deps.worklogService.record({
+      versionId: version.id, requirementId: requirement.id, title: 'b', detail: 'd', stage: 'dev',
+    });
+
+    const text = (await HANDLERS.list_programs({}, deps)).content[0].text;
+    expect(text).toContain(PROGRAM_NAME);
+    expect(text).toContain(programId);
+    expect(text).toContain('版本 1');
+    expect(text).toContain('条目 2');
+    expect(text).toContain(other.id);
+    expect(text).toContain('版本 0');
+  });
+
+  it('list_programs should hint to create a program when none exists', async () => {
+    const emptyDeps: ToolDeps = {
+      ...deps,
+      worklogService: new WorklogService(
+        new JsonWorklogRepository(path.join(tmpDir, 'empty', 'worklog.json'), path.join(tmpDir, 'empty', 'backups')),
+      ),
+    };
+    const text = (await HANDLERS.list_programs({}, emptyDeps)).content[0].text;
+    expect(text).toContain('暂无建设主题');
+    expect(text).toContain('请在页面新建');
+  });
+
+  it('list_versions should filter by programId and show program name', async () => {
+    const other = await deps.worklogService.createProgram({ name: '大陆建设' });
+    await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
+    await deps.worklogService.createVersion({ name: 'V1.0.0', programId: other.id });
+
+    const text = (await HANDLERS.list_versions({ programId }, deps)).content[0].text;
+    expect(text).toContain('V8.0.8');
+    expect(text).toContain(PROGRAM_NAME);
+    expect(text).toContain('共 1 个');
+    expect(text).not.toContain('V1.0.0');
+  });
+
+  it('list_versions should reject unknown programId with candidates', async () => {
+    const result = await HANDLERS.list_versions({ programId: 'g_nope' }, deps);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(PROGRAM_NAME);
+    expect(result.content[0].text).toContain('请让用户在页面新建主题并复制 id');
+  });
+
   it('list_requirements should list requirements for a version', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
+    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id, title: '澳门底层数据建设',
     });
@@ -283,7 +342,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_requirements should reject unknown version id with candidates', async () => {
-    await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
+    await deps.worklogService.createVersion({ name: 'V8.0.8', programId });
     const result = await HANDLERS.list_requirements({ versionId: 'v_nope' }, deps);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('V8.0.8');

@@ -95,9 +95,18 @@ export const WORKLOG_TOOL_CATALOG: WorklogToolMeta[] = [
     userPromptExample: '「看下工作记录里已经有哪些项目、id 是什么、有没有绑定路径」',
   },
   {
+    name: 'list_programs',
+    description:
+      '列出建设主题(id、名称、版本数、条目数)。只读,用于让 AI 获取 programId;' +
+      '主题只能由用户在页面创建,AI 不得创建或猜名称。',
+    whenToUse: '想确认当前有哪些建设主题、各自规模,或需要 programId 过滤版本时。',
+    userPromptExample: '「看下现在有哪些建设主题,各自多少版本、多少条目」',
+  },
+  {
     name: 'list_versions',
     description:
-      '列出所有版本(id、名称、需求数、条目数、首末日期)。只读,用于让 AI 获取 versionId;版本只能由用户在页面创建,AI 不得创建或猜名称。',
+      '列出所有版本(id、名称、所属主题、需求数、条目数、首末日期)。只读,用于让 AI 获取 versionId;' +
+      '可按 programId 过滤(先 list_programs 获取),输出主题名。版本只能由用户在页面创建,AI 不得创建或猜名称。',
     whenToUse: '记录前拿 versionId,或用户问"现在有哪些版本/版本 id 是什么"时。',
     userPromptExample: '「看下现在有哪些版本,各自的 id 是什么」',
   },
