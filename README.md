@@ -21,7 +21,7 @@
    · diff 折叠查看 · 人工增删改/重命名(内联编辑,零弹窗)
 ```
 
-删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(worklog 15 个工具的示例话术)。
+删除/重命名自动快照备份(`~/.ai-task-flow/worklog-backups/`,滚动 10 份);AI 使用指南在工作记录页 📖 入口(12 个工作记录工具的示例话术)。
 
 长对话讨论定稿后,让 AI 记一张**结论卡**(`record_conclusion`,结论/数据/待办/代码位置),下次直接看最新版;补充/修正走追加新版,历史逐版可查。默认**一对话一卡**,跨对话续写需显式允许。工作记录/结论卡都带**唯一阶段标签**（获取需求→设计→开发→自测→代码评审→覆盖度→上线→复盘;缺陷修改用 `fix` 标签）。
 
@@ -65,7 +65,7 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 ## 架构要点
 
 - **Backend**: Node + TS + Fastify + @modelcontextprotocol/sdk,DDD 四层(domain/application/infrastructure/interfaces)
-- **worklog 数据模型**: `worklog.json` 顶层为 `{ projects, programs, versions }`;建设主题(program)是版本之上的归属层,版本通过 `programId` 归属主题,条目带项目属性。旧数据在 HTTP 启动时自动归入「澳门底层数据建设」主题(独立标记 `.migration-program-layer.json`,幂等,迁移前快照留 `worklog-backups/`)
+- **worklog 数据模型**: `worklog.json` 顶层为 `{ projects, programs, versions }`;建设主题(program)是版本之上的归属层,版本通过 `programId` 归属主题,条目带项目属性。旧数据在 HTTP 启动时自动归入「澳门底层数据建设」主题(取版本内同名需求;无同名需求时归入「未分类建设」;独立标记 `.migration-program-layer.json`,幂等,迁移前快照留 `worklog-backups/`)
 - **worklog 写协议**: 双层锁(进程内 mutex + proper-lockfile 跨进程文件锁)+ write-file-atomic 原子写——HTTP 与 MCP(stdio 独立进程)并发写零丢失(双进程冒烟验证)
 - **单一来源**: MCP 工具元数据(catalog)、记录格式模板均为 shared 单一定义,MCP 注册/页面指南/AI 描述三方同源
 - **Frontend**: React 19 + Vite + shadcn/ui(Radix) + Tailwind v4 + Zustand
