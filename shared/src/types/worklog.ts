@@ -59,10 +59,21 @@ export interface WorklogProject {
   missingPaths?: string[];
 }
 
+/** 建设主题(顶层):如「澳门底层数据建设」,名称全局唯一 */
+export interface WorklogProgram {
+  id: string;
+  /** 全局唯一,如「澳门底层数据建设」 */
+  name: string;
+  description?: string;
+  createdAt: number;
+}
+
 /** 版本:自由文本名(如 V8.0.8),全局唯一 */
 export interface WorklogVersion {
   id: string;
   name: string;
+  /** 所属主题 id */
+  programId: string;
   description?: string;
   createdAt: number;
   requirements: WorklogRequirement[];
@@ -85,7 +96,9 @@ export interface WorklogRequirement {
 export interface WorklogData {
   /** 项目字典:路径归属与项目筛选用 */
   projects: WorklogProject[];
-  /** 顶层组织:版本 → 需求 → 条目 */
+  /** 建设主题(顶层) */
+  programs: WorklogProgram[];
+  /** 版本扁平存储,通过 programId 归属主题 */
   versions: WorklogVersion[];
 }
 
@@ -114,10 +127,25 @@ export interface WorklogRecordRequest {
   sourcePath?: string;
 }
 
-/** 版本创建入参 */
-export interface WorklogVersionCreateRequest {
+/** 建设主题创建入参 */
+export interface WorklogProgramCreateRequest {
   name: string;
   description?: string;
+}
+
+/** 版本创建:必须归属已存在的主题 */
+export interface WorklogVersionCreateRequest {
+  name: string;
+  programId: string;
+  description?: string;
+}
+
+/** 建设主题摘要(列表视图用) */
+export interface WorklogProgramSummary {
+  id: string;
+  name: string;
+  versionCount: number;
+  entryCount: number;
 }
 
 /** 需求创建入参 */
