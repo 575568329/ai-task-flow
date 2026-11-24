@@ -17,8 +17,8 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `417ae10`(feat(knowledge): 导入引导、内容级幂等导入与未关联空态提示；14 工具) |
-| 构建时间 | 2026-11-23 21:53 |
+| dist 构建来源 commit | `e844087`(feat(mcp): 新增 list_programs，版本输出主题；15 工具) |
+| 构建时间 | 2026-11-24 10:05 |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 ## 注册清单
