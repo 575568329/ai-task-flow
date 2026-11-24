@@ -108,15 +108,15 @@ describe('KnowledgeViewer 编辑关联', () => {
     expect(screen.getByText('未关联')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '编辑关联' }));
+    // 需求层已移除:编辑关联只剩版本/项目/阶段
+    expect(screen.queryByLabelText('关联需求')).toBeNull();
     fireEvent.change(screen.getByLabelText('关联版本'), { target: { value: 'v1' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
-    // 需求层已移除:需求下拉无可选需求,不再写入 requirementId
     await waitFor(() =>
       expect(vi.mocked(updateDocMeta)).toHaveBeenCalledWith({
         path: 'a.md',
         versionId: 'v1',
-        requirementId: '',
         projectId: '',
         stage: '',
       }),
@@ -125,8 +125,8 @@ describe('KnowledgeViewer 编辑关联', () => {
 
     // manifest 刷新后的关联徽标(映射为名称)
     expect(await screen.findByText('版本 · V8.0.8')).toBeTruthy();
-    // 需求层已移除:旧文档的 requirementId 退化为按 id 展示
-    expect(screen.getByText('需求 · r1')).toBeTruthy();
+    // 旧文档的 requirementId 仍可读取,但不再展示
+    expect(screen.queryByText('需求 · r1')).toBeNull();
     // 无未保存改动时按最新文件回填正文(fetchDoc 至少两次:挂载 + meta 保存后)
     expect(vi.mocked(fetchDoc).mock.calls.length).toBeGreaterThanOrEqual(2);
   });

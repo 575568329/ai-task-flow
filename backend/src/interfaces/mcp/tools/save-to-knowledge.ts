@@ -12,7 +12,6 @@ export const toolDef = {
   description:
     '将调研结论/笔记写入知识库(创建新 Markdown 文档,文件名由服务端按命名规则生成,调用方无法干预物理文件名)。' +
     '可选传 versionId / projectId / stage,用于知识库按版本/项目/阶段归类;' +
-    'requirementId 已废弃(需求层已移除),传入会被忽略并提示,请改用 versionId;' +
     '关联 id 不存在时自动降级为不关联并提示,不影响文档保存。',
   inputSchema: {
     type: 'object' as const,
@@ -38,10 +37,6 @@ export const toolDef = {
         type: 'string' as const,
         description: '可选版本 id(如 v_ab12cd34),用于知识库按版本归类;先 list_versions 获取,id 不存在则降级为不关联',
       },
-      requirementId: {
-        type: 'string' as const,
-        description: '已废弃(需求层已移除):传入会被忽略并提示,请改用 versionId',
-      },
       projectId: {
         type: 'string' as const,
         description: '可选项目 id(如 p_ab12cd34),用于按项目归类;先 list_projects 获取,id 不存在则降级为不关联',
@@ -58,7 +53,6 @@ export const toolDef = {
 /** 请求的关联字段(已做空串归一) */
 interface RequestedRefs {
   versionId?: string;
-  requirementId?: string;
   projectId?: string;
   stage?: string;
 }
@@ -90,13 +84,6 @@ async function resolveRefs(
           `(可选值: ${WORK_STAGE_IDS.join('/')};缺陷修改用 tags 的 fix,不占 stage)`,
       );
     }
-  }
-
-  // 需求层已移除:任何 requirementId 都无法再解析,先于 needsTree 提前返回,避免「只传 requirementId」时无提示
-  if (requested.requirementId) {
-    warnings.push(
-      `需求 id "${requested.requirementId}" 已废弃,将被忽略(需求层已移除,请改用 versionId)`,
-    );
   }
 
   const needsTree = Boolean(requested.versionId || requested.projectId);
@@ -150,7 +137,6 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
 
   const requested: RequestedRefs = {
     versionId: optionalString(args.versionId),
-    requirementId: optionalString(args.requirementId),
     projectId: optionalString(args.projectId),
     stage: optionalString(args.stage),
   };
@@ -171,7 +157,7 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       meta.stage ? `阶段 \`${meta.stage}\`` : '',
     ].filter(Boolean);
     if (contentHasFrontmatter && (associations.length > 0 || (tags?.length ?? 0) > 0)) {
-      warnings.push('文档自带 frontmatter,服务端未覆盖 frontmatter(传入的 tags/版本/需求/项目/阶段未写入)');
+      warnings.push('文档自带 frontmatter,服务端未覆盖 frontmatter(传入的 tags/版本/项目/阶段未写入)');
     }
     if (associations.length > 0 && !contentHasFrontmatter) {
       lines.push('', `**关联**: ${associations.join(' / ')}`);

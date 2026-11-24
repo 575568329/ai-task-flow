@@ -11,15 +11,24 @@ describe('formatKnowledgeResourceText', () => {
       content: '# 正文',
       frontmatter: {
         versionId: 'v_1',
-        requirementId: 'r_2',
         projectId: 'p_3',
         stage: 'dev',
         tags: ['架构设计', 'worklog'],
       },
     });
     expect(text).toBe(
-      '<!-- meta: versionId=v_1 requirementId=r_2 projectId=p_3 stage=dev tags=架构设计,worklog -->\n# 正文',
+      '<!-- meta: versionId=v_1 projectId=p_3 stage=dev tags=架构设计,worklog -->\n# 正文',
     );
+  });
+
+  it('should ignore legacy requirementId from old documents', () => {
+    const text = formatKnowledgeResourceText({
+      path: 'a.md',
+      kind: 'md',
+      content: '正文',
+      frontmatter: { requirementId: 'r_2', projectId: 'p_3' },
+    });
+    expect(text).toBe('<!-- meta: projectId=p_3 -->\n正文');
   });
 
   it('should only include fields that have values', () => {

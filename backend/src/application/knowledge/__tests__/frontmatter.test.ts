@@ -5,17 +5,21 @@ import { extractFrontmatterBlock, parseFrontmatter, serializeFrontmatter } from 
 import type { KnowledgeFrontmatter } from '@ai-task-flow/shared';
 
 describe('serializeFrontmatter', () => {
-  it('should write keys in fixed order: tags → versionId → requirementId → projectId → stage', () => {
+  it('should write keys in fixed order: tags → versionId → projectId → stage', () => {
     const data: KnowledgeFrontmatter = {
       stage: 'design',
       projectId: 'p_1',
-      requirementId: 'r_1',
       versionId: 'v_1',
       tags: ['架构设计', '知识库'],
     };
     expect(serializeFrontmatter(data)).toBe(
-      '---\ntags: [架构设计, 知识库]\nversionId: v_1\n' +
-        'requirementId: r_1\nprojectId: p_1\nstage: design\n---\n',
+      '---\ntags: [架构设计, 知识库]\nversionId: v_1\nprojectId: p_1\nstage: design\n---\n',
+    );
+  });
+
+  it('should not write legacy requirementId even when provided', () => {
+    expect(serializeFrontmatter({ requirementId: 'r_1', versionId: 'v_1' })).toBe(
+      '---\nversionId: v_1\n---\n',
     );
   });
 
@@ -51,7 +55,6 @@ describe('parseFrontmatter', () => {
     const data: KnowledgeFrontmatter = {
       tags: ['架构设计', '知识库'],
       versionId: 'v_abc',
-      requirementId: 'r_abc',
       projectId: 'p_abc',
       stage: 'dev',
     };
@@ -59,6 +62,14 @@ describe('parseFrontmatter', () => {
     expect(parsed.hasFrontmatter).toBe(true);
     expect(parsed.data).toEqual(data);
     expect(parsed.body).toBe('# 正文\n内容');
+  });
+
+  it('should still parse legacy requirementId from old documents', () => {
+    // 兼容旧文档:字段保留可读,前端展示与写入已不再使用
+    const parsed = parseFrontmatter('---\nrequirementId: r_old\n---\n正文');
+    expect(parsed.hasFrontmatter).toBe(true);
+    expect(parsed.data).toEqual({ requirementId: 'r_old' });
+    expect(parsed.body).toBe('正文');
   });
 
   it('should return body as-is when document has no frontmatter', () => {

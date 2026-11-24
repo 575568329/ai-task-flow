@@ -47,6 +47,7 @@ export interface KnowledgeManifest {
 export interface KnowledgeFrontmatter {
   tags?: string[];
   versionId?: string;
+  /** 已废弃:仅用于兼容旧文档读取,不再写入与展示;历史行编辑关联时原样保留 */
   requirementId?: string;
   projectId?: string;
   /** 唯一阶段标签(与 worklog stage 同源,类型上保持宽松以便解析历史文档) */
@@ -75,9 +76,8 @@ export interface KnowledgeCreateRequest {
   tags?: string[];
   /** 可选子目录(相对 knowledge-base/),服务端校验越界 */
   dir?: string;
-  /** 可选软关联:版本/需求/项目/阶段,写入 frontmatter 供知识库归类 */
+  /** 可选软关联:版本/项目/阶段,写入 frontmatter 供知识库归类 */
   versionId?: string;
-  requirementId?: string;
   projectId?: string;
   stage?: string;
 }
@@ -87,10 +87,9 @@ export interface KnowledgeSaveRequest {
   content: string;
 }
 
-/** 文档的四项软关联(版本/需求/项目/阶段);空串或 undefined 表示清除 */
+/** 文档的三项软关联(版本/项目/阶段);空串或 undefined 表示清除 */
 export interface KnowledgeAssociation {
   versionId?: string;
-  requirementId?: string;
   projectId?: string;
   stage?: string;
 }

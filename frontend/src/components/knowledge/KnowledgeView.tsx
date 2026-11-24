@@ -68,7 +68,7 @@ export function KnowledgeView() {
     void refreshSuggestion();
   }, []);
 
-  // worklog 索引仅用于把版本/需求/项目 id 映射成名称;失败静默,退回展示 id
+  // worklog 索引仅用于把版本/项目 id 映射成名称;失败静默,退回展示 id
   useEffect(() => {
     worklogApi
       .getTree()

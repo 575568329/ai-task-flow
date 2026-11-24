@@ -28,8 +28,11 @@ const MAX_TITLE_LEN = 60;
 const FALLBACK_TITLE = 'untitled';
 /** UTF-8 BOM(外部工具可能写入;解析前剥离,写回时不再保留) */
 const UTF8_BOM = '\uFEFF';
-/** 元数据编辑只替换这四项,其余 frontmatter 行原样保留 */
-const ASSOCIATION_LINE = /^(versionId|requirementId|projectId|stage)\s*:/;
+/**
+ * 元数据编辑只替换这三项,其余 frontmatter 行原样保留。
+ * 旧文档的 requirementId 行不在白名单内,编辑关联时原样保留(不再写入/展示)。
+ */
+const ASSOCIATION_LINE = /^(versionId|projectId|stage)\s*:/;
 
 /** 生成 YYYYMMDDHHMMSS 本地时区时间戳(与 Scanner 展示一致) */
 function formatTimestamp(date: Date): string {
@@ -68,7 +71,7 @@ export class KnowledgeService {
   }
 
   /**
-   * 给 flatDocs 补 frontmatter(版本/需求/项目/阶段/tags)。
+   * 给 flatDocs 补 frontmatter(版本/项目/阶段/tags)。
    * Scanner 已遍历过文件,这里再读一次 md 原文做纯字符串解析:
    * 个人知识库量级(百篇内)可接受,换取 manifest 自带关联字段供前端多视图直接分组。
    */
@@ -175,11 +178,11 @@ export class KnowledgeService {
   /**
    * 创建文档:文件名由服务端按命名规则生成,调用方只传语义字段(无法干预物理文件名)。
    * 文件名 = <YYYYMMDDHHMMSS>_<sanitizedTitle>.md;
-   * tags 与版本/需求/项目/阶段非空时拼 frontmatter。
+   * tags 与版本/项目/阶段非空时拼 frontmatter。
    * 原子写(临时文件 + rename),防中途崩溃产生半截文件。
    */
   async createDoc(input: KnowledgeCreateRequest): Promise<KnowledgeDocWriteResponse> {
-    const { title, content, tags, dir, versionId, requirementId, projectId, stage } = input;
+    const { title, content, tags, dir, versionId, projectId, stage } = input;
 
     if (!title || !title.trim()) {
       throw new Error('标题不能为空');
@@ -191,7 +194,7 @@ export class KnowledgeService {
     await fs.mkdir(dirAbs, { recursive: true });
 
     const abs = path.join(dirAbs, fileName);
-    const body = this.withFrontmatter(content, { tags, versionId, requirementId, projectId, stage });
+    const body = this.withFrontmatter(content, { tags, versionId, projectId, stage });
 
     await this.atomicWrite(abs, body);
     await this.refreshManifest();
@@ -237,10 +240,10 @@ export class KnowledgeService {
   }
 
   /**
-   * 编辑文档的四项关联(版本/需求/项目/阶段)。
+   * 编辑文档的三项关联(版本/项目/阶段)。
    * - 传入非空值 → 写入/覆盖;
    * - 传入空串或 undefined → 清除;
-   * - 其余 frontmatter 键(title/date/tags 及任何外部键)原样保留。
+   * - 其余 frontmatter 键(title/date/tags 及任何外部键,含旧 requirementId)原样保留。
    * 只支持 md 文档。
    */
   async updateDocMeta(
@@ -271,8 +274,8 @@ export class KnowledgeService {
   }
 
   /**
-   * 重写 frontmatter 中的四项关联,保留其他键与正文。
-   * 无前导块时按需新建;四项清空且无其他键时整块移除。
+   * 重写 frontmatter 中的三项关联,保留其他键与正文。
+   * 无前导块时按需新建;三项清空且无其他键时整块移除。
    */
   private rewriteAssociation(raw: string, association: KnowledgeAssociation): string {
     // extractFrontmatterBlock 内部会剥离 BOM 再匹配,返回的 raw 偏移基于剥离后的串,
@@ -293,7 +296,6 @@ export class KnowledgeService {
     // 复用 frontmatter.ts 的序列化(含换行清洗/空值跳过),只取块内行
     const newLines = serializeFrontmatter({
       versionId: association.versionId,
-      requirementId: association.requirementId,
       projectId: association.projectId,
       stage: association.stage,
     })
@@ -328,7 +330,7 @@ export class KnowledgeService {
   private withFrontmatter(content: string, meta: KnowledgeFrontmatter): string {
     if (extractFrontmatterBlock(content).hasBlock) {
       if (hasFrontmatterData(meta)) {
-        console.warn('[KnowledgeService] 文档自带 frontmatter,本次元数据未写入(tags/版本/需求/项目/阶段)');
+        console.warn('[KnowledgeService] 文档自带 frontmatter,本次元数据未写入(tags/版本/项目/阶段)');
       }
       return content;
     }

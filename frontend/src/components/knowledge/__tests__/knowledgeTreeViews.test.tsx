@@ -106,8 +106,9 @@ describe('KnowledgeTree 多视图', () => {
     expect(localStorage.getItem('ai-task-flow-knowledge-view')).toBe('version');
     expect(screen.getByText('已关联 1 / 未关联 1')).toBeTruthy();
     expect(screen.getByText('V8.0.8')).toBeTruthy();
-    // 需求层已移除:旧文档的 requirementId 退化为按 id 展示
-    expect(screen.getByText('r1')).toBeTruthy();
+    // 需求层已移除:版本视图直接 版本 → 文档,不再有需求子分组
+    expect(screen.getAllByText('A 文档')).toHaveLength(1);
+    expect(screen.queryByText('r1')).toBeNull();
     expect(screen.getByText('未关联')).toBeTruthy();
   });
 

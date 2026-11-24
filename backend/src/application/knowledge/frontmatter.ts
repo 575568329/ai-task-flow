@@ -96,6 +96,7 @@ export function parseFrontmatter(raw: string): ParsedKnowledgeFrontmatter {
         data.versionId = unquote(value);
         break;
       case 'requirementId':
+        // 需求层已移除:仅解析旧文档,不再写入(保留是为了让旧文档整块仍按 frontmatter 处理)
         data.requirementId = unquote(value);
         break;
       case 'projectId':
@@ -125,7 +126,8 @@ function sanitizeValue(value: string): string {
 
 /**
  * 序列化 frontmatter。
- * 固定顺序:tags、versionId、requirementId、projectId、stage;空值不写。
+ * 固定顺序:tags、versionId、projectId、stage;空值不写。
+ * requirementId 已废弃,即使传入也不写入(旧文档字段由编辑关联流程原样保留)。
  * 无任何有效字段时返回空串(调用方据此决定是否加块)。
  */
 export function serializeFrontmatter(data: KnowledgeFrontmatter): string {
@@ -138,7 +140,6 @@ export function serializeFrontmatter(data: KnowledgeFrontmatter): string {
 
   const scalars: Array<[string, string | undefined]> = [
     ['versionId', data.versionId],
-    ['requirementId', data.requirementId],
     ['projectId', data.projectId],
     ['stage', data.stage],
   ];
@@ -151,7 +152,7 @@ export function serializeFrontmatter(data: KnowledgeFrontmatter): string {
   return `---\n${lines.join('\n')}\n---\n`;
 }
 
-/** 是否含任一可识别元数据(用于判断是否需要写 frontmatter) */
+/** 是否含任一可识别元数据(用于判断是否需要写 frontmatter);requirementId 仅旧文档兼容 */
 export function hasFrontmatterData(data: KnowledgeFrontmatter): boolean {
   return Boolean(
     (data.tags && data.tags.length > 0) ||

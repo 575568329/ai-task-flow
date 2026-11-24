@@ -63,7 +63,6 @@ export function KnowledgeViewer() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [metaForm, setMetaForm] = useState({
     versionId: '',
-    requirementId: '',
     projectId: '',
     stage: '',
   });
@@ -71,7 +70,7 @@ export function KnowledgeViewer() {
   const isMd = doc?.kind === 'md';
   const dirty = isMd && draft !== original;
 
-  // 关联徽标:有字段则逐个展示名称,全部为空显示「未关联」
+  // 关联徽标:有字段则逐个展示名称,全部为空显示「未关联」;旧 requirementId 忽略
   const associationItems: Array<{ key: string; label: string; value: string }> = [];
   if (doc?.frontmatter) {
     const fm = doc.frontmatter;
@@ -80,13 +79,6 @@ export function KnowledgeViewer() {
         key: 'versionId',
         label: '版本',
         value: worklogIndex.versionNames.get(fm.versionId) ?? fm.versionId,
-      });
-    }
-    if (fm.requirementId) {
-      associationItems.push({
-        key: 'requirementId',
-        label: '需求',
-        value: worklogIndex.requirementNames.get(fm.requirementId) ?? fm.requirementId,
       });
     }
     if (fm.projectId) {
@@ -101,33 +93,14 @@ export function KnowledgeViewer() {
     }
   }
 
-  /** 需求下拉:只列出所选版本下的需求;未选版本时置灰 */
-  const requirementOptions = worklogIndex.requirements.filter(
-    (requirement) => requirement.versionId === metaForm.versionId,
-  );
-
   const openMetaDialog = () => {
     const fm = doc?.frontmatter;
     setMetaForm({
       versionId: fm?.versionId ?? '',
-      requirementId: fm?.requirementId ?? '',
       projectId: fm?.projectId ?? '',
       stage: fm?.stage ?? '',
     });
     setMetaOpen(true);
-  };
-
-  /** 切换版本时:cursor 需求不属于新版本则清空,避免写出跨版本的悬空需求 */
-  const onMetaVersionChange = (versionId: string) => {
-    setMetaForm((prev) => {
-      const keep =
-        versionId !== '' &&
-        worklogIndex.requirements.some(
-          (requirement) =>
-            requirement.id === prev.requirementId && requirement.versionId === versionId,
-        );
-      return { ...prev, versionId, requirementId: keep ? prev.requirementId : '' };
-    });
   };
 
   const onSaveMeta = async () => {
@@ -137,7 +110,6 @@ export function KnowledgeViewer() {
       await updateDocMeta({
         path: doc.path,
         versionId: metaForm.versionId,
-        requirementId: metaForm.requirementId,
         projectId: metaForm.projectId,
         stage: metaForm.stage,
       });
@@ -278,7 +250,7 @@ export function KnowledgeViewer() {
           </Badge>
         ))}
 
-        {/* 关联徽标:版本/需求/项目/阶段;全部为空时显示「未关联」 */}
+        {/* 关联徽标:版本/项目/阶段;全部为空时显示「未关联」 */}
         {isMd &&
           (associationItems.length > 0 ? (
             associationItems.map((item) => (
@@ -448,7 +420,7 @@ export function KnowledgeViewer() {
         </ScrollArea>
       )}
 
-      {/* 编辑关联:四个下拉;空 = 未关联(保存时清除对应字段) */}
+      {/* 编辑关联:三个下拉;空 = 未关联(保存时清除对应字段) */}
       <Dialog open={metaOpen} onOpenChange={setMetaOpen}>
         <DialogContent>
           <DialogHeader>
@@ -459,7 +431,7 @@ export function KnowledgeViewer() {
               <span className="text-muted-foreground">版本</span>
               <select
                 value={metaForm.versionId}
-                onChange={(e) => onMetaVersionChange(e.target.value)}
+                onChange={(e) => setMetaForm((prev) => ({ ...prev, versionId: e.target.value }))}
                 aria-label="关联版本"
                 className="border-input bg-background h-8 rounded-md border px-2 text-sm"
               >
@@ -471,36 +443,6 @@ export function KnowledgeViewer() {
                 {worklogIndex.versions.map((version) => (
                   <option key={version.id} value={version.id}>
                     {version.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="text-muted-foreground">需求</span>
-              <select
-                value={metaForm.requirementId}
-                onChange={(e) =>
-                  setMetaForm((prev) => ({ ...prev, requirementId: e.target.value }))
-                }
-                disabled={!metaForm.versionId}
-                aria-label="关联需求"
-                className="border-input bg-background h-8 rounded-md border px-2 text-sm disabled:opacity-50"
-              >
-                <option value="">{metaForm.versionId ? '未选择需求' : '先选择版本'}</option>
-                {metaForm.requirementId &&
-                  !requirementOptions.some(
-                    (requirement) => requirement.id === metaForm.requirementId,
-                  ) && (
-                    <option value={metaForm.requirementId}>
-                      {worklogIndex.requirementNames.get(metaForm.requirementId) ??
-                        metaForm.requirementId}
-                      (未找到)
-                    </option>
-                  )}
-                {requirementOptions.map((requirement) => (
-                  <option key={requirement.id} value={requirement.id}>
-                    {requirement.title}
                   </option>
                 ))}
               </select>

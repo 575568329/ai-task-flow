@@ -85,7 +85,7 @@ export async function createDoc(input: KnowledgeCreateRequest): Promise<{ path: 
   return res.json();
 }
 
-/** 编辑文档四项关联(版本/需求/项目/阶段);空串=清除,其他 frontmatter 键保留 */
+/** 编辑文档三项关联(版本/项目/阶段);空串=清除,其他 frontmatter 键保留 */
 export async function updateDocMeta(
   input: KnowledgeDocMetaUpdateRequest,
 ): Promise<{ path: string }> {

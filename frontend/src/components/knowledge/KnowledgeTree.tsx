@@ -72,12 +72,9 @@ function collectDirNames(node: KnowledgeNode, acc: Set<string>): void {
   }
 }
 
-/** 分组内文档数(含子分组) */
+/** 分组内文档数 */
 function countGroupDocs(group: DocGroup): number {
-  return (
-    group.docs.length +
-    (group.children?.reduce((sum, child) => sum + countGroupDocs(child), 0) ?? 0)
-  );
+  return group.docs.length;
 }
 
 interface KnowledgeTreeProps {
@@ -273,7 +270,7 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
     );
   };
 
-  /** 关联视图分组(version 视图下含需求子分组) */
+  /** 关联视图分组(version/project/stage 均为单层:分组 → 文档) */
   const renderGroup = (group: DocGroup, depth: number): ReactNode => {
     const isOpen = !collapsedGroups.has(group.key);
     return (
@@ -296,7 +293,6 @@ export function KnowledgeTree({ onRefresh, refreshing }: KnowledgeTreeProps) {
         </button>
         <Collapse open={isOpen}>
           {group.docs.map((doc) => renderFlatDoc(doc, depth + 1))}
-          {group.children?.map((child) => renderGroup(child, depth + 1))}
         </Collapse>
       </div>
     );

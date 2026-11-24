@@ -18,8 +18,8 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** 关联字段白名单:只接受字符串(undefined=不清空/保持缺省),统一 trim */
-const ASSOCIATION_KEYS = ['versionId', 'requirementId', 'projectId', 'stage'] as const;
+/** 关联字段白名单:只接受字符串(undefined=不清空/保持缺省),统一 trim;旧 requirementId 忽略 */
+const ASSOCIATION_KEYS = ['versionId', 'projectId', 'stage'] as const;
 
 export async function registerKnowledgeRoutes(
   fastify: FastifyInstance,
@@ -197,8 +197,8 @@ export async function registerKnowledgeRoutes(
     }
   });
 
-  // PUT /api/knowledge/doc/meta - 编辑四项关联(版本/需求/项目/阶段)
-  // body: { path, versionId?, requirementId?, projectId?, stage? };空串/缺省=清除,其他 frontmatter 键保留
+  // PUT /api/knowledge/doc/meta - 编辑三项关联(版本/项目/阶段)
+  // body: { path, versionId?, projectId?, stage? };空串/缺省=清除,其他 frontmatter 键保留
   fastify.put<{
     Body: KnowledgeDocMetaUpdateRequest;
   }>('/api/knowledge/doc/meta', async (request, reply) => {

@@ -64,16 +64,17 @@ describe('save_to_knowledge MCP tool', () => {
     expect(doc.content).toBe('# 正文');
   });
 
-  it('should ignore requirementId-only input with a warning and still save', async () => {
+  it('should ignore legacy requirementId input and save without association', async () => {
+    // schema 已删除 requirementId;旧调用方传入时静默忽略,不写 frontmatter、不产生告警
     const result = await HANDLERS.save_to_knowledge(
-      { title: '仅需求关联', content: '正文', requirementId: 'r_legacy' },
+      { title: '旧参数', content: '正文', requirementId: 'r_legacy' },
       deps,
     );
 
     const text = result.content[0].text;
     expect(text).toContain('已写入知识库');
-    expect(text).toContain('需求 id "r_legacy" 已废弃');
     expect(text).not.toContain('**关联**');
+    expect(text).not.toContain('⚠');
 
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
     expect(doc.frontmatter).toBeUndefined();
@@ -86,7 +87,6 @@ describe('save_to_knowledge MCP tool', () => {
         title: '未知关联',
         content: '正文',
         versionId: 'v_nope',
-        requirementId: 'r_nope',
         projectId: 'p_nope',
       },
       deps,
@@ -95,7 +95,6 @@ describe('save_to_knowledge MCP tool', () => {
     const text = result.content[0].text;
     expect(text).toContain('已写入知识库');
     expect(text).toContain('版本 id "v_nope" 不存在');
-    expect(text).toContain('需求 id "r_nope" 已废弃');
     expect(text).toContain('项目 id "p_nope" 不存在');
 
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));
@@ -140,7 +139,6 @@ describe('save_to_knowledge MCP tool', () => {
         title: '损坏数据',
         content: '正文',
         versionId: 'v_1',
-        requirementId: 'r_1',
         projectId: 'p_1',
       },
       corruptDeps,
@@ -149,7 +147,6 @@ describe('save_to_knowledge MCP tool', () => {
     const text = result.content[0].text;
     expect(text).toContain('已写入知识库');
     expect(text).toContain('版本 id "v_1" 不存在');
-    expect(text).toContain('需求 id "r_1" 已废弃');
     expect(text).toContain('项目 id "p_1" 不存在');
 
     const doc = await deps.knowledgeService.getDoc(readOnlyPath(text));

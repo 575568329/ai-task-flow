@@ -102,7 +102,7 @@ class AITaskFlowServer {
       const doc = await this.knowledgeService.getDoc(relPath);
       return {
         contents: [
-          // 正文前附关联元数据摘要,让 AI 读到文档时知道它属于哪个版本/需求/项目
+          // 正文前附关联元数据摘要,让 AI 读到文档时知道它属于哪个版本/项目
           { uri, mimeType: 'text/markdown', text: formatKnowledgeResourceText(doc) },
         ],
       };

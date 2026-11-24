@@ -80,20 +80,18 @@ describe('KnowledgeService 写入', () => {
       expect(doc.frontmatter).toBeUndefined();
     });
 
-    it('should write version/requirement/project/stage into frontmatter', async () => {
+    it('should write version/project/stage into frontmatter', async () => {
       const { path: relPath } = await service.createDoc({
         title: '设计',
         content: '# x',
         dir: '技术方案',
         versionId: 'v_1',
-        requirementId: 'r_1',
         projectId: 'p_1',
         stage: 'design',
       });
       const doc = await service.getDoc(relPath);
       expect(doc.frontmatter).toEqual({
         versionId: 'v_1',
-        requirementId: 'r_1',
         projectId: 'p_1',
         stage: 'design',
       });
@@ -170,7 +168,6 @@ describe('KnowledgeService 写入', () => {
         content: '正文',
         tags: ['调研'],
         versionId: 'v_1',
-        requirementId: 'r_1',
         projectId: 'p_1',
         stage: 'design',
       });
@@ -179,7 +176,6 @@ describe('KnowledgeService 写入', () => {
       expect(doc?.frontmatter).toEqual({
         tags: ['调研'],
         versionId: 'v_1',
-        requirementId: 'r_1',
         projectId: 'p_1',
         stage: 'design',
       });
@@ -202,7 +198,6 @@ describe('KnowledgeService 写入', () => {
 
       await service.updateDocMeta('meta.md', {
         versionId: 'v_new',
-        requirementId: 'r_new',
         projectId: 'p_new',
         stage: 'dev',
       });
@@ -219,7 +214,6 @@ describe('KnowledgeService 写入', () => {
       expect(doc.frontmatter).toEqual({
         tags: ['调研'],
         versionId: 'v_new',
-        requirementId: 'r_new',
         projectId: 'p_new',
         stage: 'dev',
       });
@@ -231,7 +225,6 @@ describe('KnowledgeService 写入', () => {
 
       await service.updateDocMeta('clear.md', {
         versionId: '',
-        requirementId: '',
         projectId: '',
         stage: '',
       });
@@ -257,6 +250,31 @@ describe('KnowledgeService 写入', () => {
 
       const raw = await fs.readFile(path.join(root, relPath), 'utf-8');
       expect(raw).toBe('正文');
+    });
+
+    it('should keep legacy requirementId readable and preserved when editing meta', async () => {
+      // 旧文档:requirementId 仍可读取(兼容),但编辑关联只写三项,旧行原样保留且不再展示
+      const abs = path.join(root, 'legacy.md');
+      await fs.writeFile(abs, '---\nrequirementId: r_old\n---\n正文', 'utf-8');
+
+      const before = await service.getDoc('legacy.md');
+      expect(before.frontmatter).toEqual({ requirementId: 'r_old' });
+      expect(before.content).toBe('正文');
+
+      await service.updateDocMeta('legacy.md', { versionId: 'v_new', stage: 'design' });
+
+      const raw = await fs.readFile(abs, 'utf-8');
+      expect(raw).toContain('requirementId: r_old');
+      expect(raw).toContain('versionId: v_new');
+      expect(raw).toContain('stage: design');
+
+      const after = await service.getDoc('legacy.md');
+      expect(after.frontmatter).toEqual({
+        requirementId: 'r_old',
+        versionId: 'v_new',
+        stage: 'design',
+      });
+      expect(after.content).toBe('正文');
     });
 
     it('should add a frontmatter block when doc has none', async () => {

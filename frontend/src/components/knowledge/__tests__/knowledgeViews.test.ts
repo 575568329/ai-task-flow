@@ -3,7 +3,6 @@ import { describe, it, expect } from 'vitest';
 import type { KnowledgeFileNode, WorklogData } from '@ai-task-flow/shared';
 import {
   UNLINKED_GROUP_NAME,
-  UNSET_REQUIREMENT_NAME,
   buildWorklogIndex,
   countDocsByLinkState,
   groupDocsByView,
@@ -32,33 +31,37 @@ const worklogTree: WorklogData = {
 const index = buildWorklogIndex(worklogTree);
 
 describe('groupDocsByView', () => {
-  it('groups docs by version → requirement and puts unlinked docs last', () => {
+  it('groups docs by version name and puts unlinked docs last', () => {
     const docs = [
-      doc('a.md', { frontmatter: { versionId: 'v1', requirementId: 'r1' } }),
-      doc('b.md', { frontmatter: { versionId: 'v1' } }),
+      doc('a.md', { frontmatter: { versionId: 'v1' } }),
+      doc('b.md', { frontmatter: { versionId: 'v1', requirementId: 'r1' } }),
       doc('c.md'),
     ];
 
     const groups = groupDocsByView(docs, 'version', index);
 
     expect(groups[0].name).toBe('V8.0.8');
-    // 需求层已移除:旧文档的 requirementId 退化为按 id 展示
-    expect(groups[0].children?.map((child) => child.name)).toEqual([
-      'r1',
-      UNSET_REQUIREMENT_NAME,
-    ]);
-    expect(groups[0].children?.[0].docs.map((d) => d.path)).toEqual(['a.md']);
-    expect(groups[0].children?.[1].docs.map((d) => d.path)).toEqual(['b.md']);
+    // 需求层已移除:版本视图直接分组文档,旧 requirementId 不参与分组
+    expect(groups[0].docs.map((d) => d.path)).toEqual(['a.md', 'b.md']);
+    expect(groups).toHaveLength(2);
     expect(groups[groups.length - 1].name).toBe(UNLINKED_GROUP_NAME);
     expect(groups[groups.length - 1].docs.map((d) => d.path)).toEqual(['c.md']);
   });
 
+  it('ignores legacy requirementId when grouping by version', () => {
+    const docs = [doc('a.md', { frontmatter: { requirementId: 'r1' } })];
+    const groups = groupDocsByView(docs, 'version', index);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].name).toBe(UNLINKED_GROUP_NAME);
+    expect(groups[0].docs.map((d) => d.path)).toEqual(['a.md']);
+  });
+
   it('falls back to raw ids when worklog names are missing', () => {
-    const docs = [doc('a.md', { frontmatter: { versionId: 'v_unknown', requirementId: 'r_unknown' } })];
+    const docs = [doc('a.md', { frontmatter: { versionId: 'v_unknown' } })];
     const groups = groupDocsByView(docs, 'version', index);
 
     expect(groups[0].name).toBe('v_unknown');
-    expect(groups[0].children?.[0].name).toBe('r_unknown');
   });
 
   it('groups docs by project name and unlinked bucket', () => {
