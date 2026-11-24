@@ -18,7 +18,7 @@ describe('worklog MCP tools', () => {
 
   /** 建「版本 + 需求」组合(record 的前置条件) */
   async function seedVersionRequirement(versionName = 'V1', requirementTitle = 'R') {
-    const version = await deps.worklogService.createVersion({ name: versionName });
+    const version = await deps.worklogService.createVersion({ name: versionName, programId: '' });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id,
       title: requirementTitle,
@@ -137,9 +137,9 @@ describe('worklog MCP tools', () => {
 
   it('rename_version conflict should fail with isError and not modify', async () => {
     // 新签名按 versionId 操作:两个版本建好后,把 v1 改成已存在的 v2 名应冲突
-    await deps.worklogService.createVersion({ name: 'V1' });
+    await deps.worklogService.createVersion({ name: 'V1', programId: '' });
     const v1 = (await deps.worklogService.getTree()).versions.find((v) => v.name === 'V1')!;
-    await deps.worklogService.createVersion({ name: 'V2' });
+    await deps.worklogService.createVersion({ name: 'V2', programId: '' });
     const result = await HANDLERS.rename_version({ versionId: v1.id, newName: 'V2' }, deps);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('已存在');
@@ -252,7 +252,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_versions should list versions with ids and counts', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8' });
+    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id, title: 'R',
     });
@@ -269,7 +269,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_requirements should list requirements for a version', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V8.0.8' });
+    const version = await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id, title: '澳门底层数据建设',
     });
@@ -283,7 +283,7 @@ describe('worklog MCP tools', () => {
   });
 
   it('list_requirements should reject unknown version id with candidates', async () => {
-    await deps.worklogService.createVersion({ name: 'V8.0.8' });
+    await deps.worklogService.createVersion({ name: 'V8.0.8', programId: '' });
     const result = await HANDLERS.list_requirements({ versionId: 'v_nope' }, deps);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('V8.0.8');

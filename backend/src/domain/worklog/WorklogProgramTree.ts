@@ -19,7 +19,7 @@ export function assertProgramNameFree(data: WorklogData, name: string, exceptId?
   }
 }
 
-/** 列出归属某主题的全部版本(保持 versions 数组原顺序) */
+/** 列出归属某主题的全部版本(保持 versions 数组原顺序;旧数据缺 versions 时视为空) */
 export function versionsOfProgram(data: WorklogData, programId: string): WorklogVersion[] {
-  return data.versions.filter((v) => v.programId === programId);
+  return (data.versions ?? []).filter((v) => v.programId === programId);
 }

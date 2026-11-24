@@ -188,3 +188,13 @@ export function versionTreeMigrationMarkerPath(dataDir?: string): string {
 export function versionTreeMigrationLockTarget(dataDir?: string): string {
   return resolveDataDir(dataDir);
 }
+
+/** 建设主题层(版本 → 主题归属)一次性迁移的版本标记文件,保证幂等 */
+export function programLayerMigrationMarkerPath(dataDir?: string): string {
+  return path.join(resolveDataDir(dataDir), '.migration-program-layer.json');
+}
+
+/** 建设主题层迁移的互斥锁目标:锁定数据目录本身,HTTP 启动的多进程里只有一个执行迁移 */
+export function programLayerMigrationLockTarget(dataDir?: string): string {
+  return resolveDataDir(dataDir);
+}

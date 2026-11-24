@@ -7,11 +7,19 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { nanoid } from 'nanoid';
-import type { WorklogData, WorklogEntry, WorklogProject } from '@ai-task-flow/shared';
+import type {
+  WorklogData,
+  WorklogEntry,
+  WorklogProject,
+  WorklogRequirement,
+} from '@ai-task-flow/shared';
 import { JsonWorklogRepository } from '../../../infrastructure/persistence/JsonWorklogRepository.js';
 import {
+  DEFAULT_PROGRAM_NAME,
   LEGACY_REQUIREMENT_TITLE,
+  migrateProgramLayer,
   migrateToVersionTree,
+  runProgramLayerMigration,
   runVersionTreeMigration,
 } from '../VersionTreeMigration.js';
 
@@ -39,7 +47,27 @@ function legacyProject(
 }
 
 function legacyData(projects: LegacyProject[]): WorklogData {
-  return { projects, versions: [] };
+  return { projects, programs: [], versions: [] };
+}
+
+/** 需求夹具(迁移 v2 只关心标题与条目是否保留) */
+function requirement(id: string, title: string, entries: WorklogEntry[] = []): WorklogRequirement {
+  return { id, title, createdAt: 1, entries };
+}
+
+/** 迁移前的版本夹具:旧数据没有 programId */
+function unassignedVersion(
+  id: string,
+  name: string,
+  requirements: WorklogRequirement[],
+  createdAt = 1,
+): Record<string, unknown> {
+  return { id, name, createdAt, requirements };
+}
+
+/** 迁移前的整体数据:旧数据没有 programs 字段 */
+function unassignedData(versions: Array<Record<string, unknown>>): WorklogData {
+  return { projects: [], versions } as unknown as WorklogData;
 }
 
 describe('migrateToVersionTree', () => {
@@ -145,10 +173,12 @@ describe('migrateToVersionTree', () => {
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
         ] } as LegacyProject,
       ],
+      programs: [],
       versions: [
         {
           id: 'v1',
           name: 'V8.0.8',
+          programId: '',
           createdAt: 5,
           requirements: [
             { id: 'r1', title: '新需求', createdAt: 5, entries: [entry('e_new')] },
@@ -181,10 +211,12 @@ describe('migrateToVersionTree', () => {
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
         ] } as LegacyProject,
       ],
+      programs: [],
       versions: [
         {
           id: 'v1',
           name: 'V8.0.8',
+          programId: '',
           createdAt: 5,
           requirements: [
             { id: 'r1', title: LEGACY_REQUIREMENT_TITLE, createdAt: 5, entries: [entry('e_new')] },
@@ -215,10 +247,12 @@ describe('migrateToVersionTree', () => {
           { name: 'V8.0.8', createdAt: 1, entries: [entry('e_old')] },
         ] } as LegacyProject,
       ],
+      programs: [],
       versions: [
         {
           id: 'v1',
           name: 'V8.0.8',
+          programId: '',
           createdAt: 5,
           requirements: [
             { id: 'r1', title: LEGACY_REQUIREMENT_TITLE, createdAt: 5, entries: [] },
@@ -316,6 +350,196 @@ describe('runVersionTreeMigration', () => {
     expect(report.skipped).toBe(true);
     expect(report.entriesMoved).toBe(0);
     // 未写入任何 worklog 数据文件
+    await expect(fs.access(path.join(freshDir, 'worklog.json'))).rejects.toThrow();
+  });
+});
+
+describe('migrateProgramLayer', () => {
+  it('promotes 澳门底层数据建设 to one program across versions and keeps the requirement', () => {
+    const migrated = unassignedData([
+      unassignedVersion('v1', 'V8.0.8', [
+        requirement('r1', LEGACY_REQUIREMENT_TITLE, [entry('e1')]),
+      ]),
+      unassignedVersion('v2', 'V8.0.9', [requirement('r2', LEGACY_REQUIREMENT_TITLE)], 2),
+    ]);
+
+    const { data, report } = migrateProgramLayer(migrated);
+
+    // 同名需求跨版本聚合为一个主题
+    expect(data.programs).toHaveLength(1);
+    expect(data.programs[0].name).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(data.programs[0].id).toMatch(/^g_/);
+    expect(data.versions.every((v) => v.programId === data.programs[0].id)).toBe(true);
+    // 需求/条目保留,标题不改
+    expect(data.versions[0].requirements).toHaveLength(1);
+    expect(data.versions[0].requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e1']);
+    expect(data.versions[1].requirements[0].title).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(report).toEqual({ programsCreated: 1, versionsAssigned: 2 });
+
+    // 纯函数不改写入参(旧数据本来没有 programs / programId)
+    expect('programs' in migrated).toBe(false);
+    expect((migrated.versions[0] as { programId?: string }).programId).toBeUndefined();
+  });
+
+  it('assigns versions without the legacy requirement to 未分类建设', () => {
+    const source = unassignedData([
+      unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
+      unassignedVersion('v2', 'V8.0.9', [requirement('r2', '其他需求')], 2),
+    ]);
+
+    const { data, report } = migrateProgramLayer(source);
+
+    expect(report.programsCreated).toBe(2);
+    expect(new Set(data.programs.map((p) => p.name))).toEqual(
+      new Set([LEGACY_REQUIREMENT_TITLE, DEFAULT_PROGRAM_NAME]),
+    );
+    const defaultProgram = data.programs.find((p) => p.name === DEFAULT_PROGRAM_NAME)!;
+    expect(data.versions[1].programId).toBe(defaultProgram.id);
+    // 原需求原样保留
+    expect(data.versions[1].requirements.map((r) => r.title)).toEqual(['其他需求']);
+  });
+
+  it('reuses an existing program with the same name instead of creating a duplicate', () => {
+    const source = {
+      projects: [],
+      programs: [{ id: 'g_existing', name: LEGACY_REQUIREMENT_TITLE, createdAt: 1 }],
+      versions: [
+        unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
+      ],
+    } as unknown as WorklogData;
+
+    const { data, report } = migrateProgramLayer(source);
+
+    expect(data.programs).toHaveLength(1);
+    expect(data.versions[0].programId).toBe('g_existing');
+    expect(report).toEqual({ programsCreated: 0, versionsAssigned: 1 });
+  });
+
+  it('keeps an existing valid programId instead of reassigning by requirement title', () => {
+    const source = {
+      projects: [],
+      programs: [
+        { id: 'g_macao', name: LEGACY_REQUIREMENT_TITLE, createdAt: 1 },
+        { id: 'g_other', name: '其他主题', createdAt: 2 },
+      ],
+      versions: [
+        {
+          id: 'v1',
+          name: 'V8.0.8',
+          programId: 'g_other',
+          createdAt: 1,
+          requirements: [requirement('r1', LEGACY_REQUIREMENT_TITLE)],
+        },
+        unassignedVersion('v2', 'V8.0.9', [requirement('r2', LEGACY_REQUIREMENT_TITLE)], 2),
+      ],
+    } as unknown as WorklogData;
+
+    const { data, report } = migrateProgramLayer(source);
+
+    expect(data.versions[0].programId).toBe('g_other');
+    expect(data.versions[1].programId).toBe('g_macao');
+    expect(report.versionsAssigned).toBe(1);
+  });
+
+  it('is idempotent', () => {
+    const source = unassignedData([
+      unassignedVersion('v1', 'V8.0.8', [requirement('r1', LEGACY_REQUIREMENT_TITLE)]),
+      unassignedVersion('v2', 'V8.0.9', [requirement('r2', '其他需求')], 2),
+    ]);
+
+    const once = migrateProgramLayer(source).data;
+    const again = migrateProgramLayer(once);
+
+    expect(again.data).toEqual(once);
+    expect(again.report).toEqual({ programsCreated: 0, versionsAssigned: 0 });
+  });
+});
+
+describe('runProgramLayerMigration', () => {
+  let worklogRepo: JsonWorklogRepository;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = path.join(os.tmpdir(), `mig-pl-${nanoid()}`);
+    await fs.mkdir(dir, { recursive: true });
+    worklogRepo = new JsonWorklogRepository(path.join(dir, 'worklog.json'), path.join(dir, 'wb'));
+    // 旧数据:两个版本各自带「澳门底层数据建设」需求,都没有 programId
+    await worklogRepo.mutate((d) => {
+      d.versions.push(
+        {
+          id: 'v1',
+          name: 'V8.0.8',
+          createdAt: 1,
+          requirements: [requirement('r1', LEGACY_REQUIREMENT_TITLE, [entry('e1')])],
+        } as never,
+        {
+          id: 'v2',
+          name: 'V8.0.9',
+          createdAt: 2,
+          requirements: [requirement('r2', LEGACY_REQUIREMENT_TITLE), requirement('r3', '其他需求')],
+        } as never,
+      );
+    });
+  });
+
+  it('migrates the file, writes a marker and leaves a backup snapshot', async () => {
+    const report = await runProgramLayerMigration({ dataDir: dir, worklogRepo });
+
+    expect(report.skipped).toBe(false);
+    expect(report.programsCreated).toBe(1);
+    expect(report.versionsAssigned).toBe(2);
+
+    const data = await worklogRepo.load();
+    expect(data.programs).toHaveLength(1);
+    expect(data.programs[0].name).toBe(LEGACY_REQUIREMENT_TITLE);
+    expect(data.versions.every((v) => v.programId === data.programs[0].id)).toBe(true);
+    // 需求与条目一条不丢
+    expect(data.versions[0].requirements[0].entries.map((e) => e.id)).toEqual(['e1']);
+    expect(data.versions[1].requirements.map((r) => r.title)).toEqual([
+      LEGACY_REQUIREMENT_TITLE,
+      '其他需求',
+    ]);
+
+    // 标记文件(原子写产物)为版本 1
+    const marker = JSON.parse(
+      await fs.readFile(path.join(dir, '.migration-program-layer.json'), 'utf8'),
+    ) as { version: number };
+    expect(marker.version).toBe(1);
+
+    // 破坏性写入必须留快照
+    expect((await fs.readdir(path.join(dir, 'wb'))).length).toBeGreaterThan(0);
+  });
+
+  it('is idempotent at file level: second run skips and leaves the bytes unchanged', async () => {
+    const first = await runProgramLayerMigration({ dataDir: dir, worklogRepo });
+    expect(first.skipped).toBe(false);
+
+    const worklogFile = path.join(dir, 'worklog.json');
+    const hash = async () => (await fs.readFile(worklogFile)).toString('base64');
+    const before = await hash();
+
+    const second = await runProgramLayerMigration({ dataDir: dir, worklogRepo });
+
+    expect(second.skipped).toBe(true);
+    expect(second.programsCreated).toBe(0);
+    expect(second.versionsAssigned).toBe(0);
+    expect(await hash()).toBe(before);
+  });
+
+  it('does nothing (and marks skipped) on a data dir without versions', async () => {
+    const freshDir = path.join(os.tmpdir(), `mig-pl-fresh-${nanoid()}`);
+    await fs.mkdir(freshDir, { recursive: true });
+    const repo = new JsonWorklogRepository(
+      path.join(freshDir, 'worklog.json'),
+      path.join(freshDir, 'wb'),
+    );
+
+    const report = await runProgramLayerMigration({ dataDir: freshDir, worklogRepo: repo });
+
+    expect(report.skipped).toBe(true);
+    expect(report.programsCreated).toBe(0);
+    // 未写入任何 worklog 数据文件(不制造空主题)
     await expect(fs.access(path.join(freshDir, 'worklog.json'))).rejects.toThrow();
   });
 });

@@ -16,7 +16,10 @@ import { WorklogService } from './application/worklog/WorklogService.js';
 import { JsonConclusionRepository } from './infrastructure/persistence/JsonConclusionRepository.js';
 import { ConclusionService } from './application/conclusion/ConclusionService.js';
 import { runProjectIdMigration, shouldSuggestPathBinding } from './application/migration/ProjectIdMigration.js';
-import { runVersionTreeMigration } from './application/migration/VersionTreeMigration.js';
+import {
+  runProgramLayerMigration,
+  runVersionTreeMigration,
+} from './application/migration/VersionTreeMigration.js';
 import {
   knowledgeDirPath,
   worklogFilePath,
@@ -121,6 +124,20 @@ export async function startApp(options: StartAppOptions = {}) {
   } catch (error: unknown) {
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
     console.error(`[migration] 版本归并失败,已跳过(不影响启动): ${detail}`);
+  }
+
+  // 一次性数据迁移(续):把版本下「澳门底层数据建设」需求提升为顶层建设主题,并回填版本 programId。
+  // 放在版本归并之后(需求已就位)、HTTP 启动之前;幂等,失败不阻塞启动。
+  try {
+    const pReport = await runProgramLayerMigration({ dataDir, worklogRepo: worklogRepository });
+    if (!pReport.skipped && (pReport.programsCreated || pReport.versionsAssigned)) {
+      console.log(
+        `[migration] 建设主题 ${pReport.programsCreated} 个、归属版本 ${pReport.versionsAssigned} 个`,
+      );
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`[migration] 建设主题迁移失败,已跳过(不影响启动): ${detail}`);
   }
 
   const preferredPort = options.port ?? parseInt(process.env.PORT || '47821', 10);

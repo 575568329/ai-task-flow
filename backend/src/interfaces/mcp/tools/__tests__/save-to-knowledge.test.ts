@@ -36,7 +36,7 @@ describe('save_to_knowledge MCP tool', () => {
 
   it('should write valid associations into frontmatter', async () => {
     const project = await deps.worklogService.createProject({ name: 'ai-task-flow' });
-    const version = await deps.worklogService.createVersion({ name: 'V1' });
+    const version = await deps.worklogService.createVersion({ name: 'V1', programId: '' });
     const requirement = await deps.worklogService.createRequirement({
       versionId: version.id,
       title: '需求A',
@@ -93,7 +93,7 @@ describe('save_to_knowledge MCP tool', () => {
   });
 
   it('should warn that associations were not written when content carries its own frontmatter', async () => {
-    const version = await deps.worklogService.createVersion({ name: 'V1' });
+    const version = await deps.worklogService.createVersion({ name: 'V1', programId: '' });
 
     const result = await HANDLERS.save_to_knowledge(
       {
