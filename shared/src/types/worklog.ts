@@ -1,6 +1,6 @@
 // shared/src/types/worklog.ts
-// 工作记录(worklog)三层模型:版本 → 需求 → 功能点条目;项目降为条目属性与字典。
-// 版本/需求由用户在页面创建,AI(MCP)只传 id 写入;人类阅读走前端工作记录页渲染。
+// 工作记录(worklog)三层模型:主题 → 版本 → 功能点条目;项目降为条目属性与字典。
+// 主题/版本由用户在页面创建,AI(MCP)只传 id 写入;人类阅读走前端工作记录页渲染。
 // 存储:~/.ai-task-flow/worklog.json(单文件,原子写+跨进程文件锁,见 backend JsonWorklogRepository)。
 import type { WorkStage } from './stage.js';
 
@@ -76,19 +76,7 @@ export interface WorklogVersion {
   programId: string;
   description?: string;
   createdAt: number;
-  requirements: WorklogRequirement[];
-}
-
-/** 需求:版本内唯一标题,承载一组功能点条目 */
-export interface WorklogRequirement {
-  id: string;
-  /** 版本内唯一 */
-  title: string;
-  description?: string;
-  /** 需求计划关联的项目(名称快照) */
-  projects?: string[];
-  projectIds?: string[];
-  createdAt: number;
+  /** 版本直接持有条目(已移除需求层) */
   entries: WorklogEntry[];
 }
 
@@ -110,8 +98,6 @@ export interface WorklogData {
 export interface WorklogRecordRequest {
   /** 所属版本(必填) */
   versionId: string;
-  /** 所属需求(必填,版本内) */
-  requirementId: string;
   title: string;
   detail: string;
   /** 本条实际改动的项目名(可选) */
@@ -148,14 +134,6 @@ export interface WorklogProgramSummary {
   entryCount: number;
 }
 
-/** 需求创建入参 */
-export interface WorklogRequirementCreateRequest {
-  versionId: string;
-  title: string;
-  description?: string;
-  projects?: string[];
-}
-
 /** record 响应:版本/需求不再自动创建,createdXxx 为兼容旧客户端保留(恒 false) */
 export interface WorklogRecordResponse {
   entryId: string;
@@ -177,8 +155,6 @@ export interface WorklogQueryRequest {
   version?: string;
   /** 按版本 id 过滤 */
   versionId?: string;
-  /** 按需求 id 过滤 */
-  requirementId?: string;
   /** 对 title/detail/files.path 不区分大小写模糊匹配 */
   keyword?: string;
   /** 命中任一 tag 即可 */
@@ -205,8 +181,6 @@ export interface WorklogQueryResultEntry {
   project?: string;
   /** 所属版本名称 */
   versionName: string;
-  /** 所属需求标题 */
-  requirementTitle: string;
   tags?: string[];
   stage?: WorkStage;
   files?: string[];
@@ -214,15 +188,6 @@ export interface WorklogQueryResultEntry {
   sourcePath?: string;
   relatedProjects?: string[];
   pathUnmatched?: boolean;
-}
-
-/** 需求摘要(列表视图用,不含条目全文) */
-export interface WorklogRequirementSummary {
-  id: string;
-  versionId: string;
-  title: string;
-  projects?: string[];
-  entryCount: number;
 }
 
 /** update_work / PUT /api/worklog/entries/:id 入参(partial:只改传入字段) */
