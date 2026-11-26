@@ -22,6 +22,9 @@ body[data-scroll-locked] [data-floating-chat] {
 
 :root {
   --radius: 0.5rem;
+  /* 原生控件(select 下拉、checkbox、滚动条)跟随主题:
+     暗色下不加这条,原生 select 弹层仍是白底黑字,与整体风格割裂 */
+  color-scheme: light;
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.016 282);
@@ -57,6 +60,7 @@ body[data-scroll-locked] [data-floating-chat] {
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.129 0.016 282);
   --foreground: oklch(0.984 0.003 247);
   --card: oklch(0.208 0.042 265);
