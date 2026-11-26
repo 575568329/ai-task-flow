@@ -27,6 +27,11 @@ extract_field() {
   echo "$1" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8'))$2)"
 }
 
+# 文件名含中文:URL query 必须百分号编码,否则 Fastify 直接回 400(裸 UTF-8 请求行非法)
+url_encode() {
+  node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$1"
+}
+
 echo "=============================="
 echo " Knowledge Save API E2E Tests"
 echo " BASE_URL: $BASE_URL"
@@ -38,12 +43,13 @@ RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   --data-binary @"$__p1")
 BODY=$(echo "$RESP" | sed '$d')
 DOC_PATH=$(extract_field "$BODY" ".path")
+DOC_QUERY=$(url_encode "$DOC_PATH")
 echo "  前置创建文档: $DOC_PATH"
 
 # ============ 测试 1: PUT 覆盖 → 200 + ok ============
 echo ""
 echo "=== 测试 1: PUT 覆盖返回 200 + ok=true ==="
-RESP=$(curl -s -w "\n%{http_code}" -X PUT "$BASE_URL/api/knowledge/doc?path=$DOC_PATH" \
+RESP=$(curl -s -w "\n%{http_code}" -X PUT "$BASE_URL/api/knowledge/doc?path=$DOC_QUERY" \
   -H "Content-Type: application/json" \
   --data-binary '{"content":"new content from save"}')
 CODE=$(echo "$RESP" | tail -1); BODY=$(echo "$RESP" | sed '$d')
@@ -58,7 +64,7 @@ fi
 # ============ 测试 2: 读回验证内容已更新 ============
 echo ""
 echo "=== 测试 2: 读回验证内容已更新 ==="
-RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/knowledge/doc?path=$DOC_PATH")
+RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/knowledge/doc?path=$DOC_QUERY")
 BODY=$(echo "$RESP" | sed '$d')
 CONTENT=$(extract_field "$BODY" ".content")
 if [ "$CONTENT" = "new content from save" ]; then
@@ -88,7 +94,7 @@ assert_status "越界返回 403" 403 "$CODE" ""
 # ============ 清理 ============
 echo ""
 echo "=== 清理测试数据 ==="
-curl -s -o /dev/null -X DELETE "$BASE_URL/api/knowledge/doc?path=$DOC_PATH"
+curl -s -o /dev/null -X DELETE "$BASE_URL/api/knowledge/doc?path=$DOC_QUERY"
 echo "  cleaned"
 
 # ============ 汇总 ============

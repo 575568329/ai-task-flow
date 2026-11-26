@@ -8,6 +8,25 @@ fail() {
   exit 1
 }
 
+# 断言成功必须依赖 JSON 字段解析。jq 不是 Windows/Git Bash 自带命令,
+# 故统一用 node(项目本身就是 Node 工程,CI 与本机都有)解析:表达式里的 data 即响应体。
+json_get() {
+  local expr="$1"
+  node -e "
+    let raw = '';
+    process.stdin.on('data', (chunk) => { raw += chunk; });
+    process.stdin.on('end', () => {
+      try {
+        const data = JSON.parse(raw);
+        const value = ${expr};
+        process.stdout.write(value === undefined || value === null ? '' : String(value));
+      } catch {
+        process.stdout.write('');
+      }
+    });
+  "
+}
+
 # 请求体一律先落临时文件再用 --data-binary @file 发送：
 # Git Bash 的 MSYS curl 会把命令行参数里的中文按系统 ANSI 码页编码，
 # Content-Length 与 UTF-8 字节数对不上，后端会直接回 400。
@@ -26,12 +45,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 先查依赖：缺 jq 时如果放任脚本继续，会在 health 解析处报「后端不可达」，误导排障
-command -v jq >/dev/null 2>&1 || fail "需要 jq"
-
 echo "=== 结论卡 E2E ==="
 
-STATUS=$(curl -s "$BASE_URL/health" | jq -r '.status // empty')
+STATUS=$(curl -s "$BASE_URL/health" | json_get 'data.status')
 [ "$STATUS" = "ok" ] || fail "后端不可达 ($BASE_URL/health)"
 
 echo "--- 1. 创建 ---"
@@ -41,13 +57,13 @@ JSON
 CREATE=$(curl -s -X POST "$BASE_URL/api/conclusions" \
   -H "Content-Type: application/json" \
   --data-binary "@$TMP_DIR/create.json")
-ID=$(echo "$CREATE" | jq -r '.id // empty')
+ID=$(echo "$CREATE" | json_get 'data.id')
 [ -n "$ID" ] || fail "创建失败: $CREATE"
 echo "PASS: id=$ID"
 
 echo "--- 2. 读取当前进度 ---"
 DETAIL=$(curl -s "$BASE_URL/api/conclusions/$ID")
-[ "$(echo "$DETAIL" | jq -r '.revisions[0].decision')" = "旧结论：前端过滤" ] || fail "详情读取错误: $DETAIL"
+[ "$(echo "$DETAIL" | json_get 'data.revisions?.[0]?.decision')" = "旧结论：前端过滤" ] || fail "详情读取错误: $DETAIL"
 echo "PASS"
 
 echo "--- 3. 部分字段追加（decision 沿用，data 更新） ---"
@@ -57,10 +73,10 @@ JSON
 APPEND=$(curl -s -X POST "$BASE_URL/api/conclusions/$ID/revisions" \
   -H "Content-Type: application/json" \
   --data-binary "@$TMP_DIR/append.json")
-[ "$(echo "$APPEND" | jq -r '.rev')" = "2" ] || fail "追加失败: $APPEND"
+[ "$(echo "$APPEND" | json_get 'data.rev')" = "2" ] || fail "追加失败: $APPEND"
 DETAIL=$(curl -s "$BASE_URL/api/conclusions/$ID")
-[ "$(echo "$DETAIL" | jq -r '.revisions[1].decision')" = "旧结论：前端过滤" ] || fail "decision 未沿用"
-[ "$(echo "$DETAIL" | jq -r '.revisions[1].data')" = "新数据" ] || fail "data 未更新"
+[ "$(echo "$DETAIL" | json_get 'data.revisions?.[1]?.decision')" = "旧结论：前端过滤" ] || fail "decision 未沿用"
+[ "$(echo "$DETAIL" | json_get 'data.revisions?.[1]?.data')" = "新数据" ] || fail "data 未更新"
 echo "PASS"
 
 echo "--- 4. 搜索命中历史版本 ---"
@@ -70,7 +86,7 @@ echo "--- 4. 搜索命中历史版本 ---"
 # 带 project 过滤：数据目录里若已有其他卡片（本脚本中途失败留下的孤儿等），
 # 不加限定会让 .conclusions[0] 不再是本轮的卡。
 SEARCH=$(curl -s "$BASE_URL/api/conclusions?keyword=%E6%97%A7%E6%95%B0%E6%8D%AE&project=e2e-conclusion")
-[ "$(echo "$SEARCH" | jq -r '.conclusions[0].matchedRev')" = "1" ] || fail "历史命中错误: $SEARCH"
+[ "$(echo "$SEARCH" | json_get 'data.conclusions?.[0]?.matchedRev')" = "1" ] || fail "历史命中错误: $SEARCH"
 echo "PASS"
 
 echo "--- 5. expectedRev 冲突 ---"
@@ -100,12 +116,12 @@ JSON
 PATCH=$(curl -s -X PATCH "$BASE_URL/api/conclusions/$ID" \
   -H "Content-Type: application/json" \
   --data-binary "@$TMP_DIR/patch.json")
-[ "$(echo "$PATCH" | jq -r '.title')" = "E2E 结论（改名）" ] || fail "PATCH 失败: $PATCH"
+[ "$(echo "$PATCH" | json_get 'data.title')" = "E2E 结论（改名）" ] || fail "PATCH 失败: $PATCH"
 echo "PASS"
 
 echo "--- 8. 删除并保留历史可查（备份在数据目录） ---"
 DEL=$(curl -s -X DELETE "$BASE_URL/api/conclusions/$ID")
-[ "$(echo "$DEL" | jq -r '.deleted')" = "true" ] || fail "删除失败: $DEL"
+[ "$(echo "$DEL" | json_get 'data.deleted')" = "true" ] || fail "删除失败: $DEL"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/conclusions/$ID")
 [ "$CODE" = "404" ] || fail "删除后应 404，实际 $CODE"
 ID=""

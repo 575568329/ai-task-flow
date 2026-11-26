@@ -35,6 +35,11 @@ extract_field() {
   echo "$1" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8'))$2)"
 }
 
+# 文件名含中文:URL query 必须百分号编码,否则 Fastify 直接回 400(裸 UTF-8 请求行非法)
+url_encode() {
+  node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$1"
+}
+
 echo "=============================="
 echo " Knowledge Create API E2E Tests"
 echo " BASE_URL: $BASE_URL"
@@ -61,21 +66,24 @@ fi
 
 # ============ 测试 2: 带 tags 创建 → 201 + frontmatter ============
 echo ""
-echo "=== 测试 2: 带 tags 创建 返回 201 + 读回含 frontmatter ==="
+echo "=== 测试 2: 带 tags 创建 返回 201 + 读回含 frontmatter 元数据 ==="
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/knowledge/doc" \
   -H "Content-Type: application/json" \
   --data-binary @"$__p2")
 CODE=$(echo "$RESP" | tail -1); BODY=$(echo "$RESP" | sed '$d')
 assert_status "带 tags 创建返回 201" 201 "$CODE" "$BODY"
 TAGGED_PATH=$(extract_field "$BODY" ".path")
-# 读回验证 content 以 frontmatter 开头
-RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/knowledge/doc?path=$TAGGED_PATH")
+# 读回验证 frontmatter 元数据(中文路径先编码)。
+# 注意:API 返回的是已剥离 frontmatter 的正文 + 结构化 frontmatter 字段,
+# 不是原始文件文本,故断言结构化字段而非 content 首行。
+RESP=$(curl -s -w "\n%{http_code}" "$BASE_URL/api/knowledge/doc?path=$(url_encode "$TAGGED_PATH")")
 BODY=$(echo "$RESP" | sed '$d')
 CONTENT=$(extract_field "$BODY" ".content")
-if echo "$CONTENT" | head -1 | grep -q '^---'; then
-  echo "  PASS: 读回 content 以 frontmatter 开头"; PASS=$((PASS + 1))
+TAG=$(extract_field "$BODY" ".frontmatter.tags[0]")
+if [ "$CONTENT" = "标签正文" ] && [ "$TAG" = "e2e" ]; then
+  echo "  PASS: 读回正文与 frontmatter.tags 正确"; PASS=$((PASS + 1))
 else
-  echo "  FAIL: 读回内容未含 frontmatter, content=$CONTENT"; FAIL=$((FAIL + 1))
+  echo "  FAIL: 读回内容不符, content=$CONTENT, tag=$TAG"; FAIL=$((FAIL + 1))
 fi
 
 # ============ 测试 3: 空 title → 400 ============
@@ -100,7 +108,7 @@ assert_status "dir 越界返回 403" 403 "$CODE" ""
 echo ""
 echo "=== 清理测试数据 ==="
 for p in "$CREATED_PATH" "$TAGGED_PATH"; do
-  [ -n "$p" ] && curl -s -o /dev/null -X DELETE "$BASE_URL/api/knowledge/doc?path=$p"
+  [ -n "$p" ] && curl -s -o /dev/null -X DELETE "$BASE_URL/api/knowledge/doc?path=$(url_encode "$p")"
 done
 echo "  cleaned"
 
