@@ -17,9 +17,14 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `1aed9ab`(feat(knowledge): 移除需求关联写入与展示；14 工具) |
-| 构建时间 | 2026-11-24 22:39（shared 22:38 / backend 22:39 / frontend 22:40，按产物 mtime） |
+| dist 构建来源 commit | `86e5d7a`(docs: 修正 MCP 构建时间为产物实际 mtime；14 工具) |
+| 构建时间 | 2026-11-26 17:36(构建元数据 `backend/dist/.mcp-build-meta.json`) |
+| 源码哈希 | `e3e8430e72b6`(101 个源文件,`npm run check:mcp` 可复核) |
 | server version(MCP initialize 返回) | 0.1.0 |
+
+> **防漂移**:`backend` 的 build 在 `tsc` 之后自动写构建元数据(源码内容哈希 + commit + 时间);
+> `npm run check:mcp` 比对当前 `backend/src` + `shared/src` 与元数据,不一致即退出码 1 并列出改了哪些文件——
+> 解决"改了代码忘记 build,全局客户端静默跑旧工具"的问题。
 
 ## 注册清单
 
@@ -37,16 +42,21 @@
 
 ```bash
 # 1. 重新构建产物(所有注册点指向同一文件,重建即全局生效)
+#    构建末尾自动写入 backend/dist/.mcp-build-meta.json
 cd backend && npm run build
 
-# 2. 冒烟验证(stdio 全链路:initialize → tools/list → record → 清理)
+# 2. 校验产物与源码一致(输出 ✅ 与源码哈希;不一致会列出改动文件并以 1 退出)
+cd .. && npm run check:mcp
+
+# 3. 冒烟验证(stdio 全链路:initialize → tools/list → record → 清理)
 #    (见 tests/curl/test_worklog_api.sh 与本文档同目录的验证方式;或直接让 AI 调 list_projects)
 
-# 3. 回写本文档「当前版本」:
+# 4. 回写本文档「当前版本」:
 #    dist 构建来源 commit ← git log --oneline -1
-#    构建时间 ← 产物 mtime（stat backend/dist/interfaces/mcp/server.js），不是编辑文档的时刻
+#    构建时间/源码哈希 ← backend/dist/.mcp-build-meta.json 的 builtAt / sourceHash
+#    (以元数据为准,不要用文档编辑时刻或产物 mtime 猜)
 
-# 4. 客户端无需改配置——Claude/ZCode 每次新会话都会重新拉起 stdio 进程,自动加载新 dist;
+# 5. 客户端无需改配置——Claude/ZCode 每次新会话都会重新拉起 stdio 进程,自动加载新 dist;
 #    已开着的旧会话需重启才能用新版。
 ```
 
@@ -55,4 +65,5 @@ cd backend && npm run build
 - ZCode:Settings → MCP 看 `ai-task-flow` 状态;`failed` 多为 dist 未构建(跑 build)或 node 不在 PATH;
 - Claude Code:`claude mcp list` 查看;项目内 `.mcp.json` 与全局同时存在时,全局(用户级)优先;
 - stdio server 的报错输出在客户端日志里;直接 `node <server.js路径>` 手跑可复现启动错误;
-- 配置备份:`~/.zcode/cli/config.json.bak-*`、`~/.claude.json.bak-*`(注册操作前自动留档)。
+- 配置备份:`~/.zcode/cli/config.json.bak-*`、`~/.claude.json.bak-*`(注册操作前自动留档);
+- 怀疑跑的是旧工具:`npm run check:mcp`(在仓库根执行),报过期就 `cd backend && npm run build`。

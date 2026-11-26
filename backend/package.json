@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "dev": "tsx watch src/http-server.ts",
-    "build": "tsc",
+    "build": "tsc && node ../scripts/mcp-dist-meta.mjs --write",
     "test": "vitest",
     "mcp": "node dist/interfaces/mcp/server.js",
     "mcp:dev": "tsx src/interfaces/mcp/server.ts",

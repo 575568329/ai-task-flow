@@ -40,6 +40,7 @@ cd frontend && npm run dev  # 前端 :5678(vite,代理 /api → 后端)
 
 ```bash
 cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端配置无需改
+npm run check:mcp             # 校验 dist 是否与当前源码一致(防"忘了 build 跑旧工具")
 ```
 
 工具(14):`record_work` / `query_work` / `list_projects` / `list_programs` / `list_versions` / `update_work` / `delete_work` / `delete_version` / `delete_project` / `rename_version` / `rename_project` / `record_conclusion` / `query_conclusions` / `save_to_knowledge`
@@ -76,7 +77,8 @@ cd backend && npm run build   # 更新 MCP:重建 dist 即全局生效,客户端
 cd backend && npx vitest run    # 38 文件 / 448 用例(领域/锁协议/迁移/路由/MCP 工具)
 cd frontend && npm test         # 29 文件 / 234 用例(组件/搜索过滤/多视图)
 cd extension && npm test        # 5 文件 / 17 用例(剪藏)
-BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E(需后端在跑)
+BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E 5 套件(需后端在跑)
+npm run check:mcp                                      # MCP 产物一致性(源码哈希 vs 构建元数据)
 node tests/mcp/conclusion-stdio-smoke.mjs              # MCP stdio 冒烟(需先 cd backend && npm run build)
 ```
 
