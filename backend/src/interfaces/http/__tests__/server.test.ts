@@ -21,8 +21,8 @@ import { FastifyInstance } from 'fastify';
 describe('HTTP Server', () => {
   let server: FastifyInstance;
 
-  beforeEach(async () => {
-    // 使用 nanoid 确保测试隔离
+  /** 按指定跨站白名单起一个隔离实例(数据全部落在临时目录) */
+  async function buildServer(corsOrigin: string | string[] | false): Promise<FastifyInstance> {
     const { nanoid } = await import('nanoid');
     const id = nanoid();
 
@@ -53,8 +53,8 @@ describe('HTTP Server', () => {
       ),
     );
 
-    server = await createHttpServer(
-      { port: 0, host: '127.0.0.1', corsOrigin: '*' },
+    return createHttpServer(
+      { port: 0, host: '127.0.0.1', corsOrigin },
       llmConfigService,
       webClipService,
       knowledgeService,
@@ -62,6 +62,11 @@ describe('HTTP Server', () => {
       worklogService,
       conclusionService,
     );
+  }
+
+  beforeEach(async () => {
+    // 默认行为(不放开跨站)即生产默认值
+    server = await buildServer(false);
   });
 
   afterEach(async () => {
@@ -79,6 +84,88 @@ describe('HTTP Server', () => {
       const body = JSON.parse(response.body);
       expect(body.status).toBe('ok');
       expect(body.timestamp).toBeDefined();
+      // buildId 供插件做版本握手,未设置环境变量时为空串
+      expect(body.buildId).toBe('');
+    });
+  });
+
+  describe('跨站防护', () => {
+    it('should allow same-origin local page and non-browser callers', async () => {
+      const local = await server.inject({
+        method: 'GET',
+        url: '/api/mindmaps',
+        headers: { origin: 'http://127.0.0.1:47921' },
+      });
+      expect(local.statusCode).toBe(200);
+
+      const noOrigin = await server.inject({ method: 'GET', url: '/api/mindmaps' });
+      expect(noOrigin.statusCode).toBe(200);
+    });
+
+    it('should reject public website origin by default', async () => {
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/mindmaps',
+        headers: { origin: 'https://evil.example' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('should reject cross-site write (no CORS header needed to do damage)', async () => {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/mindmaps',
+        headers: { origin: 'https://evil.example', 'content-type': 'text/plain' },
+        payload: JSON.stringify({ title: 'csrf' }),
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
+  describe('uTools 工具桥接 /api/tools/:name', () => {
+    it('should run a whitelisted tool for local callers', async () => {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/tools/list_projects',
+        payload: { args: {} },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(Array.isArray(body.content)).toBe(true);
+      expect(body.isError).not.toBe(true);
+    });
+
+    it('should 404 unknown tool', async () => {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/tools/no_such_tool',
+        payload: { args: {} },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('should 400 when args is not an object', async () => {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/tools/list_projects',
+        payload: { args: [] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('args');
+    });
+
+    it('should reject non-local callers', async () => {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/tools/list_projects',
+        remoteAddress: '10.0.0.9',
+        payload: { args: {} },
+      });
+
+      expect(res.statusCode).toBe(403);
     });
   });
 

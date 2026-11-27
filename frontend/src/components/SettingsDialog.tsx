@@ -3,7 +3,7 @@
 // 侧栏"设置"入口打开本弹窗。各 Tab 用按钮+state 切换(无 Radix Tabs,Tab 少不引依赖)。
 import { useState, useEffect } from 'react';
 import type { ComponentType } from 'react';
-import { Database, SlidersHorizontal, Layers } from 'lucide-react';
+import { Database, SlidersHorizontal, Layers, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Dialog,
@@ -15,11 +15,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { isMarketBuild } from '@/lib/appMode';
 import { LlmConfigPanel } from './LlmConfigPanel';
 import { StoragePanel } from './StoragePanel';
 import { ClaudeProfilePanel } from './ClaudeProfilePanel';
+import { AboutPanel } from './AboutPanel';
 
-type SettingsTab = 'llm' | 'claude-profile' | 'storage';
+type SettingsTab = 'llm' | 'claude-profile' | 'storage' | 'about';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -38,14 +40,26 @@ const TABS: TabDef[] = [
   { key: 'llm', label: '模型配置', icon: SlidersHorizontal },
   { key: 'claude-profile', label: 'Claude 配置', icon: Layers },
   { key: 'storage', label: '存储管理', icon: Database },
+  { key: 'about', label: '关于 / 隐私', icon: Info },
 ];
 
-export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
-  const [tab, setTab] = useState<SettingsTab>((initialTab as SettingsTab) ?? 'llm');
+/** 市场版隐藏 Claude 配置切换:它会读写用户 ~/.claude/settings.json,与工作记录无关 */
+function visibleTabs(): TabDef[] {
+  return isMarketBuild() ? TABS.filter((tab) => tab.key !== 'claude-profile') : TABS;
+}
 
-  // 每次打开时按 initialTab 重置(支持外部指定跳转 tab)
+export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialogProps) {
+  const tabs = visibleTabs();
+  const fallbackTab: SettingsTab = tabs[0]?.key ?? 'about';
+  const resolveTab = (candidate?: string): SettingsTab => {
+    const matched = tabs.find((tab) => tab.key === candidate);
+    return matched ? matched.key : fallbackTab;
+  };
+  const [tab, setTab] = useState<SettingsTab>(resolveTab(initialTab));
+
+  // 每次打开时按 initialTab 重置(支持外部指定跳转 tab;不可见的 tab 回退到第一个)
   useEffect(() => {
-    if (open) setTab((initialTab as SettingsTab) ?? 'llm');
+    if (open) setTab(resolveTab(initialTab));
   }, [open, initialTab]);
 
   return (
@@ -54,13 +68,15 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
           <DialogDescription>
-            配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储。MCP 工具说明见工作记录页「AI 使用指南」。
+            {isMarketBuild()
+              ? '配置 LLM 模型、管理本地存储。MCP 工具说明见工作记录页「AI 使用指南」。'
+              : '配置 LLM 模型、切换 Claude Code 多套配置、管理本地存储。MCP 工具说明见工作记录页「AI 使用指南」。'}
           </DialogDescription>
         </DialogHeader>
 
         {/* Tab 切换条(按钮实现,无 Tabs 依赖) */}
         <div className="flex gap-1 border-b">
-          {TABS.map(({ key, label, icon: Icon }) => (
+          {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
@@ -92,8 +108,10 @@ export function SettingsDialog({ open, onOpenChange, initialTab }: SettingsDialo
                 <LlmConfigPanel />
               ) : tab === 'claude-profile' ? (
                 <ClaudeProfilePanel />
-              ) : (
+              ) : tab === 'storage' ? (
                 <StoragePanel />
+              ) : (
+                <AboutPanel />
               )}
             </motion.div>
           </AnimatePresence>

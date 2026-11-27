@@ -26,8 +26,19 @@ function getBackendPort(): number {
   return DEFAULT_BACKEND_PORT;
 }
 
+// 版本号唯一来源:仓库根 package.json(插件清单/upx 包名/关于页都取它)
+const APP_VERSION = (
+  JSON.parse(
+    fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf-8'),
+  ) as { version?: string }
+).version ?? '0.0.0';
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  // 版本号编译期注入,避免 AboutPanel 里再手写一份
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   // base './':产物资源相对引用。uTools 插件包以 file:// 加载,
   // 默认绝对路径 /assets/... 会解析到文件系统根而 404;同源 http 托管下相对路径等效
   base: './',

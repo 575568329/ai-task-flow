@@ -3,8 +3,8 @@
 //
 // Claude Code 把每个项目的工作目录编码成目录名,规则(实测自本机):
 // 把路径中的 \ / : . 四类字符全部替换为 '-'。
-//   C:\Users\fjyu9\Desktop\ai-task-flow  →  C--Users-fjyu9-Desktop-ai-task-flow
-//   /mnt/c/Users/fjyu9/Desktop/ai-task-flow  →  -mnt-c-Users-fjyu9-Desktop-ai-task-flow
+//   C:\Users\<user>\Desktop\ai-task-flow  →  C--Users-<user>-Desktop-ai-task-flow
+//   /mnt/c/Users/<user>/Desktop/ai-task-flow  →  -mnt-c-Users-<user>-Desktop-ai-task-flow
 //   D:\proj.x                              →  D--proj-x
 
 const ENCODE_RE = /[\\/:.]/g;
@@ -18,7 +18,7 @@ export function encodeProjectPath(rawPath: string): string {
 
 /**
  * Windows 路径 → WSL 路径。
- *   C:\Users\fjyu9\proj  →  /mnt/c/Users/fjyu9/proj
+ *   C:\Users\<user>\proj  →  /mnt/c/Users/<user>/proj
  *   D:/code/x            →  /mnt/d/code/x
  *
  * 用于:env=wsl 时启动 wsl.exe 的 --cd 参数,以及扫描 WSL 侧历史会话时编码。

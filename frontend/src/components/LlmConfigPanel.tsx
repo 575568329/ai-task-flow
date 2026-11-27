@@ -3,7 +3,7 @@
 // 复用现有 llmConfigStore(fetchConfig/saveConfig)与 llmConfigApi(test)。
 // apiKey 留空保存表示"保持原值不变"(后端 LlmConfigService.saveConfig 已处理)。
 import { useEffect, useState } from 'react';
-import { Loader2, Plug, Save } from 'lucide-react';
+import { Loader2, Plug, Save, ShieldCheck } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -67,6 +67,13 @@ export function LlmConfigPanel() {
 
   return (
     <div className="flex flex-col gap-4 py-1">
+      <div className="bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-md border p-2 text-xs leading-relaxed">
+        <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          API Key 仅保存在本机 <code className="bg-muted rounded px-1 font-mono">~/.ai-task-flow/llm-config.json</code>;
+          只有你主动测试/使用 AI 功能时,请求才发往上方填写的 API 地址。不做统计上报。
+        </span>
+      </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="llm-baseurl">API 地址</Label>
         <Input

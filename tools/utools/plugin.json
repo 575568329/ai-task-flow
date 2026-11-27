@@ -1,0 +1,32 @@
+{
+  "pluginName": "AI 工作记录",
+  "version": "0.2.0",
+  "description": "本地 AI 工作记录中枢:建设主题 → 版本 → 功能点,支持 diff/文件行号/搜索;含结论卡、知识库、思维导图。",
+  "author": "fjyu9",
+  "homepage": "https://github.com/575568329/ai-task-flow",
+  "platform": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "pluginSetting": {
+    "single": true,
+    "height": 760
+  },
+  "features": [
+    {
+      "code": "worklog",
+      "description": "AI 工作记录中枢:建设主题 → 版本 → 功能点,关联 diff/文件行号;含结论卡、知识库、思维导图",
+      "explain": "AI 工作记录中枢:建设主题 → 版本 → 功能点,关联 diff/文件行号;含结论卡、知识库、思维导图",
+      "cmds": [
+        "atf",
+        "工作记录",
+        "AI工作记录",
+        "worklog"
+      ]
+    }
+  ]
+}

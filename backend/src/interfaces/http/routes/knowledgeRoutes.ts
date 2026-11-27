@@ -4,18 +4,39 @@ import { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { KnowledgeService } from '../../../application/knowledge/KnowledgeService.js';
-import { importKnowledge, suggestImport } from '../../../application/knowledge/KnowledgeImportService.js';
+import { importKnowledgeFiles } from '../../../application/knowledge/KnowledgeImportService.js';
+import { exportKnowledge } from '../../../application/knowledge/KnowledgeExportService.js';
 import { isLocalAccess } from '../../../utils/localAccess.js';
 import type {
   KnowledgeCreateRequest,
   KnowledgeSaveRequest,
   KnowledgeDocMetaUpdateRequest,
   KnowledgeAssociation,
+  KnowledgeImportFile,
 } from '@ai-task-flow/shared';
+
+/** 选择文件导入的上限:单文件 5MB(文本与二进制同口径)、单批 500 篇(整体 body 另有 25MB 上限) */
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_FILES = 500;
+
+/** 可导入的文件类型:文本 + 知识库能预览/下载的二进制(与导出保持对称) */
+const IMPORT_EXTENSIONS = new Set([
+  '.md', '.markdown', '.txt', '.json', '.csv', '.html', '.htm', '.yml', '.yaml',
+  '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.docx',
+]);
 
 /** 把 unknown 异常收窄成可展示文案(不向调用方暴露内部对象) */
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 导出文件名时间戳(ASCII,避免 Content-Disposition 中文编码问题) */
+function exportStamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
+    `-${pad(date.getHours())}${pad(date.getMinutes())}`
+  );
 }
 
 /** 关联字段白名单:只接受字符串(undefined=不清空/保持缺省),统一 trim;旧 requirementId 忽略 */
@@ -141,28 +162,75 @@ export async function registerKnowledgeRoutes(
     }
   });
 
-  // GET /api/knowledge/import/suggestion - 是否需要引导导入仓库内旧知识库
-  // 只回计数,不暴露路径;源目录缺失/为空时 suggested=false
-  fastify.get('/api/knowledge/import/suggestion', async (_request, reply) => {
+  // GET /api/knowledge/export - 导出整个知识库为 zip
+  // 保持相对路径与文件原样,解压后可直接用「选择文件夹」导回。
+  fastify.get('/api/knowledge/export', async (request, reply) => {
+    if (!isLocalAccess(request.ip)) {
+      return reply.status(403).send({ error: '仅允许本机导出' });
+    }
+
     try {
-      return await suggestImport({ targetDir: knowledgeService.getRoot() });
+      const { buffer, fileCount } = await exportKnowledge(knowledgeService.getRoot());
+      if (fileCount === 0) {
+        return reply.status(404).send({ error: '知识库还没有文档,没有可导出的内容' });
+      }
+      return reply
+        .type('application/zip')
+        .header('Content-Disposition', `attachment; filename="knowledge-base-${exportStamp(new Date())}.zip"`)
+        .send(buffer);
     } catch (err) {
-      return reply.status(500).send({ error: `检测导入建议失败: ${errorText(err)}` });
+      return reply.status(400).send({ error: `导出失败: ${errorText(err)}` });
     }
   });
 
-  // POST /api/knowledge/import - 一次性导入旧知识库(源目录固定为仓库内 knowledge-base)
-  // 安全:刻意不接受 body 中的 sourceDir。后端 CORS 为 * 且 text/plain 可当 JSON 解析,
-  // 任意网页都能发简单请求;若允许外部指定路径,回环 IP gate 挡不住,会把本机任意目录
-  // 复制进知识库再经 manifest/raw 读出(跨站本地文件外泄)。源目录只由服务层按仓库位置解析。
-  fastify.post('/api/knowledge/import', async (request, reply) => {
+  // POST /api/knowledge/import/files - 用户从「选择文件/选择文件夹」导入文本
+  // 只接受内容,不接受 sourceDir;路径在服务层归一化并做越界校验。
+  fastify.post<{ Body: { files?: unknown } }>('/api/knowledge/import/files', async (request, reply) => {
     if (!isLocalAccess(request.ip)) {
       return reply.status(403).send({ error: '仅允许本机调用导入' });
     }
+    const rawFiles = request.body?.files;
+    if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
+      return reply.status(400).send({ error: 'files 必须是非空数组' });
+    }
+    if (rawFiles.length > MAX_IMPORT_FILES) {
+      return reply.status(400).send({ error: `单次最多导入 ${MAX_IMPORT_FILES} 个文件` });
+    }
+
+    const files: KnowledgeImportFile[] = [];
+    for (const item of rawFiles) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return reply.status(400).send({ error: 'files 中每一项必须为对象' });
+      }
+      const record = item as Record<string, unknown>;
+      if (typeof record.path !== 'string' || !record.path.trim()) {
+        return reply.status(400).send({ error: '每个文件必须包含 path' });
+      }
+      if (typeof record.content !== 'string') {
+        return reply.status(400).send({ error: `${record.path} 的 content 必须为字符串` });
+      }
+      // 编码:缺省 utf8;二进制(图片/PDF/docx)走 base64
+      const encoding = record.encoding ?? 'utf8';
+      if (encoding !== 'utf8' && encoding !== 'base64') {
+        return reply.status(400).send({ error: `${record.path} 的 encoding 只支持 utf8/base64` });
+      }
+      // 类型白名单放服务端:前端过滤只是体验,HTTP 直调不能绕过
+      const ext = path.extname(record.path).toLowerCase();
+      if (!IMPORT_EXTENSIONS.has(ext)) {
+        return reply.status(400).send({ error: `${record.path} 不支持的文件类型` });
+      }
+      const byteLength =
+        encoding === 'base64'
+          ? Buffer.byteLength(record.content, 'base64')
+          : Buffer.byteLength(record.content, 'utf8');
+      if (byteLength > MAX_IMPORT_FILE_BYTES) {
+        return reply.status(400).send({ error: `${record.path} 超过 5MB,已跳过整批导入` });
+      }
+      files.push({ path: record.path.trim(), content: record.content, encoding });
+    }
 
     try {
-      const report = await importKnowledge({ targetDir: knowledgeService.getRoot() });
-      // 导入后刷新 manifest,前端随后拉取即可看到新文档
+      const report = await importKnowledgeFiles(knowledgeService.getRoot(), files);
       await knowledgeService.refreshManifest();
       return report;
     } catch (err) {

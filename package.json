@@ -22,6 +22,8 @@
     "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "check:mcp": "node scripts/mcp-dist-meta.mjs",
+    "build:utools": "node tools/utools/build.mjs",
+    "check:utools": "node tools/utools/check-plugin.mjs",
     "dev:extension": "cd extension && npm run dev",
     "build:extension": "cd extension && npm run build",
     "start": "node cli/bin/ai-task-flow.js",

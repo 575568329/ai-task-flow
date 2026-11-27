@@ -3,6 +3,7 @@
 // 新模型:「主题 → 版本 → 条目」,项目降为字典(路径归属/筛选);主题/版本只能由页面显式创建。
 import { FastifyInstance } from 'fastify';
 import type {
+  WorklogQueryRequest,
   WorklogRecordRequest,
   WorklogUpdateRequest,
   WorklogVersionCreateRequest,
@@ -69,6 +70,25 @@ function invalidEntryField(body: unknown): string | undefined {
   return undefined;
 }
 
+/** 查询请求体类型守卫:字段类型错会落进 service 的 .trim()/比较逻辑抛 500,入口统一挡 400 */
+function invalidQueryField(body: unknown): string | undefined {
+  for (const field of [
+    'entryId', 'project', 'version', 'versionId', 'keyword', 'stage', 'dateFrom', 'dateTo', 'relatedProject',
+  ] as const) {
+    if (readOptionalStringStrict(body, field) === null) return `${field} 必须为字符串`;
+  }
+  if (readOptionalStringArrayStrict(body, 'tags') === null) return 'tags 必须为字符串数组';
+  if (isPlainObject(body)) {
+    if (body.limit !== undefined && (typeof body.limit !== 'number' || !Number.isFinite(body.limit))) {
+      return 'limit 必须为数字';
+    }
+    if (body.includeDiff !== undefined && typeof body.includeDiff !== 'boolean') {
+      return 'includeDiff 必须为布尔值';
+    }
+  }
+  return undefined;
+}
+
 export async function registerWorklogRoutes(
   fastify: FastifyInstance,
   worklogService: WorklogService,
@@ -77,6 +97,26 @@ export async function registerWorklogRoutes(
   fastify.get('/api/worklog', async () => {
     return worklogService.getTree();
   });
+
+  // POST /api/worklog/query - 条目查询(MCP query_work / uTools tools 共用;只返回轻量条目)
+  fastify.post<{ Body: WorklogQueryRequest }>(
+    '/api/worklog/query',
+    async (request, reply) => {
+      if (request.body != null && !isPlainObject(request.body)) {
+        return reply.status(400).send({ error: '请求体必须为 JSON 对象' });
+      }
+      const invalid = invalidQueryField(request.body);
+      if (invalid) {
+        return reply.status(400).send({ error: invalid });
+      }
+      try {
+        return await worklogService.query(request.body ?? {});
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(statusForError(err)).send({ error: message });
+      }
+    },
+  );
 
   // ------------------------------------------------------------------
   // 建设主题:创建 / 重命名 / 删除(名称全局唯一;删除级联版本)

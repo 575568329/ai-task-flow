@@ -49,6 +49,18 @@ npm run check:mcp             # 校验 dist 是否与当前源码一致(防"忘�
 
 注册清单、当前版本与更新 SOP 见 **[docs/mcp-registration.md](docs/mcp-registration.md)**。
 
+## uTools 插件(市场版)
+
+同一套代码可打成 uTools 8 插件:插件壳在 preload 内启动 backend(无系统 Node 依赖、无原生二进制),
+前端由本地 HTTP 同源托管,数据默认用 `~/.ai-task-flow`;开启 uTools 数据同步后,工作记录/结论/知识库文本随账号同步(密钥与图片不同步);插件内置 MCP 暴露全部 14 个工具。
+
+```bash
+node tools/utools/build.mjs        # 产出 tools/utools/ai-worklog-0.1.0.upx
+node tools/utools/check-plugin.mjs # 发行包合规自查
+```
+
+构建、安装、数据与商店文案见 **[tools/utools/README.md](tools/utools/README.md)**。
+
 ## 功能模块
 
 | 模块 | 说明 |
@@ -74,7 +86,7 @@ npm run check:mcp             # 校验 dist 是否与当前源码一致(防"忘�
 ## 测试
 
 ```bash
-cd backend && npx vitest run    # 38 文件 / 448 用例(领域/锁协议/迁移/路由/MCP 工具)
+cd backend && npx vitest run    # 39 文件 / 453 用例(领域/锁协议/迁移/路由/MCP 工具)
 cd frontend && npm test         # 29 文件 / 234 用例(组件/搜索过滤/多视图)
 cd extension && npm test        # 5 文件 / 17 用例(剪藏)
 BASE_URL=http://127.0.0.1:47821 bash tests/run_all.sh   # curl E2E 5 套件(需后端在跑)

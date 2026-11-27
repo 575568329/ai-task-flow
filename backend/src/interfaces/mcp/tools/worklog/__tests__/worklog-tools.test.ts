@@ -201,6 +201,23 @@ describe('worklog MCP tools', () => {
     spy.mockRestore();
   });
 
+  it('record_work should prefer explicit sourcePath over process.cwd', async () => {
+    const versionId = await seedVersion();
+    const spy = vi.spyOn(deps.worklogService, 'record');
+    const result = await HANDLERS.record_work(
+      {
+        versionId, title: 't', detail: 'd', stage: 'dev',
+        sourcePath: 'C:\\work\\project-x',
+      },
+      deps,
+    );
+    expect(result.isError).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ sourcePath: 'C:\\work\\project-x' }),
+    );
+    spy.mockRestore();
+  });
+
   it('record_work should pass relatedProjects and warn on unknown names', async () => {
     await deps.worklogService.createProject({ name: 'A' });
     await deps.worklogService.createProject({ name: 'B' });

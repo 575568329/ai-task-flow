@@ -118,7 +118,7 @@ export interface KnowledgeImportError {
   message: string;
 }
 
-/** POST /api/knowledge/import 响应(前后端共用单一来源) */
+/** POST /api/knowledge/import/files 响应(前后端共用单一来源) */
 export interface KnowledgeImportReport {
   copied: number;
   /** 目标中已存在内容相同的文件,跳过数(内容级幂等) */
@@ -127,12 +127,17 @@ export interface KnowledgeImportReport {
   errors: KnowledgeImportError[];
 }
 
-/** GET /api/knowledge/import/suggestion 响应:仓库知识库尚未导入的引导 */
-export interface KnowledgeImportSuggestion {
-  /** 是否建议导入(sourceCount > 0 且 targetCount < sourceCount) */
-  suggested: boolean;
-  /** 源目录(仓库 knowledge-base)可导入文件数;源目录缺失为 0 */
-  sourceCount: number;
-  /** 目标目录(用户知识库)现有文件数 */
-  targetCount: number;
+/** 用户从「选择文件/选择文件夹」导入的单篇文件 */
+export interface KnowledgeImportFile {
+  /** 相对目标知识库根的路径(服务端归一化并做越界校验) */
+  path: string;
+  /** 文本正文;二进制(图片/PDF/docx)传 base64 */
+  content: string;
+  /** content 的编码方式,缺省 utf8(文本) */
+  encoding?: 'utf8' | 'base64';
+}
+
+/** POST /api/knowledge/import/files 入参 */
+export interface KnowledgeImportFilesRequest {
+  files: KnowledgeImportFile[];
 }

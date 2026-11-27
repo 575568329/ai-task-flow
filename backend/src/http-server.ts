@@ -34,8 +34,8 @@ export interface StartAppOptions {
   port?: number;
   /** HTTP 监听地址,默认 127.0.0.1 */
   host?: string;
-  /** CORS 允许源,默认 * */
-  corsOrigin?: string | string[];
+  /** CORS 允许源白名单,默认 false(不放开跨站);扩展场景显式传入 */
+  corsOrigin?: string | string[] | false;
   /**
    * 前端打包产物目录(含 index.html)。
    * 传入则启用 SPA 静态托管 + 同源 API。生产模式由 CLI 注入。
@@ -175,7 +175,9 @@ export async function startApp(options: StartAppOptions = {}) {
   const config = {
     port: actualPort,
     host,
-    corsOrigin: options.corsOrigin ?? process.env.CORS_ORIGIN ?? '*',
+    // 默认不放开跨站访问:所有前端(插件/桌面版/vite 代理)都与后端同源。
+    // 浏览器扩展等跨域场景需显式传 CORS_ORIGIN(逗号分隔,或 * 全放开)。
+    corsOrigin: options.corsOrigin ?? process.env.CORS_ORIGIN ?? false,
     frontendDist: options.frontendDist,
     uploadsDir: options.uploadsDir,
   };

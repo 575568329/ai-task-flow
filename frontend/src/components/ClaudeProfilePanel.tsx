@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Check, ChevronDown, ChevronRight, Download, Eye, EyeOff,
-  Loader2, Pencil, Plus, RefreshCw, Trash2, X,
+  Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -387,6 +387,15 @@ export function ClaudeProfilePanel() {
 
   return (
     <div className="flex flex-col gap-3 py-1">
+      {/* 隐私告知:该功能会写本机其他应用的配置,必须在操作前说清 */}
+      <div className="bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-md border p-2 text-xs leading-relaxed">
+        <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          仅在本机读写所选目标的 <code className="bg-muted rounded px-1 font-mono">settings.json</code>,
+          写入前自动备份到 <code className="bg-muted rounded px-1 font-mono">~/.ai-task-flow/claude-settings-backups/</code>;
+          不上传任何内容。切换后新开终端生效。
+        </span>
+      </div>
       {/* 目标选择器 */}
       <div className="flex items-center gap-2">
         <Label className="text-nowrap text-sm">目标:</Label>

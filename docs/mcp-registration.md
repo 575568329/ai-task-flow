@@ -17,9 +17,9 @@
 
 | 项 | 值 |
 |---|---|
-| dist 构建来源 commit | `86e5d7a`(docs: 修正 MCP 构建时间为产物实际 mtime；14 工具) |
-| 构建时间 | 2026-11-26 17:36(构建元数据 `backend/dist/.mcp-build-meta.json`) |
-| 源码哈希 | `e3e8430e72b6`(101 个源文件,`npm run check:mcp` 可复核) |
+| dist 构建来源 commit | `108f45c` + 工作区市场版改动(uTools 适配:query 端点/record sourcePath;工具仍 14 个) |
+| 构建时间 | 2026-11-27 09:45(构建元数据 `backend/dist/.mcp-build-meta.json`) |
+| 源码哈希 | `cbf61efcb454`(101 个源文件,`npm run check:mcp` 可复核) |
 | server version(MCP initialize 返回) | 0.1.0 |
 
 > **防漂移**:`backend` 的 build 在 `tsc` 之后自动写构建元数据(源码内容哈希 + commit + 时间);
@@ -37,6 +37,23 @@
 
 所有注册均指向**同一 dist 绝对路径**(项目级 .mcp.json 为相对路径,以仓库为根)——
 即"版本"只由 dist 产物决定,客户端配置无需随版本变动。
+
+## uTools 内置 MCP(市场版插件,可选)
+
+市场版插件额外把 **全部 14 个工具**通过 uTools 8 的内置 MCP 服务暴露给 AI 客户端:
+
+- 声明:`tools/utools/build/plugin.json` 的 `tools`(构建时从后端 `ALL_TOOLS` 生成,与 stdio 同源);
+- 执行:`tools/utools/preload-tools.js` 用 `utools.registerTool` 注册,内部只调用本机
+  `127.0.0.1` 的固定 `/api` 路径;
+- 使用:用户在 uTools「设置 → AI 设置 → MCP 服务」开启后,Claude Code / ZCode 等
+  标准 MCP 客户端连接 uTools 即可,无需再配全局 stdio;
+- 与本文上半部分的关系:全局 stdio 注册仍服务本机开发/桌面版;uTools 插件是市场用户的
+  零 Node 依赖路径。两条路径共享 `~/.ai-task-flow` 与同一套文件锁协议。
+
+工具范围:worklog 11(record_work / query_work / list_projects / list_programs / list_versions /
+update_work / delete_work / delete_version / delete_project / rename_version / rename_project)
++ record_conclusion / query_conclusions / save_to_knowledge。
+执行统一走 HTTP 桥接 `POST /api/tools/:name`(复用 stdio 的 HANDLERS,参数校验/错误文案同源)。
 
 ## 更新 SOP(改了 MCP 相关代码后)
 

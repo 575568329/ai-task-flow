@@ -14,11 +14,11 @@ export const toolDef = {
   },
 };
 
-/** 路径尾段(隐私红线:不得输出完整绝对路径),如 D:\xunfei\资源加工平台 → …xunfei\资源加工平台 */
+/** 路径尾段(隐私红线:不得输出完整绝对路径),如 D:\workspace\project → …workspace\project */
 function pathTail(p?: string): string {
   if (!p) return '未绑定路径';
   const segments = p.split(/[\\/]+/).filter(Boolean);
-  // ≤2 段(如 D:\Study、/home/x)取末两段仍是完整绝对路径,必须进一步掩到只剩最后一段
+  // ≤2 段(如 D:\proj、/home/x)取末两段仍是完整绝对路径,必须进一步掩到只剩最后一段
   if (segments.length <= 2) {
     return `…${p.includes('\\') ? '\\' : '/'}${segments[segments.length - 1] ?? ''}`;
   }

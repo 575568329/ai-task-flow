@@ -5,18 +5,18 @@ import type {
   KnowledgeDocResponse,
   KnowledgeCreateRequest,
   KnowledgeDocMetaUpdateRequest,
+  KnowledgeImportFile,
   KnowledgeImportReport,
-  KnowledgeImportSuggestion,
 } from '@ai-task-flow/shared';
 
 const BASE = '/api';
 
-/** 一次性导入旧知识库(源目录固定由服务端解析仓库内 knowledge-base,前端不可指定路径) */
-export async function importKnowledge(): Promise<KnowledgeImportReport> {
-  const res = await fetch(`${BASE}/knowledge/import`, {
+/** 导入用户选择的文本文件/文件夹内容(保留相对路径,支持多选) */
+export async function importKnowledgeFiles(files: KnowledgeImportFile[]): Promise<KnowledgeImportReport> {
+  const res = await fetch(`${BASE}/knowledge/import/files`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ files }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -25,14 +25,20 @@ export async function importKnowledge(): Promise<KnowledgeImportReport> {
   return res.json();
 }
 
-/** 查询是否需要引导导入仓库内旧知识库(只回计数) */
-export async function fetchImportSuggestion(): Promise<KnowledgeImportSuggestion> {
-  const res = await fetch(`${BASE}/knowledge/import/suggestion`);
+/** 导出整个知识库为 zip(解压后可用「选择文件夹」原样导回) */
+export async function exportKnowledge(): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${BASE}/knowledge/export`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error || `请求失败 (${res.status})`);
+    throw new Error(data?.error || `导出失败 (${res.status})`);
   }
-  return res.json();
+  // 文件名由服务端给;取不到时前端兜底,保证下载可用
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const matched = /filename="([^"]+)"/.exec(disposition);
+  return {
+    blob: await res.blob(),
+    filename: matched?.[1] || `knowledge-base-${Date.now()}.zip`,
+  };
 }
 
 /** 获取 manifest(目录树 + 索引) */

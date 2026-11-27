@@ -25,6 +25,8 @@ import { registerClaudeProfileRoutes } from './routes/claudeProfileRoutes.js';
 import { registerMindmapRoutes } from './routes/mindmapRoutes.js';
 import { registerWorklogRoutes } from './routes/worklogRoutes.js';
 import { registerConclusionRoutes } from './routes/conclusionRoutes.js';
+import { HANDLERS } from '../mcp/tools/index.js';
+import type { ToolDeps } from '../mcp/tools/types.js';
 import { ClaudeProfileService } from '../../application/claude-profile/ClaudeProfileService.js';
 import { JsonClaudeProfileRepository } from '../../infrastructure/persistence/JsonClaudeProfileRepository.js';
 
@@ -38,11 +40,41 @@ const BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 export interface HttpServerConfig {
   port: number;
   host: string;
-  corsOrigin: string | string[];
+  /**
+   * 允许跨域/跨站的来源白名单。`false`(默认)= 完全不放开跨站访问。
+   * uTools 插件、桌面版、dev 代理都是同源,无需配置;
+   * 只有浏览器扩展等真正跨域场景才显式配置(CORS_ORIGIN)。
+   */
+  corsOrigin: string | string[] | false;
   /** 前端打包产物目录(含 index.html)。传入则单端口托管 SPA。 */
   frontendDist?: string;
   /** 上传目录,默认 ~/.ai-task-flow/uploads */
   uploadsDir?: string;
+}
+
+/** 浏览器发起的同源本地页面(桌面版/dev/插件)来源主机名 */
+const LOCAL_ORIGIN_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/** 把配置的来源声明归一成字符串数组(支持逗号分隔与数组) */
+function normalizeOrigins(value: string | string[] | false): string[] {
+  if (value === false) return [];
+  const list = Array.isArray(value) ? value : value.split(',');
+  return list.map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * 跨站请求是否放行。
+ * 无 Origin 头 = 非浏览器调用(curl / CLI / MCP 子进程),照旧放行;
+ * 浏览器请求必须来自本机同源页面,或命中显式白名单(如 chrome-extension://<id>)。
+ */
+function isAllowedOrigin(origin: string | undefined, allowed: string[]): boolean {
+  if (!origin) return true;
+  if (allowed.includes('*') || allowed.includes(origin)) return true;
+  try {
+    return LOCAL_ORIGIN_HOSTS.has(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** 解析上传目录,默认放在用户数据目录下 */
@@ -71,25 +103,35 @@ export async function createHttpServer(
   });
 
   // 注册 CORS
-  // 不启用 credentials:跨域调用方(扩展 side panel/service worker、vite 代理后的前端)
-  // 均走同源或请求时不带 cookie,无需跨域凭证。关键:credentials:true 与 origin:'*' 组合
-  // 违反 CORS 规范——带凭证时 allow-origin 必须是具体值而非通配 *,否则浏览器拒绝预检,
-  // 表现为扩展 POST(触发预检)Failed to fetch,而 GET(简单请求无预检)正常通过。
+  // 默认关闭:本产品所有前端(uTools 插件/桌面版/vite 代理)都与后端同源,不需要 CORS。
+  // 历史默认 '*' + PNA 放行等于允许任意网页读取本机数据(一条 /api/knowledge/export 就能导出
+  // 整个知识库),因此改为「显式配置才放开」。
+  const allowedOrigins = normalizeOrigins(config.corsOrigin);
   await fastify.register(cors, {
-    origin: config.corsOrigin,
+    origin: allowedOrigins.length > 0 ? config.corsOrigin : false,
     credentials: false,
   });
 
-  // Private Network Access(PNA):允许扩展(chrome-extension:// origin)跨域访问本地后端。
-  // Chrome 142+ 的 Local Network Access 对"扩展页/公网页 → localhost(私有网络)"做 PNA 预检,
-  // 要求预检响应 access-control-allow-private-network: true,否则实际请求被浏览器拦截
-  // (表现为 Failed to fetch,请求不到达后端)。@fastify/cors 不处理此头,故用 onSend hook 补上。
-  fastify.addHook('onSend', async (request, reply, payload) => {
-    if (request.headers['access-control-request-private-network'] === 'true') {
-      reply.header('access-control-allow-private-network', 'true');
+  // 跨站写保护:CORS 只拦"能否读响应",拦不住 text/plain / 表单这类简单请求直接写数据。
+  // 这里再按 Origin 头拦一道(浏览器一定会带 Origin),把「公网页面 → 本机 API」整类请求挡掉。
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (request.method === 'OPTIONS') return; // 预检交给 CORS 插件
+    if (!isAllowedOrigin(request.headers.origin, allowedOrigins)) {
+      return reply.status(403).send({ error: '拒绝跨站访问:来源不在白名单内' });
     }
-    return payload;
   });
+
+  // Private Network Access(PNA):仅在显式放开跨站时补头,否则浏览器不该允许公网页面访问本机。
+  // Chrome 142+ 对"扩展页/公网页 → localhost(私有网络)"做 PNA 预检,
+  // 要求预检响应 access-control-allow-private-network: true,否则实际请求被拦截。
+  if (allowedOrigins.length > 0) {
+    fastify.addHook('onSend', async (request, reply, payload) => {
+      if (request.headers['access-control-request-private-network'] === 'true') {
+        reply.header('access-control-allow-private-network', 'true');
+      }
+      return payload;
+    });
+  }
 
   // 接受扩展以 text/plain 发送 JSON。扩展(chrome-extension://)经 service worker 访问 localhost,
   // 若用 application/json 会触发 CORS 预检,而 PNA(Private Network Access)会拦截到私有网络
@@ -134,6 +176,9 @@ export async function createHttpServer(
       service: 'ai-task-flow',
       web: hasWeb,
       localAccess,
+      // uTools 插件用它判断"端口上跑的是不是同一份构建":版本不同就不复用旧实例,
+      // 否则升级插件后页面仍会连到旧 backend,看到的是旧界面。
+      buildId: process.env.AI_TASK_FLOW_BUILD_ID ?? '',
       timestamp: new Date().toISOString(),
     };
   });
@@ -149,6 +194,45 @@ export async function createHttpServer(
   await registerConclusionRoutes(fastify, conclusionService, worklogService);
   await registerSystemRoutes(fastify);
   await registerClaudeProfileRoutes(fastify, claudeProfileService);
+
+  // uTools 内置 MCP 的桥接端点:复用 stdio MCP 的同一套 handler,避免两套业务逻辑漂移。
+  // 只接受白名单工具名;仅本机调用;args 由 handler 内各自校验。
+  fastify.post<{
+    Params: { name: string };
+    Body: { args?: Record<string, unknown>; conversationId?: string; sourcePath?: string };
+  }>('/api/tools/:name', async (request, reply) => {
+    if (!isLocalAccess(request.ip)) {
+      return reply.status(403).send({ error: '仅允许本机调用工具' });
+    }
+    const handler = HANDLERS[request.params.name];
+    if (!handler) {
+      return reply.status(404).send({ error: `未知工具: ${request.params.name}` });
+    }
+    const body = request.body ?? {};
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+      return reply.status(400).send({ error: '请求体必须为 JSON 对象' });
+    }
+    const args = body.args ?? {};
+    if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+      return reply.status(400).send({ error: 'args 必须为 JSON 对象' });
+    }
+    const deps: ToolDeps = {
+      knowledgeService,
+      worklogService,
+      conclusionService,
+      mcpSource: {
+        tool: 'utools',
+        ...(typeof body.conversationId === 'string' && body.conversationId.trim()
+          ? { conversationId: body.conversationId.trim() }
+          : {}),
+        ...(typeof body.sourcePath === 'string' && body.sourcePath.trim()
+          ? { cwd: body.sourcePath.trim() }
+          : {}),
+      },
+    };
+    // handler 自己把异常包成 isError:true 的 MCP 文本结果;原样返回给 preload 判断
+    return handler(args, deps);
+  });
 
   // 全局错误处理(P1-16 + P2-20):未捕获的抛错统一转 JSON。
   // 优先级:DomainError.httpStatus(业务 4xx/5xx 精准) > Fastify statusCode(校验 4xx) > 默认 500。

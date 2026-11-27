@@ -39,6 +39,10 @@ export const toolDef = {
         description: '标签,约定 feat/fix/refactor/docs,可选(缺陷修改用 fix)',
       },
       stage: STAGE_SCHEMA,
+      sourcePath: {
+        type: 'string' as const,
+        description: '记录端所在项目目录(可选;uTools 插件没有进程 cwd 时传入,用于按项目路径自动归属)',
+      },
     },
     required: ['versionId', 'title', 'detail', 'stage'],
   },
@@ -63,6 +67,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
     const tags = normalizeStringArray(args.tags, 'tags', notices);
     const relatedProjects = normalizeStringArray(args.relatedProjects, 'relatedProjects', notices);
     const files = normalizeFiles(args.files, notices);
+    // uTools 插件的进程 cwd 是安装目录,不能代表用户项目;由 AI 显式传 sourcePath 时才用
+    const sourcePathArg = normalizeOptionalString(args.sourcePath, 'sourcePath', notices)?.trim();
 
     const result = await deps.worklogService.record({
       versionId,
@@ -73,8 +79,8 @@ export async function handle(args: Record<string, unknown> | undefined, deps: To
       diff: args.diff ? String(args.diff) : undefined,
       tags,
       relatedProjects,
-      // cwd 不暴露给 AI:记录端进程所在目录,用于服务端按项目路径归属记录
-      sourcePath: process.cwd(),
+      // 显式传入优先(uTools 插件无项目 cwd),否则用 stdio MCP 进程 cwd 做路径归属
+      sourcePath: sourcePathArg || process.cwd(),
       stage: args.stage as WorkStage,
     });
 
